@@ -1,0 +1,41 @@
+module(
+    name = "roar",
+    version = "0.1.0",
+)
+
+# General
+bazel_dep(name = "rules_license", version = "1.0.0")
+
+# C++
+bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "abseil-cpp", version = "20260107.1")
+bazel_dep(name = "googletest", version = "1.17.0")
+
+git_repository = use_repo_rule("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository")
+
+git_repository(
+    name = "oar",
+    commit = "dfe4c571d96f38e4005bab16df11f7a745ab27e9",
+    remote = "https://github.com/AOMediaCodec/oar.git",
+)
+
+# Rust, see https://github.com/bazelbuild/rules_rust
+bazel_dep(name = "rules_rust", version = "0.68.1")
+bazel_dep(name = "rules_rs", version = "0.0.26")
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2024",
+    # versions = ["1.75.0"],
+)
+
+crate = use_extension("@rules_rs//rs:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "crates",
+    cargo_lock = "//:Cargo.lock",
+    cargo_toml = "//:Cargo.toml",
+    platform_triples = [
+        "x86_64-unknown-linux-gnu",
+    ],
+)
+use_repo(crate, "crates")

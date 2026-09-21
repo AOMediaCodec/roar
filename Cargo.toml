@@ -1,0 +1,13 @@
+[package]
+name = "roar"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+
+[dependencies]
+log = "0.4"
+realfft = "3.5.0"
+rustfft = "6.4.1"
+
+[dev-dependencies]
+googletest = "0.14.3"
