@@ -102,7 +102,8 @@ impl ProcessingGroup {
             return Err(OarError::InvalidParameter);
         }
 
-        self.ambisonic_rotator = Some(AmbisonicRotator::new(order));
+        let frames_per_buffer = self.buffer_size_per_channel.value() as usize;
+        self.ambisonic_rotator = Some(AmbisonicRotator::new(order, frames_per_buffer));
 
         let profile_str = match self.key.filter_profile {
             BinauralFilterProfile::Direct => "Direct",
@@ -124,7 +125,7 @@ impl ProcessingGroup {
         self.ambisonic_binaural_decoder = Some(AmbisonicBinauralDecoder::new(
             &sh_hrirs_l,
             &sh_hrirs_r,
-            self.buffer_size_per_channel.value() as usize,
+            frames_per_buffer,
             fft_manager,
         ));
 

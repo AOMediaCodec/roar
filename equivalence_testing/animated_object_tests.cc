@@ -19,15 +19,15 @@
 #include <vector>
 
 #include "absl/strings/str_format.h"
+#include "equivalence_testing/test_helpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "roar/equivalence_testing/test_helpers.h"
 
 extern "C" {
-#include "oar/include/animation.h"
-#include "oar/include/oar.h"
-#include "oar/include/oar_base.h"
-#include "oar/include/oar_metadata.h"
+#include "include/animation.h"
+#include "include/oar.h"
+#include "include/oar_base.h"
+#include "include/oar_metadata.h"
 }
 
 namespace roar_equivalence_testing {

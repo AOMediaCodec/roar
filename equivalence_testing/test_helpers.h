@@ -19,10 +19,10 @@
 #include <vector>
 
 extern "C" {
-#include "oar/include/animation.h"
-#include "oar/include/oar.h"
-#include "oar/include/oar_base.h"
-#include "oar/include/oar_metadata.h"
+#include "include/animation.h"
+#include "include/oar.h"
+#include "include/oar_base.h"
+#include "include/oar_metadata.h"
 
 // Rust port declarations (`roar_*`) directly exported by roar (`ffi.rs`)
 oar_t* roar_create(const oar_config_t* config);

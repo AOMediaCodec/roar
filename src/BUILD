@@ -1,8 +1,8 @@
 # Top-level src for Rust Open Audio Renderer (ROAR).
 
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_static_library", "rust_test")
 
-rust_library(
+rust_static_library(
     name = "roar",
     srcs = [
         "c_types.rs",

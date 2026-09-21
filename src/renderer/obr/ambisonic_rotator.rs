@@ -24,51 +24,91 @@ use crate::renderer::obr::common::ambisonic_utils::{
 const ROTATION_QUANTIZATION_RAD: f32 = 1.0f32.to_radians();
 const SLERP_FRAME_INTERVAL: usize = 32;
 
+/// Precomputed recurrence coefficients for spherical harmonic rotation.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct UvwEntry {
+    /// Recurrence coefficient scaling the `U` coupling term.
+    u: f32,
+    /// Recurrence coefficient scaling the `V` coupling term.
+    v: f32,
+    /// Recurrence coefficient scaling the `W` coupling term.
+    w: f32,
+}
+
 /// Sound field rotator for Higher-Order Ambisonics.
 ///
 /// Employs recurrence relations to construct block-diagonal rotation matrices mapping input
 /// Ambisonic channels to rotated output channels. Supports smooth spherical linear interpolation
 /// (slerp) to prevent clicks when the orientation changes.
+///
+/// Note: "Band" is used in this module to refer to the channels added by a given ambisonic order.
+/// For example band 2 refers to the 5 channels added for 2nd order ambisonics.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AmbisonicRotator {
     /// The ambisonic order of the sound field.
     ambisonic_order: i32,
+    /// Number of audio frames per buffer used to size scratch memory.
+    frames_per_buffer: usize,
     /// The current rotation of the sound field to be applied.
     current_rotation: Quaternion,
     /// Rotation matrices for each band of the sound field.
-    /// `rotation_matrices[l]` is the (2l + 1) x (2l + 1) sub-matrix for band `l`.
+    /// `rotation_matrices[band]` is the (2 * band + 1) x (2 * band + 1) matrix for `band`.
     rotation_matrices: Vec<Vec<f32>>,
-    /// Temporary buffer for storing intermediate results.
-    scratch_col: Vec<f32>,
+    /// Precomputed recurrence parameters for each band (bands 2..=ambisonic_order).
+    uvw_tables: Vec<Vec<UvwEntry>>,
+    /// Scratch memory used to decouple in-place channel reads and writes during band rotation.
+    band_scratch: Vec<f32>,
 }
 
 impl AmbisonicRotator {
     /// Constructs a new `AmbisonicRotator` instance.
-    pub fn new(ambisonic_order: i32) -> Self {
+    ///
+    /// # Parameters
+    /// * `ambisonic_order` - Ambisonic order of the sound field (must be >= 1).
+    /// * `frames_per_buffer` - Number of audio frames per buffer used to allocate scratch memory.
+    pub fn new(ambisonic_order: i32, frames_per_buffer: usize) -> Self {
         assert!(ambisonic_order >= 1);
-        // The maximum sub-matrix size is the number of channels added in the highest order.
-        // (e.g. 25 - 16 = 9 for 4th order).
-        let max_submatrix_size = get_num_nth_order_periphonic_components(ambisonic_order);
+        assert!(frames_per_buffer > 0);
+        // The maximum band size is the number of channels in the highest ambisonic band
+        // (e.g. 25 - 16 = 9 for band 4).
+        let max_band_size = get_num_nth_order_periphonic_components(ambisonic_order);
         let mut rotation_matrices = vec![Vec::new(); (ambisonic_order + 1) as usize];
 
-        // Band 0 (order 0) is 1x1 identity.
+        // Band 0 is a 1x1 identity matrix.
         rotation_matrices[0] = vec![1.0_f32];
 
-        // Initialize sub-matrices to identity.
-        for l in 1..=ambisonic_order {
-            let submatrix_size = get_num_nth_order_periphonic_components(l);
-            let mut r = vec![0.0_f32; submatrix_size * submatrix_size];
-            for i in 0..submatrix_size {
-                r[i * submatrix_size + i] = 1.0;
+        // Initialize each band's rotation matrix to identity.
+        for band in 1..=ambisonic_order {
+            let band_size = get_num_nth_order_periphonic_components(band);
+            let mut r = vec![0.0_f32; band_size * band_size];
+            for i in 0..band_size {
+                r[i * band_size + i] = 1.0;
             }
-            rotation_matrices[l as usize] = r;
+            rotation_matrices[band as usize] = r;
+        }
+
+        // Precompute recurrence coefficients for bands 2..=ambisonic_order to eliminate
+        // redundant divisions and square roots during dynamic head rotation.
+        let mut uvw_tables = vec![Vec::new(); (ambisonic_order + 1) as usize];
+        for band in 2..=ambisonic_order {
+            let size = (2 * band + 1) as usize;
+            let mut table = Vec::with_capacity(size * size);
+            for m in -band..=band {
+                for n in -band..=band {
+                    let (u, v, w) = compute_uvw_coeff(m, n, band);
+                    table.push(UvwEntry { u, v, w });
+                }
+            }
+            uvw_tables[band as usize] = table;
         }
 
         Self {
             ambisonic_order,
+            frames_per_buffer,
             current_rotation: Quaternion::identity(),
             rotation_matrices,
-            scratch_col: vec![0.0; max_submatrix_size],
+            uvw_tables,
+            band_scratch: vec![0.0_f32; max_band_size * frames_per_buffer],
         }
     }
 
@@ -78,6 +118,7 @@ impl AmbisonicRotator {
         target_rotation: &Quaternion,
         buffer: &mut AudioBuffer,
     ) -> bool {
+        assert!(buffer.num_frames() <= self.frames_per_buffer);
         let num_channels = get_num_periphonic_components(self.ambisonic_order);
         assert_eq!(buffer.num_channels(), num_channels);
 
@@ -108,33 +149,45 @@ impl AmbisonicRotator {
         true
     }
 
-    // TODO(b/525080422): Optimize by avoiding manual indexing in nested loops. Swap loops to
-    // process channel-by-channel and use zip iterators to allow auto-vectorization and avoid bounds
-    // checks.
+    /// Multiplies the channels of the audio buffer in place using the current rotation matrices.
     fn multiply_channels_in_place(
         &mut self,
         buffer: &mut AudioBuffer,
         start_frame: usize,
-        duration: usize,
+        num_frames: usize,
     ) {
         // Ambisonic channel 0 is spherically symmetric (omnidirectional) and invariant to rotation.
-        // We iterate over channels 1 up to ambisonic_order, multiplying only the rotation matrix
-        // for each order (flattened square matrix with side length of 2 * order + 1).
-        for order in 1..=self.ambisonic_order as usize {
-            let submatrix = &self.rotation_matrices[order];
-            let submatrix_size = 2 * order + 1;
-            let start_channel = order * order;
-            for frame in start_frame..start_frame + duration {
-                for row in 0..submatrix_size {
-                    let mut sum = 0.0_f32;
-                    let row_offset = row * submatrix_size;
-                    for col in 0..submatrix_size {
-                        sum += submatrix[row_offset + col] * buffer[start_channel + col][frame];
-                    }
-                    self.scratch_col[row] = sum;
+        // Multiply each band's channels by its rotation matrix (flattened square matrix with side
+        // length of 2 * band + 1).
+        for band in 1..=self.ambisonic_order as usize {
+            let band_matrix = &self.rotation_matrices[band];
+            let band_size = 2 * band + 1; // Starting with band 1: 3, 5, 7, 9.
+            let start_channel = band * band; // Starting with band 1: 1, 4, 9, 16.
+
+            // Copy input channels for this band into contiguous rows of band_scratch.
+            // This decouples reads from in-place writes and enables contiguous memory access.
+            for chan in 0..band_size {
+                let src = &buffer[start_channel + chan][start_frame..start_frame + num_frames];
+                let scratch = &mut self.band_scratch[chan * num_frames..(chan + 1) * num_frames];
+                scratch.copy_from_slice(src);
+            }
+            // Compute output channels as planar linear combinations of the scratch input channels.
+            // Slices are contiguous and distinct from scratch memory, enabling auto-vectorization.
+            for r in 0..band_size {
+                let row_offset = r * band_size;
+                let coeff_0 = band_matrix[row_offset];
+                let src_0 = &self.band_scratch[0..num_frames];
+                let mut ch = buffer.channel_mut(start_channel + r);
+                let dst = &mut ch.as_mut_slice()[start_frame..start_frame + num_frames];
+                for (d, &s) in dst.iter_mut().zip(src_0.iter()) {
+                    *d = coeff_0 * s;
                 }
-                for row in 0..submatrix_size {
-                    buffer.channel_mut(start_channel + row)[frame] = self.scratch_col[row];
+                for c in 1..band_size {
+                    let coeff = band_matrix[row_offset + c];
+                    let src_c = &self.band_scratch[c * num_frames..(c + 1) * num_frames];
+                    for (d, &s) in dst.iter_mut().zip(src_c.iter()) {
+                        *d += coeff * s;
+                    }
                 }
             }
         }
@@ -148,7 +201,7 @@ impl AmbisonicRotator {
             Quaternion { w: rotation.w, x: -rotation.x, y: rotation.z, z: rotation.y };
         let r_3x3 = ambix_rotation.to_rotation_matrix();
 
-        // Band 1 (order 1) submatrix.
+        // Band 1 rotation matrix.
         let r1 = &mut self.rotation_matrices[1];
         for r in 0..3 {
             for c in 0..3 {
@@ -156,34 +209,37 @@ impl AmbisonicRotator {
             }
         }
 
-        for current_order in 2..=self.ambisonic_order {
-            self.compute_band_rotation(current_order);
+        for band in 2..=self.ambisonic_order {
+            self.compute_band_rotation(band);
         }
     }
 
-    fn compute_band_rotation(&mut self, l: i32) {
-        let size = (2 * l + 1) as usize;
-        let (prev_matrices, target_slice) = self.rotation_matrices.split_at_mut(l as usize);
-        let target = &mut target_slice[0];
+    /// Computes the rotation matrix for `band` using Ivanic and Ruedenberg spherical harmonic
+    /// recurrence relations.
+    fn compute_band_rotation(&mut self, band: i32) {
+        let (prev_matrices, target_slice) = self.rotation_matrices.split_at_mut(band as usize);
+        let current_band_matrix = &mut target_slice[0];
+        let band1_matrix = &prev_matrices[1];
+        let prev_band_matrix = &prev_matrices[(band - 1) as usize];
+        let uvw_table = &self.uvw_tables[band as usize];
 
-        for m in -l..=l {
-            for n in -l..=l {
-                let (u_coeff, v_coeff, w_coeff) = compute_uvw_coeff(m, n, l);
+        let mut matrix_and_uvw = current_band_matrix.iter_mut().zip(uvw_table);
+        for m in -band..=band {
+            for n in -band..=band {
+                let (dst, entry) = matrix_and_uvw.next().unwrap();
                 let mut term_u = 0.0_f32;
                 let mut term_v = 0.0_f32;
                 let mut term_w = 0.0_f32;
-                if u_coeff.abs() > 0.0 {
-                    term_u = u_coeff * u_func(m, n, l, prev_matrices);
+                if entry.u != 0.0 {
+                    term_u = entry.u * u_func(m, n, band, band1_matrix, prev_band_matrix);
                 }
-                if v_coeff.abs() > 0.0 {
-                    term_v = v_coeff * v_func(m, n, l, prev_matrices);
+                if entry.v != 0.0 {
+                    term_v = entry.v * v_func(m, n, band, band1_matrix, prev_band_matrix);
                 }
-                if w_coeff.abs() > 0.0 {
-                    term_w = w_coeff * w_func(m, n, l, prev_matrices);
+                if entry.w != 0.0 {
+                    term_w = entry.w * w_func(m, n, band, band1_matrix, prev_band_matrix);
                 }
-                let row = (m + l) as usize;
-                let col = (n + l) as usize;
-                target[row * size + col] = term_u + term_v + term_w;
+                *dst = term_u + term_v + term_w;
             }
         }
     }
@@ -197,53 +253,78 @@ fn kronecker_delta(i: i32, j: i32) -> f32 {
     }
 }
 
-fn get_centered_element(r: &[f32], band: i32, i: i32, j: i32) -> f32 {
-    let row = (i + band) as usize;
-    let col = (j + band) as usize;
-    let stride = (2 * band + 1) as usize;
-    r[row * stride + col]
-}
+/// Computes the recurrence coupling term P(i, /*row*/ a, /*col*/ b, /*band*/ l) combining element
+/// of the band 1 rotation matrix with the band (l - 1) rotation matrix.
+#[inline(always)]
+fn p_func(i: i32, a: i32, b: i32, l: i32, band1_matrix: &[f32], prev_band_matrix: &[f32]) -> f32 {
+    let band1_row_offset = (i + 1) as usize * 3;
+    let prev_band = (l - 1) as usize;
+    let prev_band_stride = 2 * l as usize - 1;
+    let prev_band_row_offset = (a + l - 1) as usize * prev_band_stride;
 
-fn p_func(i: i32, a: i32, b: i32, l: i32, r: &[Vec<f32>]) -> f32 {
-    let r1 = &r[1];
-    let r_prev = &r[(l - 1) as usize];
     if b == l {
-        get_centered_element(r1, 1, i, 1) * get_centered_element(r_prev, l - 1, a, l - 1)
-            - get_centered_element(r1, 1, i, -1) * get_centered_element(r_prev, l - 1, a, -l + 1)
+        let band1_val_pos1 = band1_matrix[band1_row_offset + 2];
+        let band1_val_neg1 = band1_matrix[band1_row_offset];
+        let prev_val_pos = prev_band_matrix[prev_band_row_offset + 2 * prev_band];
+        let prev_val_neg = prev_band_matrix[prev_band_row_offset];
+        band1_val_pos1 * prev_val_pos - band1_val_neg1 * prev_val_neg
     } else if b == -l {
-        get_centered_element(r1, 1, i, 1) * get_centered_element(r_prev, l - 1, a, -l + 1)
-            + get_centered_element(r1, 1, i, -1) * get_centered_element(r_prev, l - 1, a, l - 1)
+        let band1_val_pos1 = band1_matrix[band1_row_offset + 2];
+        let band1_val_neg1 = band1_matrix[band1_row_offset];
+        let prev_val_neg = prev_band_matrix[prev_band_row_offset];
+        let prev_val_pos = prev_band_matrix[prev_band_row_offset + 2 * prev_band];
+        band1_val_pos1 * prev_val_neg + band1_val_neg1 * prev_val_pos
     } else {
-        get_centered_element(r1, 1, i, 0) * get_centered_element(r_prev, l - 1, a, b)
+        let band1_val_zero = band1_matrix[band1_row_offset + 1];
+        let prev_val_b = prev_band_matrix[prev_band_row_offset + (b + l - 1) as usize];
+        band1_val_zero * prev_val_b
     }
 }
 
-fn u_func(m: i32, n: i32, l: i32, r: &[Vec<f32>]) -> f32 {
-    p_func(0, m, n, l, r)
+/// Computes the U(/*row*/ m, /*col*/ n, /*band*/ l) recurrence term using the central coupling
+/// P(0, m, n, l).
+#[inline(always)]
+fn u_func(m: i32, n: i32, l: i32, band1_matrix: &[f32], prev_band_matrix: &[f32]) -> f32 {
+    p_func(0, m, n, l, band1_matrix, prev_band_matrix)
 }
 
-fn v_func(m: i32, n: i32, l: i32, r: &[Vec<f32>]) -> f32 {
+/// Computes the V(/*row*/ m, /*col*/ n, /*band*/ l) recurrence term combining off-diagonal P terms
+/// based on the sign of `m`.
+#[inline(always)]
+fn v_func(m: i32, n: i32, l: i32, band1_matrix: &[f32], prev_band_matrix: &[f32]) -> f32 {
     if m == 0 {
-        p_func(1, 1, n, l, r) + p_func(-1, -1, n, l, r)
+        p_func(1, 1, n, l, band1_matrix, prev_band_matrix)
+            + p_func(-1, -1, n, l, band1_matrix, prev_band_matrix)
     } else if m > 0 {
-        let d = kronecker_delta(m, 1);
-        p_func(1, m - 1, n, l, r) * (1.0 + d).sqrt() - p_func(-1, -m + 1, n, l, r) * (1.0 - d)
+        if m == 1 {
+            p_func(1, 0, n, l, band1_matrix, prev_band_matrix) * std::f32::consts::SQRT_2
+        } else {
+            p_func(1, m - 1, n, l, band1_matrix, prev_band_matrix)
+                - p_func(-1, -m + 1, n, l, band1_matrix, prev_band_matrix)
+        }
+    } else if m == -1 {
+        p_func(-1, 0, n, l, band1_matrix, prev_band_matrix) * std::f32::consts::SQRT_2
     } else {
-        let d = kronecker_delta(m, -1);
-        p_func(1, m + 1, n, l, r) * (1.0 - d) + p_func(-1, -m - 1, n, l, r) * (1.0 + d).sqrt()
+        p_func(1, m + 1, n, l, band1_matrix, prev_band_matrix)
+            + p_func(-1, -m - 1, n, l, band1_matrix, prev_band_matrix)
     }
 }
 
-fn w_func(m: i32, n: i32, l: i32, r: &[Vec<f32>]) -> f32 {
-    if m == 0 {
-        0.0
-    } else if m > 0 {
-        p_func(1, m + 1, n, l, r) + p_func(-1, -m - 1, n, l, r)
+/// Computes the W(/*row*/ m, /*col*/ n, /*band*/ l) recurrence term based on the sign of `m`.
+#[inline(always)]
+fn w_func(m: i32, n: i32, l: i32, band1_matrix: &[f32], prev_band_matrix: &[f32]) -> f32 {
+    // `compute_band_rotation` avoids calling `w_func` when m == 0 but assert in debug for safety.
+    debug_assert!(m != 0);
+    if m > 0 {
+        p_func(1, m + 1, n, l, band1_matrix, prev_band_matrix)
+            + p_func(-1, -m - 1, n, l, band1_matrix, prev_band_matrix)
     } else {
-        p_func(1, m - 1, n, l, r) - p_func(-1, -m + 1, n, l, r)
+        p_func(1, m - 1, n, l, band1_matrix, prev_band_matrix)
+            - p_func(-1, -m + 1, n, l, band1_matrix, prev_band_matrix)
     }
 }
 
+/// Computes the recurrence coefficients (u, v, w) for /*row*/ `m`, /*col*/ `n`, and /*band*/ `l`.
 fn compute_uvw_coeff(m: i32, n: i32, l: i32) -> (f32, f32, f32) {
     let d = kronecker_delta(m, 0);
     let denom =
@@ -333,7 +414,7 @@ mod test {
 
         let rotation = from_angle_axis(rotation_angle_deg.to_radians(), rotation_axis);
 
-        let mut rotator = AmbisonicRotator::new(AMBISONIC_ORDER);
+        let mut rotator = AmbisonicRotator::new(AMBISONIC_ORDER, buffer_size);
         let result = rotator.process_in_place(&rotation, &mut encoded_rotated_buffer);
         expect_true!(result);
 
@@ -365,7 +446,7 @@ mod test {
         let small_rotation = Quaternion { w: 1.0, x: 0.001, y: 0.001, z: 0.001 };
         let large_rotation = Quaternion { w: 1.0, x: 0.1, y: 0.1, z: 0.1 };
 
-        let mut rotator = AmbisonicRotator::new(AMBISONIC_ORDER);
+        let mut rotator = AmbisonicRotator::new(AMBISONIC_ORDER, frames_per_buffer);
 
         expect_false!(rotator.process_in_place(&small_rotation, &mut buffer));
         expect_true!(rotator.process_in_place(&large_rotation, &mut buffer));
@@ -448,7 +529,7 @@ mod test {
         let rotation = from_angle_axis(45.0f32.to_radians(), [0.0, 1.0, 0.0]);
         let mut buffer = AudioBuffer::new(num_channels, num_frames);
         buffer.channel_mut(0).as_mut_slice().fill(1.5);
-        let mut rotator = AmbisonicRotator::new(order);
+        let mut rotator = AmbisonicRotator::new(order, num_frames);
 
         rotator.process_in_place(&rotation, &mut buffer);
 
@@ -468,7 +549,7 @@ mod test {
         buffer.channel_mut(1).as_mut_slice().fill(1.0);
         buffer.channel_mut(2).as_mut_slice().fill(2.0);
         buffer.channel_mut(3).as_mut_slice().fill(3.0);
-        let mut rotator = AmbisonicRotator::new(order);
+        let mut rotator = AmbisonicRotator::new(order, num_frames);
 
         rotator.process_in_place(&rotation, &mut buffer);
 
@@ -476,7 +557,7 @@ mod test {
         for ch in 4..num_channels {
             expect_that!(buffer[ch], each(eq(&0.0)));
         }
-        // Energy is conserved within order 1 under 3D rotation (1.0^2 + 2.0^2 + 3.0^2 = 14.0).
+        // Energy is conserved within band 1 under 3D rotation (1.0^2 + 2.0^2 + 3.0^2 = 14.0).
         for ((&c1, &c2), &c3) in buffer[1].iter().zip(&buffer[2]).zip(&buffer[3]) {
             let energy = c1 * c1 + c2 * c2 + c3 * c3;
             expect_that!(energy, near(14.0, EPSILON));

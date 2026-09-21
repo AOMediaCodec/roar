@@ -18,12 +18,12 @@
 #include "absl/log/globals.h"
 #include "absl/types/span.h"
 #include "benchmark/benchmark.h"
-#include "roar/equivalence_testing/benchmarks/benchmark_helpers.h"
+#include "equivalence_testing/benchmarks/benchmark_helpers.h"
 
 extern "C" {
-#include "oar/include/oar.h"
-#include "oar/include/oar_base.h"
-#include "oar/include/oar_metadata.h"
+#include "include/oar.h"
+#include "include/oar_base.h"
+#include "include/oar_metadata.h"
 }
 
 namespace roar_equivalence_testing {
