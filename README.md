@@ -1,6 +1,7 @@
 # ROAR (Rust Open Audio Renderer)
 
-A Rust port of [Open Audio Renderer](https://github.com/AOMediaCodec/oar).
+A Rust port of [Open Audio Renderer](https://github.com/AOMediaCodec/oar), the
+reference implementation of the OAR specification.
 
 The library can be used to render various types of input audio into a
 loudspeaker or binaural output.
