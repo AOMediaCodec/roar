@@ -107,8 +107,8 @@ rust_static_library(
     ],
     edition = "2024",
     visibility = [
-        "@roar//equivalence_testing:__subpackages__",
-        "@roar//tests:__subpackages__",
+        "@aom-roar//equivalence_testing:__subpackages__",
+        "@aom-roar//tests:__subpackages__",
     ],
     deps = [
         "@crates//:realfft",

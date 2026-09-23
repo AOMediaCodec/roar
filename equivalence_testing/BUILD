@@ -7,9 +7,9 @@ cc_test(
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
+        "@aom-roar//src:roar",
         "@googletest//:gtest_main",
         "@oar",
-        "@roar//src:roar",
     ],
 )
 
@@ -20,9 +20,9 @@ cc_test(
         ":test_helpers",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
+        "@aom-roar//src:roar",
         "@googletest//:gtest_main",
         "@oar",
-        "@roar//src:roar",
     ],
 )
 
@@ -32,9 +32,9 @@ cc_test(
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
+        "@aom-roar//src:roar",
         "@googletest//:gtest_main",
         "@oar",
-        "@roar//src:roar",
     ],
 )
 
@@ -44,9 +44,9 @@ cc_test(
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
+        "@aom-roar//src:roar",
         "@googletest//:gtest_main",
         "@oar",
-        "@roar//src:roar",
     ],
 )
 
@@ -56,9 +56,9 @@ cc_test(
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
+        "@aom-roar//src:roar",
         "@googletest//:gtest_main",
         "@oar",
-        "@roar//src:roar",
     ],
 )
 
@@ -68,9 +68,9 @@ cc_test(
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
+        "@aom-roar//src:roar",
         "@googletest//:gtest_main",
         "@oar",
-        "@roar//src:roar",
     ],
 )
 
@@ -80,9 +80,9 @@ cc_test(
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
+        "@aom-roar//src:roar",
         "@googletest//:gtest_main",
         "@oar",
-        "@roar//src:roar",
     ],
 )
 
@@ -104,10 +104,10 @@ cc_library(
     hdrs = [
         "test_helpers.h",
     ],
-    visibility = ["@roar//equivalence_testing:__subpackages__"],
+    visibility = ["@aom-roar//equivalence_testing:__subpackages__"],
     deps = [
         "@abseil-cpp//absl/strings:str_format",
+        "@aom-roar//src:roar",
         "@oar",
-        "@roar//src:roar",
     ],
 )

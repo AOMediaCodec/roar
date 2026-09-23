@@ -11,8 +11,8 @@ cc_library(
     deps = [
         "@abseil-cpp//absl/log:absl_check",
         "@abseil-cpp//absl/types:span",
+        "@aom-roar//equivalence_testing:test_helpers",
         "@oar",
-        "@roar//equivalence_testing:test_helpers",
     ],
 )
 

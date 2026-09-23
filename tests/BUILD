@@ -7,10 +7,10 @@ rust_library(
     testonly = True,
     srcs = ["test_helpers.rs"],
     visibility = [
-        "@roar//tests:__subpackages__",
+        "@aom-roar//tests:__subpackages__",
     ],
     deps = [
-        "@roar//src:roar",
+        "@aom-roar//src:roar",
     ],
 )
 
@@ -20,8 +20,8 @@ rust_test(
     edition = "2024",
     deps = [
         ":test_helpers",
+        "@aom-roar//src:roar",
         "@crates//:googletest",
-        "@roar//src:roar",
     ],
 )
 
@@ -31,8 +31,8 @@ rust_test(
     edition = "2024",
     deps = [
         ":test_helpers",
+        "@aom-roar//src:roar",
         "@crates//:googletest",
-        "@roar//src:roar",
     ],
 )
 
@@ -42,8 +42,8 @@ rust_test(
     edition = "2024",
     deps = [
         ":test_helpers",
+        "@aom-roar//src:roar",
         "@crates//:googletest",
-        "@roar//src:roar",
     ],
 )
 
@@ -53,8 +53,8 @@ rust_test(
     edition = "2024",
     deps = [
         ":test_helpers",
+        "@aom-roar//src:roar",
         "@crates//:googletest",
-        "@roar//src:roar",
     ],
 )
 
@@ -64,8 +64,8 @@ rust_test(
     edition = "2024",
     deps = [
         ":test_helpers",
+        "@aom-roar//src:roar",
         "@crates//:googletest",
-        "@roar//src:roar",
     ],
 )
 
@@ -75,8 +75,8 @@ rust_test(
     edition = "2024",
     deps = [
         ":test_helpers",
+        "@aom-roar//src:roar",
         "@crates//:googletest",
-        "@roar//src:roar",
     ],
 )
 
@@ -86,8 +86,8 @@ rust_test(
     edition = "2024",
     deps = [
         ":test_helpers",
+        "@aom-roar//src:roar",
         "@crates//:googletest",
-        "@roar//src:roar",
     ],
 )
 
@@ -97,7 +97,7 @@ rust_test(
     edition = "2024",
     deps = [
         ":test_helpers",
+        "@aom-roar//src:roar",
         "@crates//:googletest",
-        "@roar//src:roar",
     ],
 )

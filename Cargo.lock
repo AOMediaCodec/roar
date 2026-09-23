@@ -12,6 +12,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "aom-roar"
+version = "0.1.0"
+dependencies = [
+ "googletest",
+ "log",
+ "realfft",
+ "rustfft",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -20,8 +30,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 [[package]]
 name = "googletest"
 version = "0.14.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6b5e2f2b556b7b90297a5a35c8267dd43a537923d2b329beefdba2b4ec19d94"
+source = "git+https://github.com/google/googletest-rust?rev=75ba2198e83bd2e62785fa92e2bf28aa30591a67#75ba2198e83bd2e62785fa92e2bf28aa30591a67"
 dependencies = [
  "googletest_macro",
  "num-traits",
@@ -32,8 +41,7 @@ dependencies = [
 [[package]]
 name = "googletest_macro"
 version = "0.14.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ae6abc96141edd26bf5aeec0f119c129c44de3ced09e5073711a02cb74725d0"
+source = "git+https://github.com/google/googletest-rust?rev=75ba2198e83bd2e62785fa92e2bf28aa30591a67#75ba2198e83bd2e62785fa92e2bf28aa30591a67"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -42,9 +50,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.33"
+version = "0.4.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
+checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "memchr"
@@ -145,16 +153,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
-name = "roar"
-version = "0.1.0"
-dependencies = [
- "googletest",
- "log",
- "realfft",
- "rustfft",
-]
-
-[[package]]
 name = "rustfft"
 version = "6.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -203,6 +201,6 @@ dependencies = [
 
 [[package]]
 name = "unicode-ident"
-version = "1.0.24"
+version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
+checksum = "d245f478577f809a851594d02313b640fb437e0bb33866753cff937863096954"
