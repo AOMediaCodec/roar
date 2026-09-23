@@ -1,0 +1,4 @@
+# For C++ (OAR equivalence testing)
+build --cxxopt=-std=c++20
+build --host_cxxopt=-std=c++20
+build --linkopt=-lm

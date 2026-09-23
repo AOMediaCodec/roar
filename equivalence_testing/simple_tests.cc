@@ -17,6 +17,7 @@
 #include <string_view>
 #include <vector>
 
+#include "absl/strings/str_format.h"
 #include "equivalence_testing/test_helpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"

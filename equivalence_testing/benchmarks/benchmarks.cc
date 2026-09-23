@@ -40,8 +40,6 @@ const bool kLogsSuppressed = []() {
 void SetAudioMetrics(benchmark::State& state, int64_t num_frames,
                      uint32_t frame_size = kDefaultFrameSize,
                      uint32_t sample_rate = kDefaultSampleRate) {
-  state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) *
-                          num_frames * frame_size);
   const double total_audio_duration =
       (static_cast<double>(frame_size) / sample_rate) *
       static_cast<double>(num_frames) * static_cast<double>(state.iterations());

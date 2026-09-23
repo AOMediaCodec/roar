@@ -91,6 +91,7 @@ cc_test(
     srcs = ["simple_tests.cc"],
     deps = [
         ":test_helpers",
+        "@abseil-cpp//absl/strings:str_format",
         "@googletest//:gtest_main",
         "@oar",
     ],

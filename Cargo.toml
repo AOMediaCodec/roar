@@ -32,4 +32,7 @@ realfft = "3.5.0"
 rustfft = "6.4.1"
 
 [dev-dependencies]
-googletest = "0.14.3"
+# The current crates.io version (0.14.3) is out of date.  Pull from git until a
+# new version is released.
+googletest = { git = "https://github.com/google/googletest-rust",
+               rev = "75ba2198e83bd2e62785fa92e2bf28aa30591a67" }
