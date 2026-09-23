@@ -1,13 +1,34 @@
 # ROAR (Rust Open Audio Renderer)
 
-[TOC]
-
 A Rust port of [Open Audio Renderer](https://github.com/AOMediaCodec/oar).
 
 The library can be used to render various types of input audio into a
 loudspeaker or binaural output.
 
-## Output configuration
+## Building
+
+### Prerequisites
+
+-  Install [bazelisk](https://bazel.build/install/bazelisk) to run and manage bazel.
+
+### Build
+
+```shell
+bazelisk build src:roar
+```
+
+### Run tests
+
+```shell
+bazelisk test src:roar_test  # unit tests
+bazelisk test tests:all      # integration tests
+bazelisk test equivalence_tests:all  # equivalence tests
+bazelisk run -c opt equivalence_testing/benchmarks:benchmarks  # benchmarks
+```
+
+## Configuration
+
+### Output configuration
 
 Output is configured by `Config` (or `oar_config_t` for C) when the renderer
 instance is created and contains the following:
@@ -16,7 +37,7 @@ instance is created and contains the following:
 -   `samples_per_channel`: Buffer chunk size in samples (per channel).
 -   `sampling_rate`: Sampling rate in Hz (e.g., 48000).
 
-### Valid output types
+#### Valid output types
 
 Output layouts are defined in `oar_layout_t` in `c_types.rs` for C++ or in the
 `Layout` enum.
@@ -25,7 +46,7 @@ Output layouts are defined in `oar_layout_t` in `c_types.rs` for C++ or in the
     `ck_oar_layout_sound_system_g_490`.
 -   **Binaural**: `ck_oar_layout_binaural`
 
-### Example
+#### Example
 
 C++
 
@@ -46,9 +67,9 @@ let config = Config::new(
 )?;
 ```
 
-## Input configuration
+### Input configuration
 
-### Audio groups
+#### Audio groups
 
 -   Every input audio element must belong to a group so one group is required,
     but ROAR can be also be configured with two groups.
@@ -57,7 +78,7 @@ let config = Config::new(
     groups allows applying gains to the group of elements, indepent of the other
     group.
 
-#### Adding an audio group
+##### Adding an audio group
 
 C++
 
@@ -76,7 +97,7 @@ Rust
 let group_id = rdr.add_audio_group()?;
 ```
 
-#### Configuring or updating a group
+##### Configuring or updating a group
 
 Groups can be configured by updating metadata.
 
@@ -157,12 +178,12 @@ rdr.enable_loudness_processor(true)?;
 rdr.set_loudness(group_id, current_loudness_db, target_loudness_db)?;
 ```
 
-### Audio elements
+#### Audio elements
 
 Note: Audio Element IDs (provided by the caller) must be unique across all audio
 groups.
 
-#### Creating audio elements
+##### Creating audio elements
 
 The Audio Element has the following configuration when created:
 
@@ -236,7 +257,7 @@ let elem_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
 rdr.add_element(group_id, element_id, &elem_cfg)?;
 ```
 
-#### Updating Audio
+##### Updating Audio
 
 *   Audio elements can be removed by ID.
 *   Input audio data is provided by ID.
@@ -358,43 +379,44 @@ rdr.update_element_downmix_mode(
 rdr.remove_element(element_id)?;
 ```
 
-## Additional renderer settings
+### Additional renderer settings
 
 These settings are supported in both C/C++ and Rust APIs.
 
--   **Limiter**: Output peak limiter.
+#### Output peak limiter.
 
-    C++
+C++
 
-    ```cpp
-    roar_enable_limiter(oar, 1); // Enable
-    ```
+```cpp
+roar_enable_limiter(oar, 1); // Enable
+```
 
-    Rust
+Rust
 
-    ```rust
-    rdr.enable_limiter(true)?;
-    ```
+```rust
+rdr.enable_limiter(true)?;
+```
 
--   **Head Tracking** (for binaural rendering): Enable if you will provide head
-    rotation information for the user's head to enable world-locked binaural
-    audio.
+#### Head Tracking
 
-    C++
+Enables head tracking for binaural rendering. Enable if you will provide head
+rotation information for the user's head to enable world-locked binaural audio.
 
-    ```cpp
-    roar_enable_head_tracking(oar, 1); // Enable
-    ```
+C++
 
-    Rust
+```cpp
+roar_enable_head_tracking(oar, 1); // Enable
+```
 
-    ```rust
-    rdr.enable_head_tracking(true)?;
-    ```
+Rust
+
+```rust
+rdr.enable_head_tracking(true)?;
+```
 
 ## Examples
 
-#### Simple usage (7.1.4 to 5.1 output)
+### Simple usage (7.1.4 to 5.1 output)
 
 C/C++
 
@@ -900,7 +922,7 @@ Name                                | Directory               | Used for input t
 **Open Loudspeaker Renderer (OLR)** | `src/renderer/olr/`     | Object-based                             | Loudspeaker
 **Downmix**                         | `src/renderer/downmix/` | Channel-based                            | Loudspeaker
 
-#### Selection logic and downmix parameter behavior
+##### Selection logic and downmix parameter behavior
 
 The active internal renderer is selected during initialization based on the
 target output layout and the configuration of the audio elements:
