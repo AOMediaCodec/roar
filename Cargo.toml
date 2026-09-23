@@ -1,8 +1,30 @@
 [package]
-name = "roar"
+name = "aom-roar"
 version = "0.1.0"
+license-file = "LICENSE"
+description = "A Rust port of Alliance for Open Media's Open Audio Renderer (OAR)."
+readme = "README.md"
+repository = "https://github.com/AOMediaCodec/roar/"
+# Rust edition and version are also specified in MODULE.bazel for bazel builds.
 edition = "2024"
 rust-version = "1.97.1"
+categories = ["multimedia::audio"]
+keywords = [
+  "Alliance for Open Media",
+  "ambisonic audio",
+  "ambisonics",
+  "AOM",
+  "audio renderer",
+  "audio rendering",
+  "audio",
+  "binaural",
+  "channel-based audio",
+  "IAMF",
+  "Immersive Audio Model and Formats",
+  "immersive audio",
+  "scene-based audio",
+  "spatial audio",
+]
 
 [dependencies]
 log = "0.4"
