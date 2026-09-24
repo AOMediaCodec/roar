@@ -454,8 +454,8 @@ pub unsafe extern "C" fn roar_update_metadata(
 ///
 /// The caller must guarantee that:
 /// - `oar` points to a valid, initialized OAR object.
-/// - `output` points to a valid `oar_audio_block_t` with correct `channels` and `samples_per_channel`
-///   and allocated planar float memory.
+/// - `output` points to a valid `oar_audio_block_t` with correct `channels` and
+///   `samples_per_channel` and allocated planar float memory.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn roar_render(oar: *mut oar_t, output: *mut oar_audio_block_t) -> c_int {
     std::panic::catch_unwind(|| {

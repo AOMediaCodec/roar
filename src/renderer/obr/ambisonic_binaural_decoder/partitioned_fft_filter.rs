@@ -35,17 +35,22 @@ pub struct PartitionedFftFilter {
     max_filter_size: usize,
     /// Maximum number of partitions allocated in the frequency-domain buffers.
     max_num_partitions: usize,
-    /// Active time-domain filter length in samples (rounded up to a multiple of `frames_per_buffer`).
+    /// Active time-domain filter length in samples (rounded up to a multiple of
+    /// `frames_per_buffer`).
     filter_size: usize,
     /// Active number of partitions (`filter_size / frames_per_buffer`) convolved during rendering.
     num_partitions: usize,
-    /// Frequency-domain spectra for each partition of the impulse response kernel ($H_0 \dots H_{P-1}$).
+    /// Frequency-domain spectra for each partition of the impulse response kernel ($H_0 \dots
+    /// H_{P-1}$).
     kernel_freq_domain_buffer: AudioBuffer,
-    /// Ring-buffer index into `freq_domain_buffer` pointing to the current (most recent) input block.
+    /// Ring-buffer index into `freq_domain_buffer` pointing to the current (most recent) input
+    /// block.
     curr_front_buffer: usize,
-    /// Circular history buffer storing the frequency-domain spectra of the last $P$ input blocks ($X_m \dots X_{m-(P-1)}$).
+    /// Circular history buffer storing the frequency-domain spectra of the last $P$ input blocks
+    /// ($X_m \dots X_{m-(P-1)}$).
     freq_domain_buffer: AudioBuffer,
-    /// Pre-allocated single-channel scratch buffer used to zero-pad time-domain kernel chunks before FFT transformation.
+    /// Pre-allocated single-channel scratch buffer used to zero-pad time-domain kernel chunks
+    /// before FFT transformation.
     temp_kernel_chunk_buffer: AudioBuffer,
 }
 

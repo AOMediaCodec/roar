@@ -81,7 +81,8 @@ impl EarRenderer {
         Self { target_layout, sample_rate, active_mode: None }
     }
 
-    /// Creates a new `EarRenderer` with specified target output layout using default 48 kHz sample rate.
+    /// Creates a new `EarRenderer` with specified target output layout using default 48 kHz sample
+    /// rate.
     pub fn with_output_layout(target_layout: Layout) -> Self {
         Self::with_params(target_layout, SampleRate::new(48000).unwrap())
     }

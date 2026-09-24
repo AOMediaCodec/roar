@@ -32,7 +32,8 @@ pub struct HoaWithLfeFlag {
     pub lfe_on: bool,
 }
 
-/// Matrix entry table structure associating input HOA order with target loudspeaker layout (`h2m_rdr_t`).
+/// Matrix entry table structure associating input HOA order with target loudspeaker layout
+/// (`h2m_rdr_t`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct H2mRdr {
     /// Input Ambisonic order (`HighOrderAmbisonics`).
@@ -1365,7 +1366,8 @@ pub static H2M_RDR_TAB: [H2mRdr; 80] = [
     H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::Layout7154, channels: 17, lfe1: 3, lfe2: -1, mat: &H4A_IAMF7154, m: 25, n: 16 },
 ];
 
-/// Retrieves the HOA-to-multichannel conversion matrix for given input HOA layout and output speaker layout.
+/// Retrieves the HOA-to-multichannel conversion matrix for given input HOA layout and output
+/// speaker layout.
 ///
 /// Port of `IAMF_element_renderer_get_H2M_matrix`.
 ///
@@ -1393,7 +1395,8 @@ pub fn element_renderer_get_h2m_matrix(
 /// and zeroes out LFE channels as HOA LFE filtering is disabled (`DISABLE_LFE_HOA == 1`).
 ///
 /// # Parameters
-/// * `h2m_matrix`: Conversion matrix configuration obtained via [`element_renderer_get_h2m_matrix`].
+/// * `h2m_matrix`: Conversion matrix configuration obtained via
+///   [`element_renderer_get_h2m_matrix`].
 /// * `inputs`: Slice of planar input channel buffers (`&[&[f32]]`).
 /// * `outputs`: Mutable slice of planar output channel buffers (`&mut [&mut [f32]]`).
 pub fn element_renderer_render_h2m(
@@ -1444,8 +1447,9 @@ pub fn element_renderer_render_h2m(
         let out_slices_ref = &mut out_slices[..num_out_channels];
         outputs.as_slices_mut(out_slices_ref);
         // Iterate backwards from the highest channel index to 0. When right-shifting slices across
-        // the planar output buffer (`out_slices_ref[dest_idx] = out_slices_ref[i]`), reverse iteration guarantees
-        // higher destination slots are populated before lower channels can overwrite them.
+        // the planar output buffer (`out_slices_ref[dest_idx] = out_slices_ref[i]`), reverse
+        // iteration guarantees higher destination slots are populated before lower channels
+        // can overwrite them.
         for i in (0..n_size).rev() {
             let dest_idx = *map.get(i).unwrap_or(&i);
             if dest_idx != i && dest_idx < out_slices_ref.len() && i < out_slices_ref.len() {

@@ -93,7 +93,8 @@ pub struct M2mRdr {
     pub n: usize,
 }
 
-/// Speaker representation structure mapping sound systems to individual channel labels (`IAMF_SPLABEL_PER_LAYOUT`).
+/// Speaker representation structure mapping sound systems to individual channel labels
+/// (`IAMF_SPLABEL_PER_LAYOUT`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IamfSplabelPerLayout {
     pub system: Layout,
@@ -3448,7 +3449,8 @@ pub static IAMF_SPLABEL_PER_LAYOUT: [IamfSplabelPerLayout; 13] = [
     IamfSplabelPerLayout { system: Layout::LayoutA293, channels: 24, sp_labels: &IAMF_A293_SPL },
 ];
 
-/// Retrieves the multichannel-to-multichannel conversion matrix for predefined input and output layouts.
+/// Retrieves the multichannel-to-multichannel conversion matrix for predefined input and output
+/// layouts.
 ///
 /// Port of `IAMF_element_renderer_get_M2M_matrix`.
 ///
@@ -3530,7 +3532,8 @@ pub fn element_renderer_get_m2m_custom_matrix(
 /// Port of `IAMF_element_renderer_render_M2M`.
 ///
 /// # Parameters
-/// * `m2m_matrix`: Conversion matrix configuration obtained via [`element_renderer_get_m2m_matrix`].
+/// * `m2m_matrix`: Conversion matrix configuration obtained via
+///   [`element_renderer_get_m2m_matrix`].
 pub fn element_renderer_render_m2m(
     m2m_matrix: &M2mRdr,
     inputs: PlanarBufferRef<'_, '_>,
@@ -3553,12 +3556,14 @@ pub fn element_renderer_render_m2m(
     matrix_render(&mv, inputs, outputs)
 }
 
-/// Renders custom multichannel input signals into multichannel output signals using channel mapping.
+/// Renders custom multichannel input signals into multichannel output signals using channel
+/// mapping.
 ///
 /// Port of `IAMF_element_renderer_render_M2M_custom`.
 ///
 /// # Parameters
-/// * `m2m_matrix`: Conversion matrix configuration obtained via [`element_renderer_get_m2m_custom_matrix`].
+/// * `m2m_matrix`: Conversion matrix configuration obtained via
+///   [`element_renderer_get_m2m_custom_matrix`].
 /// * `inputs`: Validated read-only view of planar input channels.
 /// * `outputs`: Validated mutable view of planar output channels to be accumulated or overwritten.
 /// * `chmap`: Channel mapping slice obtained during [`element_renderer_get_m2m_custom_matrix`].

@@ -66,7 +66,8 @@ impl VbapPanner {
     ///
     /// * `azimuth` - The target source azimuth angle.
     /// * `elevation` - The target source elevation angle.
-    /// * `gains` - A mutable slice to store the calculated gains. Must be equal in length to the number of speakers.
+    /// * `gains` - A mutable slice to store the calculated gains. Must be equal in length to the
+    ///   number of speakers.
     pub fn calculate_gains(
         &self,
         azimuth: Degrees,

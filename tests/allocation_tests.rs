@@ -170,8 +170,8 @@ mod test {
         });
     }
 
-    /// Verifies that rendering a scene-based element to a loudspeaker output (5.1, routing through EAR)
-    /// does not allocate memory on the heap.
+    /// Verifies that rendering a scene-based element to a loudspeaker output (5.1, routing through
+    /// EAR) does not allocate memory on the heap.
     #[gtest]
     fn ear_rendering_does_not_allocate_memory() {
         let frame_size: usize = 256;
@@ -211,8 +211,8 @@ mod test {
         });
     }
 
-    /// Verifies that rendering an object-based element to a loudspeaker output (5.1, routing through OLR)
-    /// does not allocate memory on the heap.
+    /// Verifies that rendering an object-based element to a loudspeaker output (5.1, routing
+    /// through OLR) does not allocate memory on the heap.
     #[gtest]
     fn olr_rendering_does_not_allocate_memory() {
         let frame_size: usize = 128;

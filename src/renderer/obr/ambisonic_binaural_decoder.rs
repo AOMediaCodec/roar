@@ -181,8 +181,9 @@ impl AmbisonicBinauralDecoder {
     /// Performs time-domain overlap-add synthesis between the current and previous IFFT blocks,
     /// writing `frames_per_buffer` samples to `output`.
     ///
-    /// Sums the head of `curr_buffer` with the tail of `prev_buffer`. When `frames_per_buffer < chunk_size`
-    /// (non-power-of-two frame sizes), `temp_zeropad_buffer` stages the unpadded result.
+    /// Sums the head of `curr_buffer` with the tail of `prev_buffer`. When `frames_per_buffer <
+    /// chunk_size` (non-power-of-two frame sizes), `temp_zeropad_buffer` stages the unpadded
+    /// result.
     fn overlap_add(
         time_buffers: &AudioBuffer,
         curr_buffer: usize,

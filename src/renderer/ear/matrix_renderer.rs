@@ -38,7 +38,8 @@ pub struct MatrixView<'a> {
     pub in_idx_map: Option<&'a [usize]>,
 }
 
-/// Multiplies planar input channels by a transformation matrix and accumulates into output channels.
+/// Multiplies planar input channels by a transformation matrix and accumulates into output
+/// channels.
 ///
 /// Port of `multiply_channels_by_matrix_c` from `matrix_render_x86.c`.
 pub fn multiply_channels_by_matrix_c(
@@ -101,7 +102,8 @@ pub fn multiply_channels_by_matrix_c(
 ///
 /// # Parameters
 ///
-/// * `matrix`: Configuration descriptor describing matrix weights, mapping, and striding dimensions.
+/// * `matrix`: Configuration descriptor describing matrix weights, mapping, and striding
+///   dimensions.
 /// * `inputs`: Validated read-only view of planar input channels.
 /// * `outputs`: Validated mutable view of planar output channels to be accumulated or overwritten.
 pub fn matrix_render(

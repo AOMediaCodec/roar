@@ -24,12 +24,11 @@ pub struct Distance(f32);
 /// `polar_t`.
 ///
 /// Coordinate system details:
-/// - `azimuth`: Horizontal angle in degrees.
-///   Range: `[-180.0, 180.0]`. 0° = front, 90° = left, -90° = right, ±180° = behind.
-/// - `elevation`: Vertical angle in degrees.
-///   Range: `[-90.0, 90.0]`. 0° = horizon, 90° = above, -90° = below.
-/// - `distance`: Distance from the listener.
-///   Range: `[0.0, f32::MAX]`.
+/// - `azimuth`: Horizontal angle in degrees. Range: `[-180.0, 180.0]`. 0° = front, 90° = left, -90°
+///   = right, ±180° = behind.
+/// - `elevation`: Vertical angle in degrees. Range: `[-90.0, 90.0]`. 0° = horizon, 90° = above,
+///   -90° = below.
+/// - `distance`: Distance from the listener. Range: `[0.0, f32::MAX]`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PolarCoordinate {
     azimuth: Degrees,

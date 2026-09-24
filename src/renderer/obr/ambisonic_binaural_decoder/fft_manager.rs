@@ -28,7 +28,8 @@ pub const MIN_FFT_SIZE: usize = 32;
 /// Pre-allocates scratch arrays at initialisation to guarantee that real-time execution
 /// does not trigger dynamic heap allocations.
 pub struct FftManager {
-    /// Number of points in the real-to-complex FFT, matching `2 * next_pow_two(frames_per_buffer)`.
+    /// Number of points in the real-to-complex FFT, matching `2 *
+    /// next_pow_two(frames_per_buffer)`.
     fft_size: usize,
     /// Number of audio frames per processing buffer block.
     frames_per_buffer: usize,

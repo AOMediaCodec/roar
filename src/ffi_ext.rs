@@ -22,10 +22,10 @@ impl oar_audio_block_t {
     ///
     /// # Safety
     /// The caller must guarantee that:
-    /// - `self.data` is either null or points to a valid block of contiguous memory
-    ///   containing at least `channels * samples_per_channel` elements of type `f32`.
-    /// - The memory region remains valid and is not modified for the lifetime of
-    ///   the returned slices.
+    /// - `self.data` is either null or points to a valid block of contiguous memory containing at
+    ///   least `channels * samples_per_channel` elements of type `f32`.
+    /// - The memory region remains valid and is not modified for the lifetime of the returned
+    ///   slices.
     pub unsafe fn as_slices(&self) -> Vec<&[f32]> {
         if self.data.is_null() || self.channels == 0 || self.samples_per_channel == 0 {
             return Vec::new();
@@ -38,8 +38,8 @@ impl oar_audio_block_t {
 
         // SAFETY:
         // - We checked that `self.data` is not null and computed a safe `total_samples`.
-        // - The caller guarantees that `self.data` points to a block of memory containing
-        //   at least `channels * samples_per_channel` valid float values.
+        // - The caller guarantees that `self.data` points to a block of memory containing at least
+        //   `channels * samples_per_channel` valid float values.
         // - The memory region remains unmodified for the duration of the returned immutable slice.
         let full_slice =
             unsafe { std::slice::from_raw_parts(self.data as *const f32, total_samples) };
@@ -56,10 +56,10 @@ impl oar_audio_block_t {
     ///
     /// # Safety
     /// The caller must guarantee that:
-    /// - `self.data` is either null or points to a contiguous block of allocated memory
-    ///   containing at least `channels * samples_per_channel` elements of size `f32`.
-    /// - The memory region is not accessed via any other pointers or references
-    ///   for the lifetime of the returned mutable slices.
+    /// - `self.data` is either null or points to a contiguous block of allocated memory containing
+    ///   at least `channels * samples_per_channel` elements of size `f32`.
+    /// - The memory region is not accessed via any other pointers or references for the lifetime of
+    ///   the returned mutable slices.
     pub unsafe fn as_slices_mut(&mut self) -> Vec<&mut [std::mem::MaybeUninit<f32>]> {
         if self.data.is_null() || self.channels == 0 || self.samples_per_channel == 0 {
             return Vec::new();
@@ -93,8 +93,8 @@ impl oar_audio_element_config_t {
     ///
     /// # Returns
     /// - `Ok(AudioElementConfig)` if the translation is successful.
-    /// - `Err(OarError::InvalidParameter)` if the element type is unsupported, unrecognized,
-    ///   or if an object-based configuration does not specify between 1 and 2 objects.
+    /// - `Err(OarError::InvalidParameter)` if the element type is unsupported, unrecognized, or if
+    ///   an object-based configuration does not specify between 1 and 2 objects.
     pub fn to_safe(
         &self,
     ) -> Result<crate::common::definitions::AudioElementConfig, crate::common::definitions::OarError>

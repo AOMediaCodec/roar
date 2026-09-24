@@ -22,7 +22,8 @@ pub mod convex_hull;
 pub mod custom_gain_calculator;
 
 // // TODO(b/525080422): Get rid of the use of this magic number.
-/// Sentinel angle value representing "no angle" or "unset", matching the C reference's DEF_NONE_DEGREE.
+/// Sentinel angle value representing "no angle" or "unset", matching the C reference's
+/// DEF_NONE_DEGREE.
 pub const SENTINEL_ANGLE_DEGREES: f32 = 361.0;
 pub mod dbap;
 pub mod gain_calculator;

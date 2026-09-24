@@ -376,7 +376,8 @@ mod test {
         let mid_start = next_len / 4;
         let mid_end = 3 * next_len / 4;
         for i in mid_start..mid_end {
-            expect_that!(output[0][i], near(1.0, 0.02)); // 2% tolerance for boundary leakage / ripple
+            expect_that!(output[0][i], near(1.0, 0.02)); // 2% tolerance for boundary leakage /
+                                                         // ripple
         }
     }
 }
