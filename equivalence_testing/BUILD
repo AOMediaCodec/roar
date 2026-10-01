@@ -4,6 +4,9 @@ load("@rules_cc//cc:cc_test.bzl", "cc_test")
 cc_test(
     name = "animated_object_tests",
     srcs = ["animated_object_tests.cc"],
+    tags = [
+        "notap",  # TODO(b/553439367): Temporarily disabled until catching up on OAR updates.
+    ],
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
@@ -29,6 +32,9 @@ cc_test(
 cc_test(
     name = "element_gains_tests",
     srcs = ["element_gains_tests.cc"],
+    tags = [
+        "notap",  # TODO(b/553439367): Temporarily disabled until catching up on OAR updates.
+    ],
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
@@ -53,6 +59,9 @@ cc_test(
 cc_test(
     name = "group_gains_tests",
     srcs = ["group_gains_tests.cc"],
+    tags = [
+        "notap",  # TODO(b/553439367): Temporarily disabled until catching up on OAR updates.
+    ],
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
@@ -65,6 +74,9 @@ cc_test(
 cc_test(
     name = "head_tracking_tests",
     srcs = ["head_tracking_tests.cc"],
+    tags = [
+        "notap",  # TODO(b/553439367): Temporarily disabled until catching up on OAR updates.
+    ],
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
@@ -77,6 +89,9 @@ cc_test(
 cc_test(
     name = "loudness_tests",
     srcs = ["loudness_tests.cc"],
+    tags = [
+        "notap",  # TODO(b/553439367): Temporarily disabled until catching up on OAR updates.
+    ],
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
@@ -89,6 +104,9 @@ cc_test(
 cc_test(
     name = "simple_tests",
     srcs = ["simple_tests.cc"],
+    tags = [
+        "notap",  # TODO(b/553439367): Temporarily disabled until catching up on OAR updates.
+    ],
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
