@@ -58,17 +58,33 @@ pub struct SourceProperties {
 /// to Higher-Order Ambisonics format. Guaranteed to be allocation-free on real-time loops.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AmbisonicEncoder {
+    /// Maximum number of mono input source channels to encode.
     number_of_input_channels: usize,
+    /// Number of periphonic Ambisonic output channels (`(ambisonic_order + 1)^2`).
     number_of_output_channels: usize,
+    /// Target Ambisonic order of the encoded sound field.
     ambisonic_order: usize,
+    /// Per-input-channel current and target spatial parameters (`None` if unconfigured).
     sources: Vec<Option<SourceProperties>>,
+    /// False until the first call to `process_planar_audio_data()`. While false, `set_source()`
+    /// snaps `current` to `target` instead of scheduling a ramp because no audio has been rendered
+    /// yet, so there is no previously audible position to interpolate from.
+    has_processed: bool,
+    /// Generator for evaluating Associated Legendre Polynomials at a source's elevation.
     alp_generator: AssociatedLegendrePolynomialsGenerator,
-    encoding_matrix: Vec<f32>,
+    /// Pre-allocated scratch buffer storing start-of-block encoding columns per input channel.
     scratch_column_start: Vec<f32>,
+    /// Pre-allocated scratch buffer storing end-of-block (target) encoding columns per input
+    /// channel.
     scratch_column_end: Vec<f32>,
+    /// Pre-allocated scratch flags indicating which input channels require ramping across the
+    /// block.
     scratch_needs_interpolation: Vec<bool>,
+    /// Pre-allocated scratch buffer for a single source's spherical harmonic coefficients.
     scratch_sh_coeffs: Vec<f32>,
+    /// Pre-allocated scratch buffer for Associated Legendre Polynomial values.
     scratch_alp_values: Vec<f32>,
+    /// Pre-allocated scratch buffer for a single source's gain-scaled encoding column.
     scratch_col_temp: Vec<f32>,
 }
 
@@ -88,8 +104,8 @@ impl AmbisonicEncoder {
             number_of_output_channels,
             ambisonic_order,
             sources: vec![None; number_of_input_channels],
+            has_processed: false,
             alp_generator,
-            encoding_matrix: vec![0.0; mat_size],
             scratch_column_start: vec![0.0; mat_size],
             scratch_column_end: vec![0.0; mat_size],
             scratch_needs_interpolation: vec![false; number_of_input_channels],
@@ -119,32 +135,18 @@ impl AmbisonicEncoder {
 
         let params = SingleSourceParams { gain, azimuth, elevation, distance };
         if let Some(prop) = &mut self.sources[input_channel] {
-            if prop.target.gain == gain
-                && prop.target.azimuth == azimuth
-                && prop.target.elevation == elevation
-                && prop.target.distance == distance
-            {
+            if prop.target == params {
                 return;
             }
             prop.target = params;
+            // Before any audio has been rendered there is no previously audible position to ramp
+            // from, so snap to the new parameters immediately.
+            if !self.has_processed {
+                prop.current = params;
+            }
         } else {
             self.sources[input_channel] =
                 Some(SourceProperties { current: params, target: params });
-            if gain.0 < NEGATIVE_120DB_IN_AMPLITUDE {
-                self.zero_encoding_column(input_channel);
-            }
-            return;
-        }
-
-        if gain.0 < NEGATIVE_120DB_IN_AMPLITUDE {
-            self.zero_encoding_column(input_channel);
-        }
-    }
-
-    fn zero_encoding_column(&mut self, input_channel: usize) {
-        let offset = input_channel * self.number_of_output_channels;
-        for i in 0..self.number_of_output_channels {
-            self.encoding_matrix[offset + i] = 0.0;
         }
     }
 
@@ -242,11 +244,13 @@ impl AmbisonicEncoder {
             }
         }
 
-        self.encoding_matrix.copy_from_slice(&self.scratch_column_end);
-
         for prop in self.sources.iter_mut().flatten() {
             prop.current = prop.target;
         }
+
+        // Audio has now been rendered; subsequent `set_source()` updates ramp from the previously
+        // audible parameters.
+        self.has_processed = true;
     }
 
     fn fill_column_to_temp(&mut self, p: &SingleSourceParams) {
@@ -427,5 +431,84 @@ mod test {
             vec![1.0, 0.0, -1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0];
 
         run_encoder_test(120.0, -90.0, &expected);
+    }
+
+    /// A source position set after the source was created—but before any audio has been
+    /// processed—must take effect from the first frame with no ramp from the previously set
+    /// default position.
+    #[gtest]
+    fn pre_render_position_update_takes_effect_immediately() {
+        let buffer_size = 64;
+        let ambisonic_order = 1;
+        let num_out = 4;
+        let mut encoder = AmbisonicEncoder::new(NUMBER_OF_INPUT_CHANNELS, ambisonic_order);
+        encoder.set_source(
+            0,
+            LinearGain(1.0),
+            Degrees(0.0),
+            Degrees(0.0),
+            Distance::new(1.0).unwrap(),
+        );
+        encoder.set_source(
+            0,
+            LinearGain(1.0),
+            Degrees(90.0),
+            Degrees(0.0),
+            Distance::new(1.0).unwrap(),
+        );
+        let mut input_buffer = AudioBuffer::new(NUMBER_OF_INPUT_CHANNELS, buffer_size);
+        input_buffer.channel_mut(0).as_mut_slice().fill(1.0);
+        let mut output_buffer = AudioBuffer::new(num_out, buffer_size);
+
+        encoder.process_planar_audio_data(&input_buffer, &mut output_buffer);
+
+        // First-order ACN/SN3D coefficients for azimuth 90, elevation 0: [1.0, 1.0, 0.0, 0.0].
+        expect_that!(&output_buffer[0], each(near(1.0, EPSILON)));
+        expect_that!(&output_buffer[1], each(near(1.0, EPSILON)));
+        expect_that!(&output_buffer[2], each(near(0.0, EPSILON)));
+        expect_that!(&output_buffer[3], each(near(0.0, EPSILON)));
+    }
+
+    /// Once audio has been processed, subsequent position updates must ramp across the next block
+    /// from the previously audible position to the new target position.
+    #[gtest]
+    fn post_render_position_update_ramps_across_block() {
+        let buffer_size = 64;
+        let ambisonic_order = 1;
+        let num_out = 4;
+        let mut encoder = AmbisonicEncoder::new(NUMBER_OF_INPUT_CHANNELS, ambisonic_order);
+        encoder.set_source(
+            0,
+            LinearGain(1.0),
+            Degrees(0.0),
+            Degrees(0.0),
+            Distance::new(1.0).unwrap(),
+        );
+        let mut input_buffer = AudioBuffer::new(NUMBER_OF_INPUT_CHANNELS, buffer_size);
+        input_buffer.channel_mut(0).as_mut_slice().fill(1.0);
+        let mut output_buffer = AudioBuffer::new(num_out, buffer_size);
+        encoder.process_planar_audio_data(&input_buffer, &mut output_buffer);
+
+        encoder.set_source(
+            0,
+            LinearGain(1.0),
+            Degrees(90.0),
+            Degrees(0.0),
+            Distance::new(1.0).unwrap(),
+        );
+        encoder.process_planar_audio_data(&input_buffer, &mut output_buffer);
+
+        // First-order ACN/SN3D coefficients: front (0°) is [1, 0, 0, 1], left (90°) is
+        // [1, 1, 0, 0].
+        // Starts at front.
+        expect_that!(output_buffer[0][0], near(1.0, EPSILON));
+        expect_that!(output_buffer[1][0], near(0.0, EPSILON));
+        expect_that!(output_buffer[2][0], near(0.0, EPSILON));
+        expect_that!(output_buffer[3][0], near(1.0, EPSILON));
+        // Ends at left.
+        expect_that!(output_buffer[0][buffer_size - 1], near(1.0, EPSILON));
+        expect_that!(output_buffer[1][buffer_size - 1], near(1.0, EPSILON));
+        expect_that!(output_buffer[2][buffer_size - 1], near(0.0, EPSILON));
+        expect_that!(output_buffer[3][buffer_size - 1], near(0.0, EPSILON));
     }
 }
