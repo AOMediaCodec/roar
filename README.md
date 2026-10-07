@@ -311,7 +311,9 @@ or Cartesian systems:
 *   **Animation smoothness**: Choosing a smaller `metadata_unit_to_process`
     (e.g., 64 samples) increases the "frame rate" of position updates, producing
     smoother spatial transitions at the cost of additional sub-renderer metadata
-    updates.
+    updates. Note: [OAR](https://github.com/AOMediaCodec/oar) does not allow
+    calling `oar_set_metadata_unit_to_process` for binaural output but ROAR does
+    allow it.
 
 C++
 
@@ -838,6 +840,11 @@ while rendering {
 ```
 
 ## Implementation details
+
+### Differences from [OAR](https://github.com/AOMediaCodec/oar)
+
+- OAR does not allow calling `set_metadata_unit_to_process` for binaural
+  output but ROAR does allow it.
 
 ### Library architecture
 

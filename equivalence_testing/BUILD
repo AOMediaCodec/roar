@@ -7,7 +7,6 @@ cc_test(
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
-        "@aom-roar//src:roar",
         "@googletest//:gtest_main",
         "@oar",
     ],

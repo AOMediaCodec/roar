@@ -81,6 +81,29 @@ impl ObrImpl {
         }
     }
 
+    /// Updates the processing block size per channel and re-initializes DSP state if elements
+    /// exist.
+    ///
+    /// # Parameters
+    /// * `buffer_size_per_channel` - Number of audio frames per processing block.
+    pub fn set_buffer_size_per_channel(
+        &mut self,
+        buffer_size_per_channel: Samples,
+    ) -> Result<(), OarError> {
+        if self.buffer_size_per_channel == buffer_size_per_channel {
+            return Ok(());
+        }
+        self.buffer_size_per_channel = buffer_size_per_channel;
+        let size_usize = buffer_size_per_channel.value() as usize;
+        self.fft_manager = FftManager::new(size_usize);
+        self.scratch_group_output = AudioBuffer::new(2, size_usize);
+        self.scratch_limiter_buffer = AudioBuffer::new(2, size_usize);
+        if !self.audio_elements.is_empty() {
+            self.initialize_dsp()?;
+        }
+        Ok(())
+    }
+
     /// Resets all DSP state and clears processing groups.
     pub fn reset_dsp(&mut self) {
         self.processing_groups.clear();
@@ -577,6 +600,19 @@ impl AudioRenderer for ObrAudioRendererAdapter {
         self.obr.enable_limiter(enable);
         Ok(())
     }
+
+    fn set_metadata_unit_to_process(&mut self, samples: Samples) -> Result<(), OarError> {
+        if self.obr.get_buffer_size_per_channel() == samples {
+            return Ok(());
+        }
+        self.obr.set_buffer_size_per_channel(samples)?;
+        let size_usize = samples.value() as usize;
+        let expected_ins = self.obr.get_number_of_input_channels();
+        self.scratch_input.resize(expected_ins, size_usize);
+        self.scratch_output = AudioBuffer::new(NUM_BINAURAL_CHANNELS, size_usize);
+        self.gain_scratch_buf.resize(size_usize, 1.0);
+        Ok(())
+    }
 }
 
 // ===== Tests =====
@@ -823,5 +859,45 @@ mod test {
         renderer.process(&input_buffer, &mut output_buffer);
 
         expect_that!(has_non_zero_output(&output_buffer), eq(true));
+    }
+
+    #[gtest]
+    fn set_buffer_size_per_channel_with_same_value_preserves_buffers() {
+        let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
+        let initial_group_ptr = renderer.scratch_group_output.channel(0).as_slice().as_ptr();
+        let initial_limiter_ptr = renderer.scratch_limiter_buffer.channel(0).as_slice().as_ptr();
+
+        let result = renderer.set_buffer_size_per_channel(get_buffer_size());
+
+        expect_ok!(result);
+        expect_eq!(renderer.scratch_group_output.channel(0).as_slice().as_ptr(), initial_group_ptr);
+        expect_eq!(
+            renderer.scratch_limiter_buffer.channel(0).as_slice().as_ptr(),
+            initial_limiter_ptr
+        );
+    }
+
+    #[gtest]
+    fn set_buffer_size_per_channel_with_new_value_resizes_buffers() -> Result<()> {
+        let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
+        let new_size = Samples::new(64)?;
+
+        renderer.set_buffer_size_per_channel(new_size)?;
+
+        expect_eq!(renderer.get_buffer_size_per_channel(), new_size);
+        expect_eq!(renderer.scratch_group_output.num_frames(), 64);
+        expect_eq!(renderer.scratch_limiter_buffer.num_frames(), 64);
+        Ok(())
+    }
+
+    #[gtest]
+    fn set_metadata_unit_to_process_preserves_limiter_enabled_state() -> Result<()> {
+        let mut adapter = ObrAudioRendererAdapter::new(get_buffer_size(), get_sample_rate());
+        adapter.enable_limiter(true)?;
+
+        adapter.set_metadata_unit_to_process(Samples::new(64)?)?;
+
+        expect_true!(adapter.obr.limiter_enabled);
+        Ok(())
     }
 }

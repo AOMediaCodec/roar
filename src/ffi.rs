@@ -338,7 +338,8 @@ pub unsafe extern "C" fn roar_update_audio_element_data(
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
+/// - `oar` points to a properly aligned, validly aligned object and that no aliasing accesses occur
+///   for the duration of this call.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn roar_set_metadata_unit_to_process(
     oar: *mut oar_t,
@@ -352,7 +353,12 @@ pub unsafe extern "C" fn roar_set_metadata_unit_to_process(
         if r#type != oar_metadata_type_t::ck_metadata_object_positions {
             return OarError::NotSupported.into();
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
+        let Ok(samples) = Samples::new(samples) else {
+            return OarError::InvalidParameter.into();
+        };
+        // SAFETY: `oar` was verified non-null above. The caller guarantees that `oar` points to a
+        // properly aligned, validly initialized `FfiWrapper` and that no aliasing accesses occur
+        // for the duration of this call, satisfying `&mut` validity and exclusivity.
         let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
         match wrapper.renderer.set_object_position_metadata_unit_to_process(samples) {
             Ok(()) => OAR_STATUS_OK,

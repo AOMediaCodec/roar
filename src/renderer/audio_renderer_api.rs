@@ -120,7 +120,7 @@ pub trait AudioRenderer: Send + Sync {
     }
 
     /// Sets the metadata processing unit size in samples.
-    fn set_metadata_unit_to_process(&mut self, _samples: u32) -> Result<(), OarError> {
+    fn set_metadata_unit_to_process(&mut self, _samples: Samples) -> Result<(), OarError> {
         Ok(())
     }
 }

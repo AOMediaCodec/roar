@@ -11,13 +11,16 @@
 //! Helpers for ROAR integration tests.
 
 use roar::c_types::{
-    audio_element_rendering_config_t, audio_element_type_t, downmix_info_t,
-    oar_audio_element_config_t, oar_audio_element_config_union_t, oar_binaural_filter_profile_t,
-    oar_channel_based_config_t, oar_config_t, oar_headphones_rendering_mode_t, oar_hoa_t,
-    oar_layout_t, oar_object_based_config_t, oar_scene_based_config_t, oar_t, parameter_set_t,
+    audio_element_rendering_config_t, audio_element_type_t, coordinate_type_t,
+    def_max_number_of_objects, downmix_info_t, oar_audio_element_config_t,
+    oar_audio_element_config_union_t, oar_binaural_filter_profile_t, oar_channel_based_config_t,
+    oar_config_t, oar_headphones_rendering_mode_t, oar_hoa_t, oar_layout_t,
+    oar_metadata_object_positions_t, oar_metadata_object_positions_union_t, oar_metadata_t,
+    oar_metadata_type_t, oar_metadata_union_t, oar_object_based_config_t, oar_param_type_t,
+    oar_scene_based_config_t, oar_t, parameter_set_t, polar_t,
 };
 use roar::ffi::{roar_create, roar_destroy};
-use roar::{PlanarBufferMut, PlanarBufferRef, Samples};
+use roar::{ObjectPosition, PlanarBufferMut, PlanarBufferRef, PolarCoordinate, Samples};
 
 /// Convenience wrapper for creating and destroying the C API test renderer.
 pub struct TestRoar {
@@ -170,6 +173,45 @@ pub fn create_object_based_config(num_objects: usize) -> oar_audio_element_confi
         },
         parameters: default_parameter_set(),
     }
+}
+
+/// Creates a C FFI metadata struct (`oar_metadata_t`) for constant polar object positions.
+///
+/// # Parameters
+/// * `positions` - Slice of `(azimuth, elevation, distance)` tuples in degrees and normalized
+///   distance.
+/// * `duration` - Transition duration in samples.
+pub fn create_polar_position_metadata(
+    positions: &[(f32, f32, f32)],
+    duration: usize,
+) -> oar_metadata_t {
+    let mut polar_pos =
+        [polar_t { azimuth: 0.0, elevation: 0.0, distance: 0.0 }; def_max_number_of_objects];
+    for (i, &(azimuth, elevation, distance)) in positions.iter().enumerate() {
+        polar_pos[i] = polar_t { azimuth, elevation, distance };
+    }
+    oar_metadata_t {
+        r#type: oar_metadata_type_t::ck_metadata_object_positions as u32,
+        value: oar_metadata_union_t {
+            object_positions: oar_metadata_object_positions_t {
+                param_type: oar_param_type_t::ck_param_constant,
+                position_type: coordinate_type_t::ck_polar,
+                num_objects: positions.len() as u32,
+                positions: oar_metadata_object_positions_union_t { polar_positions: polar_pos },
+            },
+        },
+        duration: duration as i32,
+    }
+}
+
+/// Creates a Rust `ObjectPosition::Polar` from `(azimuth, elevation, distance)` tuples.
+pub fn create_polar_positions(positions: &[(f32, f32, f32)]) -> ObjectPosition {
+    ObjectPosition::Polar(
+        positions
+            .iter()
+            .map(|&(az, el, dist)| PolarCoordinate::new_from_floats(az, el, dist).unwrap())
+            .collect(),
+    )
 }
 
 /// Computes the Root Mean Square (RMS) of an audio channel.

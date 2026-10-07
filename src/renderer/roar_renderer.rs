@@ -113,7 +113,7 @@ pub struct RoarRenderer {
     /// Scratch buffer for gain interpolation.
     gain_scratch_buf: Vec<f32>,
     /// Interval in samples for processing object position metadata.
-    pub(crate) object_position_metadata_samples: u32,
+    pub(crate) object_position_metadata_samples: Samples,
 }
 
 impl RoarRenderer {
@@ -209,16 +209,23 @@ impl RoarRenderer {
     }
 
     /// Sets the metadata processing unit size in samples for object positions.
+    ///
+    /// # Errors
+    ///
+    /// Returns `OarError::InvalidParameter` if `samples` exceeds `samples_per_channel`.
     pub fn set_object_position_metadata_unit_to_process(
         &mut self,
-        samples: u32,
+        samples: Samples,
     ) -> Result<(), OarError> {
-        self.object_position_metadata_samples = samples;
+        if samples > self.config.samples_per_channel() {
+            return Err(OarError::InvalidParameter);
+        }
         for renderers in self.group_renderers.values_mut() {
             for rdr in renderers {
                 rdr.renderer.set_metadata_unit_to_process(samples)?;
             }
         }
+        self.object_position_metadata_samples = samples;
         Ok(())
     }
 
@@ -262,7 +269,7 @@ impl RoarRenderer {
             element_gains: HashMap::new(),
             group_gains: HashMap::new(),
             gain_scratch_buf: vec![1.0f32; samples],
-            object_position_metadata_samples: config.samples_per_channel().value(),
+            object_position_metadata_samples: config.samples_per_channel(),
         })
     }
 
@@ -325,13 +332,11 @@ impl RoarRenderer {
             )?),
         };
 
-        let sub_frame_samples = if self.object_position_metadata_samples == 0 {
-            None
-        } else {
-            Some(Samples::new(self.object_position_metadata_samples)?)
-        };
-        let router =
-            AudioElementsRenderer::with_backend(sub, target_layout.channels(), sub_frame_samples);
+        let router = AudioElementsRenderer::with_backend(
+            sub,
+            target_layout.channels(),
+            Some(self.object_position_metadata_samples),
+        );
 
         let mut active_sub: Box<dyn AudioRenderer> = Box::new(router);
         active_sub.add_element(id, config)?;
@@ -369,18 +374,13 @@ impl RoarRenderer {
                 renderers[idx].renderer.add_element(id, config)?;
             } else {
                 let obr = ObrAudioRendererAdapter::new(
-                    self.config.samples_per_channel(),
+                    self.object_position_metadata_samples,
                     self.config.sample_rate(),
                 );
-                let sub_frame_samples = if self.object_position_metadata_samples == 0 {
-                    None
-                } else {
-                    Some(Samples::new(self.object_position_metadata_samples)?)
-                };
                 let router = AudioElementsRenderer::with_backend(
                     Box::new(obr),
                     self.config.output_layout().channels(),
-                    sub_frame_samples,
+                    Some(self.object_position_metadata_samples),
                 );
 
                 let mut active_sub: Box<dyn AudioRenderer> = Box::new(router);

@@ -287,31 +287,6 @@ TEST(AnimatedObjectTest,
   }
 }
 
-// TODO(b/546520799): Re-enable once the bug is fixed (or combine with above).
-// This test crashes in liboar: https://github.com/AOMediaCodec/oar/issues/29.
-// Tests subframe metadata processing (every 32 samples) across motion
-// variations for binaural rendering.
-TEST(AnimatedObjectTest,
-     DISABLED_BinauralSubframeProcessing_RendersEquivalently) {
-  const size_t num_renders = kDefaultNumRenders;
-  const uint32_t total_duration = num_renders * kSamplesPerChannel;
-  auto layout = ck_oar_layout_binaural;
-  for (const auto& test_case : GetAllObjectMotionVariations(total_duration)) {
-    oar_config_t config = {};
-    config.target_layout = layout;
-    config.samples_per_channel = kSamplesPerChannel;
-    config.sampling_rate = kSampleRate;
-    oar_audio_element_config_t element_config = {};
-    element_config.type = ck_object_based;
-    element_config.obc.num_objects = 1;
-
-    std::string error_message = absl::StrFormat(
-        "Binaural Subframe Processing Variation: %s", test_case.name);
-    RunAnimatedObjectTest(config, element_config, {test_case.metadata},
-                          num_renders, kSubframeSize, error_message);
-  }
-}
-
 // Attempt to move azimuth from -90 to +90 but with 0 duration.
 // For OLR, this means the metadata is discarded and there is no output.
 // For OBR, the metadata is applied immediately and maintained.

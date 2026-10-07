@@ -559,9 +559,11 @@ impl AudioRenderer for AudioElementsRenderer {
         }
     }
 
-    fn set_metadata_unit_to_process(&mut self, samples: u32) -> Result<(), OarError> {
-        let sub_frame_samples = if samples == 0 { None } else { Some(Samples::new(samples)?) };
-        self.set_sub_frame_samples(sub_frame_samples);
+    fn set_metadata_unit_to_process(&mut self, samples: Samples) -> Result<(), OarError> {
+        if let Some(ref mut sub) = self.sub_renderer {
+            sub.set_metadata_unit_to_process(samples)?;
+        }
+        self.set_sub_frame_samples(Some(samples));
         Ok(())
     }
 }
