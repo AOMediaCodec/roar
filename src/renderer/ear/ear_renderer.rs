@@ -19,7 +19,7 @@
 
 use crate::common::definitions::{
     AudioElementConfig, HighOrderAmbisonics, Layout, OarError, PlanarBufferMut, PlanarBufferRef,
-    SampleRate, MAX_OUTPUT_CHANNEL_COUNT,
+    MAX_OUTPUT_CHANNEL_COUNT,
 };
 use crate::renderer::audio_renderer_api::AudioRenderer;
 use crate::renderer::ear::ambisonic_to_channel_renderer::{
@@ -39,8 +39,6 @@ use crate::renderer::ear::channel_to_channel_renderer::{
 pub struct EarRenderer {
     /// Target output layout for this renderer instance.
     pub target_layout: Layout,
-    /// Sample rate configured in Hz.
-    pub sample_rate: SampleRate,
     /// Active rendering matrix mode configured for the current audio element.
     active_mode: Option<EarRenderingMode>,
 }
@@ -62,7 +60,7 @@ pub enum EarRenderingMode {
 }
 
 impl EarRenderer {
-    /// Creates a new `EarRenderer` configured with default Stereo output and 48 kHz sample rate.
+    /// Creates a new `EarRenderer` configured with default Stereo output.
     ///
     /// # Examples
     ///
@@ -70,21 +68,16 @@ impl EarRenderer {
     /// use roar::renderer::ear::ear_renderer::EarRenderer;
     ///
     /// let rdr = EarRenderer::new();
-    /// assert_eq!(rdr.sample_rate.value(), 48000);
+    /// assert_eq!(rdr.target_layout, Layout::Stereo);
     /// ```
     pub fn new() -> Self {
-        Self::with_params(Layout::Stereo, SampleRate::new(48000).unwrap())
+        Self::with_output_layout(Layout::Stereo)
     }
 
-    /// Creates a new `EarRenderer` with specified target output layout and sample rate.
-    pub fn with_params(target_layout: Layout, sample_rate: SampleRate) -> Self {
-        Self { target_layout, sample_rate, active_mode: None }
-    }
-
-    /// Creates a new `EarRenderer` with specified target output layout using default 48 kHz sample
+    /// Creates a new `EarRenderer` with specified target output layout.
     /// rate.
     pub fn with_output_layout(target_layout: Layout) -> Self {
-        Self::with_params(target_layout, SampleRate::new(48000).unwrap())
+        Self { target_layout, active_mode: None }
     }
 }
 
@@ -298,7 +291,7 @@ mod tests {
 
     #[gtest]
     fn ear_renderer_add_element_scene_based_sets_active_mode_and_renders() {
-        let mut rdr = EarRenderer::with_params(Layout::Layout51, SampleRate::new(48000).unwrap());
+        let mut rdr = EarRenderer::with_output_layout(Layout::Layout51);
         let config = AudioElementConfig::SceneBased(SceneBasedConfig {
             order: HighOrderAmbisonics::Zoa,
             rendering_config: None,
@@ -335,7 +328,7 @@ mod tests {
 
     #[gtest]
     fn ear_renderer_add_element_channel_custom_sets_active_mode_and_renders() {
-        let mut rdr = EarRenderer::with_params(Layout::Layout51, SampleRate::new(48000).unwrap());
+        let mut rdr = EarRenderer::with_output_layout(Layout::Layout51);
         let config = AudioElementConfig::ChannelBased(ChannelBasedConfig {
             layout: Layout::StereoS,
             downmix_info: None,

@@ -57,11 +57,6 @@ impl LayerGainsResult {
         self.len
     }
 
-    /// Returns true if the result contains no gains.
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
     /// Pushes a new elevation gain to the result.
     ///
     /// If the fixed-size buffer is full, the gain is ignored.
