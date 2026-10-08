@@ -21,10 +21,8 @@ use crate::common::definitions::{
     Decibels, LinearGain, Milliseconds, OarError, PlanarBufferMut, SampleRate, Samples,
 };
 
-// The decay time constant of -3.0 corresponds to the time to decay to e^-3 (~0.05 or -26 dB,
-// which represents 95% settling time).
-const DECAY_TIME_CONSTANT: f64 = -3.0;
-const MS_PER_SECOND: f64 = 1000.0;
+/// Release log-decay target in nepers (`-3 Np` => `e^-3 ≈ 0.05`, or ~26 dB / 95% settling).
+const RELEASE_DECAY_NEPERS: f64 = -3.0;
 
 /// High-performance look-ahead dynamics peak limiter with zero dynamic allocation inside real-time
 /// block loops.  Exactly mirrors `oar_limiter_t` in `liboar/src/limiter/oar_limiter.h`.
@@ -34,8 +32,8 @@ pub struct OarLimiter {
     sample_rate: SampleRate,
     /// Threshold ceiling value as a linear amplitude scale.
     ceiling: f64,
-    /// Release time constant coefficient.
-    release_time_constant: f64,
+    /// Per-sample one-pole release smoothing coefficient (`e^(RELEASE_DECAY_NEPERS / N)`).
+    release_coeff: f64,
     /// Currently active envelope gain scale value.
     env: f64,
     /// Scratch buffer for peaks to avoid stack/heap allocation during render.
@@ -59,14 +57,13 @@ impl OarLimiter {
         let linear_gain: LinearGain = ceiling_db.into();
         let ceiling = linear_gain.0 as f64;
 
-        let release_time_constant = (DECAY_TIME_CONSTANT
-            / (sample_rate.value() as f64 * release_time.0 / MS_PER_SECOND))
-            .exp();
+        let release_coeff =
+            (RELEASE_DECAY_NEPERS / (sample_rate * release_time).value() as f64).exp();
 
         Ok(Self {
             sample_rate,
             ceiling,
-            release_time_constant,
+            release_coeff,
             env: 1.0,
             peaks: vec![0.0f32; block_size.value() as usize],
         })
@@ -100,7 +97,7 @@ impl OarLimiter {
         }
 
         let ceiling = self.ceiling;
-        let release_time_constant = self.release_time_constant;
+        let release_coeff = self.release_coeff;
         let mut env = self.env;
         for p in peaks_slice.iter_mut() {
             let sample_peak = *p as f64;
@@ -109,7 +106,7 @@ impl OarLimiter {
             env = if max_req_gain < env {
                 max_req_gain
             } else {
-                release_time_constant * (env - max_req_gain) + max_req_gain
+                release_coeff * (env - max_req_gain) + max_req_gain
             };
             *p = env as f32;
         }
@@ -254,16 +251,5 @@ mod test {
         let result = limiter.process_block(&mut buf);
 
         expect_eq!(result.unwrap_err(), OarError::InvalidParameter);
-    }
-
-    #[gtest]
-    fn new_returns_invalid_parameter_for_zero_or_negative_values() {
-        let sample_rate_err = SampleRate::new(0);
-        let ms_zero_err = Milliseconds::new(0.0);
-        let ms_neg_err = Milliseconds::new(-5.0);
-
-        expect_eq!(sample_rate_err.unwrap_err(), OarError::InvalidParameter);
-        expect_eq!(ms_zero_err.unwrap_err(), OarError::InvalidParameter);
-        expect_eq!(ms_neg_err.unwrap_err(), OarError::InvalidParameter);
     }
 }

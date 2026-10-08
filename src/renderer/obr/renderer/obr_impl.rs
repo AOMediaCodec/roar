@@ -83,7 +83,10 @@ impl ObrImpl {
             processing_groups: Vec::new(),
             resampler: Resampler::new(),
             fft_manager: FftManager::new(size_usize),
-            peak_limiter: Some(PeakLimiter::new_with_defaults(sampling_rate)),
+            peak_limiter: Some(PeakLimiter::new_with_defaults(
+                sampling_rate,
+                buffer_size_per_channel,
+            )),
             scratch_group_output: AudioBuffer::new(2, size_usize),
             scratch_limiter_buffer: AudioBuffer::new(2, size_usize),
         }
@@ -108,6 +111,9 @@ impl ObrImpl {
         self.scratch_limiter_buffer = AudioBuffer::new(2, size_usize);
         if !self.audio_elements.is_empty() {
             self.initialize_dsp()?;
+        } else {
+            self.peak_limiter =
+                Some(PeakLimiter::new_with_defaults(self.sampling_rate, buffer_size_per_channel));
         }
         Ok(())
     }
@@ -133,7 +139,8 @@ impl ObrImpl {
             group.initialize(&mut self.fft_manager, &mut self.resampler)?;
             group.update_ambisonic_encoder(&mut self.audio_elements)?;
         }
-        self.peak_limiter = Some(PeakLimiter::new_with_defaults(self.sampling_rate));
+        self.peak_limiter =
+            Some(PeakLimiter::new_with_defaults(self.sampling_rate, self.buffer_size_per_channel));
         Ok(())
     }
 

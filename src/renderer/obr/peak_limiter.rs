@@ -15,15 +15,15 @@
 //! Provides the DSP logic for dynamic range compression and peak signal limiting
 //! used on OBR stereo binaural outputs.
 
-use crate::common::definitions::{Decibels, LinearGain, Milliseconds, SampleRate};
+use crate::common::definitions::{Decibels, LinearGain, Milliseconds, SampleRate, Samples};
 use crate::renderer::obr::audio_buffer::AudioBuffer;
 use crate::renderer::obr::common::constants::{
     PEAK_LIMITER_DEFAULT_CEILING, PEAK_LIMITER_DEFAULT_RELEASE_TIME,
 };
 
-// TODO(b/525080422): Move these constants to definitions.rs, use Decibels and Milliseconds types.
-const DEFAULT_THRESHOLD_DB: f64 = -3.0;
-const MS_PER_SECOND: f64 = 1000.0;
+/// Release log-decay target in nepers (`-3 Np` => `e^-3 ≈ 0.05`, or ~26 dB / 95% settling).
+/// Expresses how much the signal should decay during the `release_time` contructor argument.
+const RELEASE_DECAY_NEPERS: f64 = -3.0;
 
 /// Envelope-tracking true-peak audio signal limiter.
 ///
@@ -31,12 +31,17 @@ const MS_PER_SECOND: f64 = 1000.0;
 /// without performing dynamic memory allocations on the process loop.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PeakLimiter {
-    sampling_rate: SampleRate,
+    /// Audio sample rate in Hz.
+    sample_rate: SampleRate,
+    /// Configured output signal ceiling level.
     ceiling: f64,
-    release_time_constant: f64,
+    /// The per-sample decay of the signal during the release.
+    release_coeff: f64,
+    /// Current envelope level, updated during processing.
     env: f64,
-    // Pre-allocated scratch work buffers guaranteeing zero dynamic allocation inside `process()`.
+    /// Scratch work buffer for peak sample values per channel.
     max_samples: Vec<f32>,
+    /// Scratch work buffer for limiter envelope values per channel.
     limiter_env: Vec<f32>,
 }
 
@@ -44,35 +49,43 @@ impl PeakLimiter {
     /// Constructs a new `PeakLimiter` instance.
     ///
     /// # Parameters
-    /// * `sampling_rate` - Audio sample rate.
+    /// * `sample_rate` - Audio sample rate.
     /// * `release_time` - Limiter release time.
     /// * `ceiling_db` - Output signal ceiling level.
+    /// * `block_size` - Number of audio frames per processing block.
     pub fn new(
-        sampling_rate: SampleRate,
+        sample_rate: SampleRate,
         release_time: Milliseconds,
         ceiling_db: Decibels,
+        block_size: Samples,
     ) -> Self {
         let linear_gain: LinearGain = ceiling_db.into();
         let ceiling = linear_gain.0 as f64;
-        let release_time_constant = (DEFAULT_THRESHOLD_DB
-            / (sampling_rate.value() as f64 * release_time.0 / MS_PER_SECOND))
-            .exp();
+        let release_samples = sample_rate * release_time;
+        let release_coeff = (RELEASE_DECAY_NEPERS / release_samples.value() as f64).exp();
+        let num_frames = block_size.value() as usize;
         Self {
-            sampling_rate,
+            sample_rate,
             ceiling,
-            release_time_constant,
+            release_coeff,
             env: 1.0,
-            max_samples: Vec::with_capacity(1024),
-            limiter_env: Vec::with_capacity(1024),
+            max_samples: vec![0.0; num_frames],
+            limiter_env: vec![0.0; num_frames],
         }
     }
 
     /// Constructs a new `PeakLimiter` instance with default parameters.
     ///
     /// # Parameters
-    /// * `sampling_rate` - Audio sample rate.
-    pub fn new_with_defaults(sampling_rate: SampleRate) -> Self {
-        Self::new(sampling_rate, PEAK_LIMITER_DEFAULT_RELEASE_TIME, PEAK_LIMITER_DEFAULT_CEILING)
+    /// * `sample_rate` - Audio sample rate.
+    /// * `block_size` - Number of audio frames per processing block.
+    pub fn new_with_defaults(sample_rate: SampleRate, block_size: Samples) -> Self {
+        Self::new(
+            sample_rate,
+            PEAK_LIMITER_DEFAULT_RELEASE_TIME,
+            PEAK_LIMITER_DEFAULT_CEILING,
+            block_size,
+        )
     }
 
     /// Processes the input audio block and applies peak limiting to `output`.
@@ -83,10 +96,10 @@ impl PeakLimiter {
         assert_eq!(input.num_frames(), output.num_frames());
         let num_channels = input.num_channels();
         let num_frames = input.num_frames();
+        assert_eq!(num_frames, self.max_samples.len());
 
         // Populate `max_samples` across all channels without allocating new heap memory.
-        self.max_samples.clear();
-        self.max_samples.resize(num_frames, 0.0);
+        self.max_samples.fill(0.0);
         for c in 0..num_channels {
             let channel = input.channel(c);
             assert!(channel.enabled);
@@ -98,14 +111,12 @@ impl PeakLimiter {
         }
 
         // Calculate Limiter envelope.
-        self.limiter_env.clear();
-        self.limiter_env.resize(num_frames, 0.0);
         for frame in 0..num_frames {
             let max_req_gain = self.get_maximum_required_gain(self.max_samples[frame] as f64);
             if max_req_gain < self.env {
                 self.env = max_req_gain;
             } else {
-                self.env = self.release_time_constant * (self.env - max_req_gain) + max_req_gain;
+                self.env = self.release_coeff * (self.env - max_req_gain) + max_req_gain;
             }
             self.limiter_env[frame] = self.env as f32;
         }
@@ -139,7 +150,7 @@ impl PeakLimiter {
 mod test {
 
     use super::*;
-    use crate::common::definitions::{Decibels, Milliseconds, SampleRate};
+    use crate::common::definitions::{Decibels, Milliseconds, SampleRate, Samples};
     use crate::renderer::obr::audio_buffer::AudioBuffer;
     use googletest::prelude::*;
 
@@ -149,7 +160,8 @@ mod test {
         // Ceiling at -3 dB (~0.707 linear)
         let ceiling = Decibels(-3.0);
         let release = Milliseconds(100.0);
-        let mut limiter = PeakLimiter::new(sample_rate, release, ceiling);
+        let block_size = Samples::new(4).unwrap();
+        let mut limiter = PeakLimiter::new(sample_rate, release, ceiling, block_size);
 
         // Input signal peak at 0.5 (below 0.707)
         let mut input = AudioBuffer::new(2, 4);
@@ -171,7 +183,8 @@ mod test {
         // Ceiling at -6 dB (~0.501 linear)
         let ceiling = Decibels(-6.0);
         let release = Milliseconds(100.0);
-        let mut limiter = PeakLimiter::new(sample_rate, release, ceiling);
+        let block_size = Samples::new(4).unwrap();
+        let mut limiter = PeakLimiter::new(sample_rate, release, ceiling, block_size);
 
         // Input peak at 1.0 (above ~0.501)
         let mut input = AudioBuffer::new(1, 4);

@@ -48,8 +48,7 @@ pub use common::audio_buffer::{AudioBuffer, PlanarBufferMut, PlanarBufferRef};
 // Configurations
 pub use common::config::{
     AudioElementConfig, BinauralFilterProfile, ChannelBasedConfig, ChannelCount, Config,
-    ElementRenderingConfig, HeadphonesRenderingMode, ObjectBasedConfig, SampleRate,
-    SceneBasedConfig,
+    ElementRenderingConfig, HeadphonesRenderingMode, ObjectBasedConfig, SceneBasedConfig,
 };
 
 // Common Definitions
@@ -77,4 +76,4 @@ pub use common::object_positions::ObjectPosition;
 pub use common::quaternion::Quaternion;
 
 // Units and Gains
-pub use common::units::{Decibels, LinearGain, Radians};
+pub use common::units::{Decibels, LinearGain, Radians, SampleRate};

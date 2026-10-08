@@ -13,33 +13,15 @@
 use super::downmix::DownmixInfo;
 use super::hoa::HighOrderAmbisonics;
 use super::layout::Layout;
-use super::units::Samples;
+use super::units::{SampleRate, Samples};
 use crate::common::definitions::{OarError, MAX_SAMPLES_PER_CHANNEL};
 use std::num::NonZeroUsize;
 
 /// Number of channels in an audio element or layout or similar.
 pub type ChannelCount = NonZeroUsize;
 
-/// Sample rate in Hz.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SampleRate(u32);
-
-impl SampleRate {
-    pub fn new(val: u32) -> Result<Self, OarError> {
-        if val > 0 {
-            Ok(SampleRate(val))
-        } else {
-            Err(OarError::InvalidParameter)
-        }
-    }
-
-    pub fn value(&self) -> u32 {
-        self.0
-    }
-}
-
 /// Configuration for creating the ROAR instance, equivalent of C API `oar_config_t`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub struct Config {
     /// The target output layout.
     target_layout: Layout,
@@ -209,14 +191,6 @@ mod test {
             SampleRate::new(48000).unwrap(),
         )
         .is_err());
-    }
-
-    #[gtest]
-    fn test_sample_rate_validation() {
-        // Valid SampleRate
-        expect_ok!(SampleRate::new(48000));
-        // Invalid sample rate (0)
-        expect_true!(SampleRate::new(0).is_err());
     }
 
     #[gtest]

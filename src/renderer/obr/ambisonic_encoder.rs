@@ -29,7 +29,7 @@ pub use associated_legendre_polynomials_generator::AssociatedLegendrePolynomials
 use crate::common::definitions::{Degrees, Distance, LinearGain, Radians};
 
 /// Parameters defining the spatial location and gain of a single audio source.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SingleSourceParams {
     /// Linear volume gain factor.
     pub gain: LinearGain,
@@ -44,7 +44,7 @@ pub struct SingleSourceParams {
 /// Current and target spatial parameters for an active audio source.
 ///
 /// Used to interpolate (ramp) spatial updates smoothly across rendering blocks.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SourceProperties {
     /// Current spatial parameters used at the block start.
     pub current: SingleSourceParams,

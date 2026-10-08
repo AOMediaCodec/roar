@@ -33,7 +33,7 @@ use crate::renderer::olr::object_renderer::ObjectRenderer;
 use std::collections::HashMap;
 
 const MAX_OUTPUT_CHANNELS: usize = 25;
-const LIMITER_RELEASE_TIME_MS: f64 = 50.0;
+const LIMITER_RELEASE_TIME_MS: f32 = 50.0;
 const LIMITER_CEILING_DB: f32 = -1.0;
 
 /// Status of the OAR rendering engine.

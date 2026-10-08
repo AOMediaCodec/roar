@@ -12,32 +12,37 @@
 
 use crate::common::definitions::OarError;
 use crate::utility::oar_utils::validate_float;
+use std::ops::Mul;
 
 // ===== Types =====
 
 /// Represents an angle in degrees.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Degrees(pub f32);
 
 /// Represents an angle in radians.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Radians(pub f32);
 
 /// Represents a value in decibels (dB).
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Decibels(pub f32);
+
+/// Sample rate in Hz.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SampleRate(u32);
 
 /// Represents a duration in milliseconds.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct Milliseconds(pub f64);
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Milliseconds(pub f32);
 
 /// Represents a duration or offset measured in audio samples.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Samples(pub u32);
 
 // ===== Degrees =====
@@ -58,6 +63,30 @@ impl Decibels {
     /// Creates a new Decibels value if it is finite.
     pub fn new(val: f32) -> Result<Self, OarError> {
         Ok(Self(validate_float(val)?))
+    }
+}
+// ===== SampleRate =====
+
+impl SampleRate {
+    pub fn new(val: u32) -> Result<Self, OarError> {
+        if val > 0 {
+            Ok(SampleRate(val))
+        } else {
+            Err(OarError::InvalidParameter)
+        }
+    }
+
+    pub fn value(&self) -> u32 {
+        self.0
+    }
+}
+
+// Multiply SampleRate by Milliseconds to get duration in Samples.
+impl Mul<Milliseconds> for SampleRate {
+    type Output = Samples;
+
+    fn mul(self, rhs: Milliseconds) -> Self::Output {
+        Samples(((self.0 as f64 * rhs.0 as f64) / 1000.0).round() as u32)
     }
 }
 
@@ -157,12 +186,21 @@ impl std::ops::Sub<f32> for LinearGain {
 
 impl Milliseconds {
     /// Creates a new Milliseconds value if it is finite and positive.
-    pub fn new(val: f64) -> Result<Self, OarError> {
-        if val.is_finite() && val > 0.0 {
+    pub fn new(val: f32) -> Result<Self, OarError> {
+        let val = validate_float(val)?;
+        if val > 0.0 {
             Ok(Milliseconds(val))
         } else {
             Err(OarError::InvalidParameter)
         }
+    }
+}
+
+impl Mul<SampleRate> for Milliseconds {
+    type Output = Samples;
+
+    fn mul(self, rhs: SampleRate) -> Self::Output {
+        rhs * self
     }
 }
 
@@ -273,12 +311,32 @@ mod test {
     #[gtest]
     fn test_milliseconds_validation() {
         expect_ok!(Milliseconds::new(1.0));
-        expect_ok!(Milliseconds::new(100.5));
+        expect_ok!(Milliseconds::new(100.0));
 
         expect_eq!(Milliseconds::new(0.0).unwrap_err(), OarError::InvalidParameter);
-        expect_eq!(Milliseconds::new(-10.0).unwrap_err(), OarError::InvalidParameter);
-        expect_eq!(Milliseconds::new(f64::NAN).unwrap_err(), OarError::InvalidParameter);
-        expect_eq!(Milliseconds::new(f64::INFINITY).unwrap_err(), OarError::InvalidParameter);
+        expect_eq!(Milliseconds::new(-1.0).unwrap_err(), OarError::InvalidParameter);
+        expect_eq!(Milliseconds::new(f32::NAN).unwrap_err(), OarError::InvalidParameter);
+        expect_eq!(Milliseconds::new(f32::INFINITY).unwrap_err(), OarError::InvalidParameter);
+    }
+
+    #[gtest]
+    fn test_sample_rate_validation() {
+        expect_ok!(SampleRate::new(1));
+        expect_ok!(SampleRate::new(48_000));
+
+        expect_eq!(SampleRate::new(0).unwrap_err(), OarError::InvalidParameter);
+    }
+
+    #[gtest]
+    fn test_sample_rate_times_milliseconds() {
+        let sr = SampleRate(48_000);
+        let ms = Milliseconds(1000.0);
+        expect_eq!(sr * ms, Samples(48_000));
+        expect_eq!(ms * sr, Samples(48_000));
+
+        let ms = Milliseconds(5.0);
+        expect_eq!(sr * ms, Samples(240));
+        expect_eq!(ms * sr, Samples(240));
     }
 
     #[gtest]
