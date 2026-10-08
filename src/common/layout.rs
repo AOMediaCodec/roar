@@ -10,6 +10,7 @@
 
 #![forbid(unsafe_code)]
 
+use crate::common::definitions::ChannelCount;
 use crate::common::definitions::IAChannel;
 
 /// Loudspeaker layouts and target layouts, equivalent of C API `oar_layout_t`.
@@ -108,8 +109,8 @@ impl Layout {
 
 impl Layout {
     /// Returns the number of channels for this layout.
-    pub fn channels(&self) -> usize {
-        match self {
+    pub fn channels(&self) -> ChannelCount {
+        let count = match self {
             Layout::Mono => 1,
             Layout::Stereo => 2,
             Layout::Layout51 => 6,
@@ -143,7 +144,8 @@ impl Layout {
             Layout::Bottom4ch => 4,
             Layout::Top1ch => 1,
             Layout::Top5ch => 5,
-        }
+        };
+        ChannelCount::new(count).unwrap()
     }
 
     /// Returns the height and surround channel counts.

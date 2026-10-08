@@ -12,6 +12,7 @@
 
 use crate::c_types::oar_audio_block_t;
 use crate::c_types::oar_audio_element_config_t;
+use crate::common::definitions::ChannelCount;
 
 impl oar_audio_block_t {
     /// Views the planar audio block as a collection of safe, immutable float slices.
@@ -182,8 +183,10 @@ impl oar_audio_element_config_t {
                 if obc.num_objects < 1 || obc.num_objects > 2 {
                     return Err(OarError::InvalidParameter);
                 }
+                let num_objects = ChannelCount::new(obc.num_objects as usize)
+                    .ok_or(OarError::InvalidParameter)?;
                 Ok(AudioElementConfig::ObjectBased(ObjectBasedConfig {
-                    num_objects: obc.num_objects as u32,
+                    num_objects,
                     rendering_config,
                 }))
             }

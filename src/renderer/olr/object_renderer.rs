@@ -82,7 +82,7 @@ impl AudioRenderer for ObjectRenderer {
         match config {
             AudioElementConfig::ObjectBased(cfg) => {
                 let mut channels = Vec::new();
-                for _ in 0..cfg.num_objects {
+                for _ in 0..cfg.num_objects.get() {
                     channels.push(BlockProcessingChannel::new(Arc::clone(&self.gain_calculator)));
                 }
                 if !self.elements.contains_key(&id) {
@@ -187,6 +187,7 @@ impl AudioRenderer for ObjectRenderer {
 mod test {
 
     use super::*;
+    use crate::common::definitions::ChannelCount;
     use crate::common::definitions::{ObjectBasedConfig, PolarCoordinate};
     use googletest::prelude::*;
 
@@ -201,7 +202,7 @@ mod test {
         )
         .unwrap();
         let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: 1,
+            num_objects: ChannelCount::new(1).unwrap(),
             rendering_config: None,
         });
 
@@ -235,7 +236,7 @@ mod test {
         )
         .unwrap();
         let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: 1,
+            num_objects: ChannelCount::new(1).unwrap(),
             rendering_config: None,
         });
         rdr.add_element(10, &config).unwrap();
@@ -270,7 +271,7 @@ mod test {
         )
         .unwrap();
         let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: 1,
+            num_objects: ChannelCount::new(1).unwrap(),
             rendering_config: None,
         });
         rdr.add_element(10, &config).unwrap();

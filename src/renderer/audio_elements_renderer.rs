@@ -17,6 +17,7 @@
 //! applying sub-frame temporal block slicing (`sub_frame_samples`) and dynamic
 //! polar coordinate trajectory updates during block rendering (`render_sub_frames`).
 
+use crate::common::definitions::ChannelCount;
 use crate::common::definitions::{
     AudioElementConfig, DownmixMode, GroupId, Interpolate, OarError, ObjectPosition,
     PlanarBufferMut, PlanarBufferRef, Quaternion, Samples, MAX_OUTPUT_CHANNEL_COUNT,
@@ -59,7 +60,7 @@ pub struct AudioElementsRenderer {
     positions_queues: HashMap<u32, ElementPositionsContext>,
     sub_frame_samples: Option<Samples>,
     sub_out_buffer: Vec<f32>,
-    num_out_channels: usize,
+    num_out_channels: ChannelCount,
     /// Underlying spatial rendering backend (e.g. `ObjectRenderer`, `EarRenderer`).
     /// Note: manual Clone impl sets this field to None when cloned.
     pub sub_renderer: Option<Box<dyn AudioRenderer>>,
@@ -107,15 +108,15 @@ impl AudioElementsRenderer {
     ///   slicing input blocks into sub-frames of this size during rendering. If `None`, sub-frame
     ///   slicing is disabled (inputs are rendered as a single block, and no scratch memory is
     ///   allocated).
-    pub fn new(num_out_channels: usize, sub_frame_samples: Option<Samples>) -> Self {
+    pub fn new(num_out_channels: ChannelCount, sub_frame_samples: Option<Samples>) -> Self {
         assert!(
-            num_out_channels <= MAX_OUTPUT_CHANNEL_COUNT,
+            num_out_channels.get() <= MAX_OUTPUT_CHANNEL_COUNT,
             "Output channels {} exceeds maximum {}",
             num_out_channels,
             MAX_OUTPUT_CHANNEL_COUNT
         );
         let samples_val = sub_frame_samples.map(|s| s.value() as usize).unwrap_or(0);
-        let req_size = num_out_channels * samples_val;
+        let req_size = num_out_channels.get() * samples_val;
         Self {
             active_elements: HashMap::new(),
             sorted_ids: Vec::new(),
@@ -142,17 +143,17 @@ impl AudioElementsRenderer {
     ///   allocated).
     pub fn with_backend(
         sub: Box<dyn AudioRenderer>,
-        num_out_channels: usize,
+        num_out_channels: ChannelCount,
         sub_frame_samples: Option<Samples>,
     ) -> Self {
         assert!(
-            num_out_channels <= MAX_OUTPUT_CHANNEL_COUNT,
+            num_out_channels.get() <= MAX_OUTPUT_CHANNEL_COUNT,
             "Output channels {} exceeds maximum {}",
             num_out_channels,
             MAX_OUTPUT_CHANNEL_COUNT
         );
         let samples_val = sub_frame_samples.map(|s| s.value() as usize).unwrap_or(0);
-        let req_size = num_out_channels * samples_val;
+        let req_size = num_out_channels.get() * samples_val;
         Self {
             active_elements: HashMap::new(),
             sorted_ids: Vec::new(),
@@ -169,7 +170,7 @@ impl AudioElementsRenderer {
     pub fn set_sub_frame_samples(&mut self, samples: Option<Samples>) {
         self.sub_frame_samples = samples;
         let samples_val = samples.map(|s| s.value() as usize).unwrap_or(0);
-        let req_size = self.num_out_channels * samples_val;
+        let req_size = self.num_out_channels.get() * samples_val;
         if self.sub_out_buffer.len() < req_size {
             self.sub_out_buffer.resize(req_size, 0.0);
         }
@@ -444,7 +445,7 @@ impl AudioElementsRenderer {
                     )?;
                     sub.render(sub_inputs_ref, &mut sub_out_buf)?;
                 } else {
-                    if out_channels > self.num_out_channels {
+                    if out_channels > self.num_out_channels.get() {
                         return Err(OarError::InvalidParameter);
                     }
                     let req_size = out_channels * current_unit_samples;
@@ -496,7 +497,7 @@ impl AudioElementsRenderer {
 
 impl Default for AudioElementsRenderer {
     fn default() -> Self {
-        Self::new(MAX_OUTPUT_CHANNEL_COUNT, None)
+        Self::new(ChannelCount::new(MAX_OUTPUT_CHANNEL_COUNT).unwrap(), None)
     }
 }
 
@@ -629,9 +630,13 @@ mod test {
     fn slices_input_into_sub_frames_during_render() {
         let state = Arc::new(Mutex::new(MockState::default()));
         let mock = Box::new(SharedMockRenderer::new(state.clone()));
-        let mut router = AudioElementsRenderer::with_backend(mock, 1, Some(Samples(4)));
+        let mut router = AudioElementsRenderer::with_backend(
+            mock,
+            ChannelCount::new(1).unwrap(),
+            Some(Samples(4)),
+        );
         let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: 1,
+            num_objects: ChannelCount::new(1).unwrap(),
             rendering_config: None,
         });
         router.add_element(10, &config).unwrap();
@@ -658,9 +663,13 @@ mod test {
     fn interpolates_metadata_across_sub_frames() {
         let state = Arc::new(Mutex::new(MockState::default()));
         let mock = Box::new(SharedMockRenderer::new(state.clone()));
-        let mut router = AudioElementsRenderer::with_backend(mock, 1, Some(Samples(4)));
+        let mut router = AudioElementsRenderer::with_backend(
+            mock,
+            ChannelCount::new(1).unwrap(),
+            Some(Samples(4)),
+        );
         let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: 1,
+            num_objects: ChannelCount::new(1).unwrap(),
             rendering_config: None,
         });
         router.add_element(10, &config).unwrap();
@@ -706,7 +715,7 @@ mod test {
 
     #[gtest]
     fn audio_elements_router_fails_to_add_duplicate_element() {
-        let mut router = AudioElementsRenderer::new(2, None);
+        let mut router = AudioElementsRenderer::new(ChannelCount::new(2).unwrap(), None);
         let config = AudioElementConfig::ChannelBased(ChannelBasedConfig {
             layout: Layout::Stereo,
             downmix_info: None,
@@ -723,9 +732,13 @@ mod test {
     fn converts_cartesian_to_polar_at_ingestion() {
         let state = Arc::new(Mutex::new(MockState::default()));
         let mock = Box::new(SharedMockRenderer::new(state.clone()));
-        let mut router = AudioElementsRenderer::with_backend(mock, 1, Some(Samples(12)));
+        let mut router = AudioElementsRenderer::with_backend(
+            mock,
+            ChannelCount::new(1).unwrap(),
+            Some(Samples(12)),
+        );
         let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: 1,
+            num_objects: ChannelCount::new(1).unwrap(),
             rendering_config: None,
         });
         router.add_element(10, &config).unwrap();

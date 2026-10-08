@@ -22,9 +22,9 @@ mod test {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use roar::{
-        AudioElementConfig, ChannelBasedConfig, Config, Decibels, Gain, HighOrderAmbisonics,
-        Layout, ObjectBasedConfig, ObjectPosition, PolarCoordinate, Quaternion, RoarRenderer,
-        SampleRate, Samples, SceneBasedConfig,
+        AudioElementConfig, ChannelBasedConfig, ChannelCount, Config, Decibels, Gain,
+        HighOrderAmbisonics, Layout, ObjectBasedConfig, ObjectPosition, PolarCoordinate,
+        Quaternion, RoarRenderer, SampleRate, Samples, SceneBasedConfig,
     };
     use test_helpers::{create_planar_buffer_mut, create_planar_buffer_ref};
 
@@ -231,7 +231,7 @@ mod test {
         let group_id = renderer.add_audio_group().unwrap();
 
         let element_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: input_channels as u32,
+            num_objects: ChannelCount::new(input_channels).unwrap(),
             rendering_config: None,
         });
         renderer.add_element(group_id, element_id, &element_cfg).unwrap();
@@ -277,7 +277,7 @@ mod test {
         let group_id = renderer.add_audio_group().unwrap();
 
         let element_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: input_channels as u32,
+            num_objects: ChannelCount::new(input_channels).unwrap(),
             rendering_config: None,
         });
         renderer.add_element(group_id, element_id, &element_cfg).unwrap();
@@ -331,7 +331,7 @@ mod test {
         let group_id = renderer.add_audio_group().unwrap();
 
         let element_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: input_channels as u32,
+            num_objects: ChannelCount::new(input_channels).unwrap(),
             rendering_config: None,
         });
         renderer.add_element(group_id, element_id, &element_cfg).unwrap();

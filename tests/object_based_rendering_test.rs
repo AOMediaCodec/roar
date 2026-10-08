@@ -17,8 +17,8 @@ mod test {
     use roar::c_types::{oar_audio_block_t, oar_layout_t, oar_metadata_type_t};
     use roar::ffi::*;
     use roar::{
-        AudioElementConfig, Config, Layout, OarError, ObjectBasedConfig, RoarRenderer, SampleRate,
-        Samples,
+        AudioElementConfig, ChannelCount, Config, Layout, OarError, ObjectBasedConfig,
+        RoarRenderer, SampleRate, Samples,
     };
     use test_helpers::{
         create_flat_sine_input, create_object_based_config, create_planar_buffer_mut,
@@ -64,7 +64,7 @@ mod test {
         let mut renderer = RoarRenderer::create(&config)?;
         let group_id = renderer.add_audio_group()?;
         let element_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: num_objects as u32,
+            num_objects: ChannelCount::new(num_objects).unwrap(),
             rendering_config: None,
         });
         renderer.add_element(group_id, element_id, &element_cfg)?;

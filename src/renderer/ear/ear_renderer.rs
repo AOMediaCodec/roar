@@ -233,7 +233,7 @@ pub use crate::renderer::ear::channel_to_channel_renderer::{
 mod tests {
     use super::*;
     use crate::common::definitions::{
-        ChannelBasedConfig, HighOrderAmbisonics, Samples, SceneBasedConfig,
+        ChannelBasedConfig, ChannelCount, HighOrderAmbisonics, Samples, SceneBasedConfig,
     };
     use googletest::prelude::*;
 
@@ -324,7 +324,7 @@ mod tests {
         let mut rdr = EarRenderer::new();
         let config =
             AudioElementConfig::ObjectBased(crate::common::definitions::ObjectBasedConfig {
-                num_objects: 1,
+                num_objects: ChannelCount::new(1).unwrap(),
                 rendering_config: None,
             });
 

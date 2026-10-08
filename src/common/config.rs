@@ -15,7 +15,12 @@ use super::hoa::HighOrderAmbisonics;
 use super::layout::Layout;
 use super::units::Samples;
 use crate::common::definitions::{OarError, MAX_SAMPLES_PER_CHANNEL};
+use std::num::NonZeroUsize;
 
+/// Number of channels in an audio element or layout or similar.
+pub type ChannelCount = NonZeroUsize;
+
+/// Sample rate in Hz.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SampleRate(u32);
 
@@ -131,7 +136,7 @@ pub struct SceneBasedConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ObjectBasedConfig {
     /// The number of objects.
-    pub num_objects: u32,
+    pub num_objects: ChannelCount,
     ///Optional binaural rendering config.
     pub rendering_config: Option<ElementRenderingConfig>,
 }
@@ -149,11 +154,11 @@ pub enum AudioElementConfig {
 
 impl AudioElementConfig {
     /// Returns the number of channels for this element configuration.
-    pub fn channels(&self) -> usize {
+    pub fn channels(&self) -> ChannelCount {
         match self {
             AudioElementConfig::ChannelBased(cbc) => cbc.layout.channels(),
             AudioElementConfig::SceneBased(sbc) => sbc.order.channels(),
-            AudioElementConfig::ObjectBased(obc) => obc.num_objects as usize,
+            AudioElementConfig::ObjectBased(obc) => obc.num_objects,
         }
     }
 
@@ -223,7 +228,10 @@ mod test {
         };
         let sc_config =
             SceneBasedConfig { order: HighOrderAmbisonics::Order1, rendering_config: None };
-        let obj_config = ObjectBasedConfig { num_objects: 8, rendering_config: None };
+        let obj_config = ObjectBasedConfig {
+            num_objects: ChannelCount::new(8).unwrap(),
+            rendering_config: None,
+        };
 
         let el_ch = AudioElementConfig::ChannelBased(ch_config);
         let el_sc = AudioElementConfig::SceneBased(sc_config);

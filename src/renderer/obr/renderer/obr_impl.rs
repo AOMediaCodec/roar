@@ -23,9 +23,16 @@
 use super::audio_element_config::{AudioElementConfig, BinauralFilterProfile};
 use super::audio_element_type::AudioElementType;
 use super::processing_group::{ProcessingGroup, ProcessingGroupKey};
+use crate::common::definitions::ChannelCount;
+use crate::common::definitions::{
+    AudioElementConfig as OarAudioElementConfig, Gain, HighOrderAmbisonics, Layout, OarError,
+    ObjectPosition,
+};
 use crate::common::definitions::{
     PlanarBufferMut, PlanarBufferRef, PolarCoordinate, Quaternion, SampleRate, Samples,
 };
+use crate::renderer::audio_renderer_api::AudioRenderer;
+use crate::renderer::gain_parameter::{generate_gain_multipliers, GainParameter, GainUpdate};
 use crate::renderer::obr::ambisonic_binaural_decoder::{FftManager, Resampler};
 use crate::renderer::obr::audio_buffer::simd_utils::add_pointwise_in_place;
 use crate::renderer::obr::audio_buffer::AudioBuffer;
@@ -34,6 +41,7 @@ use crate::renderer::obr::common::constants::{
 };
 use crate::renderer::obr::peak_limiter::PeakLimiter;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 /// Top-level coordinator for the OBR rendering pipeline.
 ///
@@ -373,20 +381,12 @@ impl ObrImpl {
     }
 }
 
-use crate::common::definitions::{
-    AudioElementConfig as OarAudioElementConfig, Gain, HighOrderAmbisonics, Layout, OarError,
-    ObjectPosition,
-};
-use crate::renderer::audio_renderer_api::AudioRenderer;
-use crate::renderer::gain_parameter::{generate_gain_multipliers, GainParameter, GainUpdate};
-use std::collections::HashMap;
-
 /// Struct to adapt and expose OBR through the AudioRenderer Trait.
 #[derive(Debug)]
 pub struct ObrAudioRendererAdapter {
     pub obr: ObrImpl,
     pub id_to_element_index: HashMap<u32, usize>,
-    element_channels: HashMap<u32, usize>,
+    element_channels: HashMap<u32, ChannelCount>,
     scratch_input: AudioBuffer,
     scratch_output: AudioBuffer,
     element_gains: HashMap<u32, HashMap<u32, GainParameter>>,
@@ -414,7 +414,7 @@ impl ObrAudioRendererAdapter {
         let mut offset = 0;
         for (&eid, &idx) in &self.id_to_element_index {
             if idx < target_idx {
-                offset += self.element_channels.get(&eid).copied().unwrap_or(0);
+                offset += self.element_channels.get(&eid).map_or(0, |c| c.get());
             }
         }
         offset
@@ -449,7 +449,7 @@ impl AudioRenderer for ObrAudioRendererAdapter {
                 HighOrderAmbisonics::Order3 => AudioElementType::Oa3,
                 HighOrderAmbisonics::Order4 => AudioElementType::Oa4,
             },
-            OarAudioElementConfig::ObjectBased(obc) => match obc.num_objects {
+            OarAudioElementConfig::ObjectBased(obc) => match obc.num_objects.get() {
                 1 => AudioElementType::ObjectMono,
                 2 => AudioElementType::ObjectDual,
                 _ => return Err(OarError::InvalidParameter),
@@ -559,7 +559,7 @@ impl AudioRenderer for ObrAudioRendererAdapter {
         }
         for &eid in self.id_to_element_index.keys() {
             let offset = self.get_element_channel_offset(eid);
-            let num_chans = self.element_channels.get(&eid).copied().unwrap_or(0);
+            let num_chans = self.element_channels.get(&eid).map_or(0, |c| c.get());
             if let Some(gains) = self.element_gains.get_mut(&eid) {
                 for param in gains.values_mut() {
                     generate_gain_multipliers(param, frames_usize, &mut self.gain_scratch_buf);

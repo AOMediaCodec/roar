@@ -47,8 +47,9 @@ pub use common::audio_buffer::{AudioBuffer, PlanarBufferMut, PlanarBufferRef};
 
 // Configurations
 pub use common::config::{
-    AudioElementConfig, BinauralFilterProfile, ChannelBasedConfig, Config, ElementRenderingConfig,
-    HeadphonesRenderingMode, ObjectBasedConfig, SampleRate, SceneBasedConfig,
+    AudioElementConfig, BinauralFilterProfile, ChannelBasedConfig, ChannelCount, Config,
+    ElementRenderingConfig, HeadphonesRenderingMode, ObjectBasedConfig, SampleRate,
+    SceneBasedConfig,
 };
 
 // Common Definitions

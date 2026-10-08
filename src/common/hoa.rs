@@ -10,6 +10,8 @@
 
 #![forbid(unsafe_code)]
 
+use crate::common::definitions::ChannelCount;
+
 /// High Order Ambisonics (HOA) orders, equivalent of C API `oar_hoa_t`.
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,13 +30,13 @@ pub enum HighOrderAmbisonics {
 
 impl HighOrderAmbisonics {
     /// Returns the number of channels for this HOA order.
-    pub fn channels(&self) -> usize {
+    pub fn channels(&self) -> ChannelCount {
         match self {
-            HighOrderAmbisonics::Zoa => 1,
-            HighOrderAmbisonics::Order1 => 4,
-            HighOrderAmbisonics::Order2 => 9,
-            HighOrderAmbisonics::Order3 => 16,
-            HighOrderAmbisonics::Order4 => 25,
+            HighOrderAmbisonics::Zoa => ChannelCount::new(1).unwrap(),
+            HighOrderAmbisonics::Order1 => ChannelCount::new(4).unwrap(),
+            HighOrderAmbisonics::Order2 => ChannelCount::new(9).unwrap(),
+            HighOrderAmbisonics::Order3 => ChannelCount::new(16).unwrap(),
+            HighOrderAmbisonics::Order4 => ChannelCount::new(25).unwrap(),
         }
     }
 }

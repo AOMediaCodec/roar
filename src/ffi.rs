@@ -303,18 +303,17 @@ pub unsafe extern "C" fn roar_update_audio_element_data(
         // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
         let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
 
-        let expected_channels =
-            wrapper.renderer.active_elements().get(&id).map(|c| c.channels()).unwrap_or(0);
-
-        if expected_channels == 0 {
+        let Some(expected_channels) =
+            wrapper.renderer.active_elements().get(&id).map(|c| c.channels())
+        else {
             return OarError::InvalidParameter.into();
-        }
+        };
 
         // SAFETY: We checked that `data` is not null. The caller guarantees that `data`
         // points to a valid `oar_audio_block_t` structure containing active planar f32 input
         // buffers, which ensures `as_slices()` can safely dereference the inner data pointers.
         let data_slices = unsafe { (*data).as_slices() };
-        if data_slices.len() != expected_channels {
+        if data_slices.len() != expected_channels.get() {
             return OarError::InvalidParameter.into();
         }
 
@@ -731,7 +730,7 @@ pub unsafe extern "C" fn roar_get_number_of_audio_element_channels(
         }
         // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
         let wrapper = unsafe { &*(oar as *const FfiWrapper) };
-        wrapper.renderer.element_channels(id).unwrap_or(0) as u32
+        wrapper.renderer.element_channels(id).map_or(0, |c| c.get() as u32)
     })
     .unwrap_or(0)
 }
@@ -752,7 +751,7 @@ pub unsafe extern "C" fn roar_get_number_of_output_channels(oar: *const oar_t) -
         }
         // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
         let wrapper = unsafe { &*(oar as *const FfiWrapper) };
-        wrapper.renderer.config().output_layout().channels() as u32
+        wrapper.renderer.config().output_layout().channels().get() as u32
     })
     .unwrap_or(0)
 }

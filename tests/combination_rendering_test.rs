@@ -22,7 +22,7 @@ mod test {
     };
     use roar::ffi::*;
     use roar::{
-        AudioElementConfig, ChannelBasedConfig, Config, HighOrderAmbisonics, Layout,
+        AudioElementConfig, ChannelBasedConfig, ChannelCount, Config, HighOrderAmbisonics, Layout,
         ObjectBasedConfig, ObjectPosition, PolarCoordinate, RoarRenderer, SampleRate, Samples,
         SceneBasedConfig,
     };
@@ -196,7 +196,7 @@ mod test {
         // 3. Object-Based Element (1 object)
         let obj_based_element_id: u32 = 30;
         let obj_based_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: 1,
+            num_objects: ChannelCount::new(1).unwrap(),
             rendering_config: None,
         });
         renderer.add_element(group_id, obj_based_element_id, &obj_based_cfg).unwrap();

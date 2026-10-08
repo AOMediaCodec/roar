@@ -15,6 +15,7 @@
 //! This module implements runtime state boundaries, dynamic updates (gain, head rotation, object
 //! position, etc) and rendering loops.
 
+use crate::common::definitions::ChannelCount;
 use crate::common::definitions::{
     AudioElementConfig, Config, Decibels, DownmixMode, Gain, GroupId, HeadphonesRenderingMode,
     Layout, LinearGain, Milliseconds, OarError, ObjectPosition, PlanarBufferMut, PlanarBufferRef,
@@ -249,7 +250,7 @@ impl RoarRenderer {
     pub fn create(config: &Config) -> Result<RoarRenderer, OarError> {
         let samples = config.samples_per_channel().value() as usize;
         let out_channels = config.output_layout().channels();
-        let total_samples = out_channels * samples;
+        let total_samples = out_channels.get() * samples;
 
         Ok(RoarRenderer {
             config: *config,
@@ -437,7 +438,7 @@ impl RoarRenderer {
         self.status = Status::Rendering;
 
         let samples = self.config.samples_per_channel().value() as usize;
-        let out_channels = self.config.output_layout().channels();
+        let out_channels = self.config.output_layout().channels().get();
 
         if output.num_channels() != out_channels || output.num_samples() != samples {
             return Err(OarError::InvalidParameter);
@@ -446,7 +447,7 @@ impl RoarRenderer {
         // Validate that all active elements have inputs provided with correct channel count
         for &id in &self.active_element_ids {
             let config = self.active_elements.get(&id).ok_or(OarError::InvalidParameter)?;
-            let expected_chans = config.channels();
+            let expected_chans = config.channels().get();
             let elem_input = inputs
                 .iter()
                 .find(|(eid, _)| *eid == id)
@@ -697,18 +698,16 @@ impl RoarRenderer {
 
     /// Returns the number of channels for a given element ID.
     /// Handles Binaural group-sum mapping.
-    pub fn element_channels(&self, id: u32) -> Option<usize> {
+    pub fn element_channels(&self, id: u32) -> Option<ChannelCount> {
         if self.config.output_layout() == Layout::Binaural {
             let group_id = self.element_to_group.get(&id)?;
             let sum: usize = self
                 .element_to_group
                 .iter()
                 .filter(|&(_, &g)| g == *group_id)
-                .map(|(&e_id, _)| {
-                    self.active_elements.get(&e_id).map(|c| c.channels()).unwrap_or(0)
-                })
+                .map(|(&e_id, _)| self.active_elements.get(&e_id).map_or(0, |c| c.channels().get()))
                 .sum();
-            Some(sum)
+            ChannelCount::new(sum)
         } else {
             self.active_elements.get(&id).map(|c| c.channels())
         }

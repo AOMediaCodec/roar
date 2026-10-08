@@ -16,6 +16,7 @@
 //! downmix configurations such as 5.1 to Stereo, 7.1 to 5.1, Mono downmix, and all
 //! height/surround layout transitions adhering to exact IAMF demixing modes and weight tables.
 
+use crate::common::definitions::ChannelCount;
 use crate::common::definitions::{
     AudioElementConfig, Coeff, DownmixMode, IAChannel, Layout, MixFactors, OarError,
     PlanarBufferMut, PlanarBufferRef, Samples, WeightIndex, WeightIndexShift,
@@ -107,8 +108,8 @@ fn get_channel_weight(
 pub struct DownmixRenderer {
     input_layout: Layout,
     output_layout: Layout,
-    input_channels: usize,
-    output_channels: usize,
+    input_channels: ChannelCount,
+    output_channels: ChannelCount,
     weights: Vec<f32>,
     supported: bool,
     mode: DownmixMode,
@@ -132,10 +133,8 @@ impl DownmixRenderer {
         let input_channels = input_layout.channels();
         let output_channels = output_layout.channels();
 
-        let weights = vec![0.0; input_channels * output_channels];
-        let supported = input_channels > 0
-            && output_channels > 0
-            && input_layout.is_valid_downmix_to(output_layout);
+        let weights = vec![0.0; input_channels.get() * output_channels.get()];
+        let supported = input_layout.is_valid_downmix_to(output_layout);
 
         let mut rdr = Self {
             input_layout,
@@ -195,8 +194,8 @@ impl DownmixRenderer {
         if self.input_layout == self.output_layout {
             // Identity matrix pass-through
             self.weights.fill(0.0);
-            for i in 0..self.input_channels {
-                self.weights[i * self.input_channels + i] = 1.0;
+            for i in 0..self.input_channels.get() {
+                self.weights[i * self.input_channels.get() + i] = 1.0;
             }
             return;
         }
@@ -213,7 +212,7 @@ impl DownmixRenderer {
         for (out_idx, &target_ch) in out_chs.iter().enumerate() {
             for (in_idx, _) in in_chs.iter().enumerate() {
                 let weight = get_channel_weight(target_ch, in_chs, in_idx, self.mode, w_val);
-                self.weights[out_idx * self.input_channels + in_idx] = weight;
+                self.weights[out_idx * self.input_channels.get() + in_idx] = weight;
             }
         }
     }
@@ -270,8 +269,8 @@ impl AudioRenderer for DownmixRenderer {
         if !self.supported {
             return Err(OarError::NotSupported);
         }
-        if inputs.num_channels() != self.input_channels
-            || output.num_channels() != self.output_channels
+        if inputs.num_channels() != self.input_channels.get()
+            || output.num_channels() != self.output_channels.get()
             || output.num_samples() != inputs.num_samples()
         {
             return Err(OarError::InvalidParameter);
@@ -310,7 +309,8 @@ impl AudioRenderer for DownmixRenderer {
             }
             // Perform the downmixing matrix multiplication safely across [offset..offset +
             // chunk_samples] without allocating any memory (`#alloc` safe).
-            for (out_idx, weights_row) in self.weights.chunks_exact(self.input_channels).enumerate()
+            for (out_idx, weights_row) in
+                self.weights.chunks_exact(self.input_channels.get()).enumerate()
             {
                 let out_slice = &mut output.channel_mut(out_idx)
                     [offset_into_buffers..offset_into_buffers + chunk_samples];
@@ -372,8 +372,8 @@ mod test {
 
         expect_that!(renderer.input_layout, eq(Layout::Layout51));
         expect_that!(renderer.output_layout, eq(Layout::Stereo));
-        expect_that!(renderer.input_channels, eq(6));
-        expect_that!(renderer.output_channels, eq(2));
+        expect_that!(renderer.input_channels.get(), eq(6));
+        expect_that!(renderer.output_channels.get(), eq(2));
     }
 
     #[gtest]
@@ -583,8 +583,8 @@ mod test {
 
         expect_ok!(update_result);
         expect_ok!(render_result);
-        expect_that!(renderer.input_channels, eq(12));
-        expect_that!(renderer.output_channels, eq(6));
+        expect_that!(renderer.input_channels.get(), eq(12));
+        expect_that!(renderer.output_channels.get(), eq(6));
         expect_true!(renderer.supported);
         expect_that!(renderer.mode, eq(DownmixMode::Mode3NegOffset));
     }
