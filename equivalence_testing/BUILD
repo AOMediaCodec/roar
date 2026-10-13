@@ -27,9 +27,6 @@ cc_test(
 cc_test(
     name = "element_gains_tests",
     srcs = ["element_gains_tests.cc"],
-    tags = [
-        "notap",  # TODO(b/553439367): Temporarily disabled until catching up on OAR updates.
-    ],
     deps = [
         ":test_helpers",
         "@googletest//:gtest_main",
@@ -50,9 +47,6 @@ cc_test(
 cc_test(
     name = "group_gains_tests",
     srcs = ["group_gains_tests.cc"],
-    tags = [
-        "notap",  # TODO(b/553439367): Temporarily disabled until catching up on OAR updates.
-    ],
     deps = [
         ":test_helpers",
         "@googletest//:gtest_main",

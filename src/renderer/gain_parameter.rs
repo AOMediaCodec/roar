@@ -10,8 +10,10 @@
 
 #![forbid(unsafe_code)]
 
+use crate::common::animation::{Animated, AnimatedDecibels};
 use crate::common::definitions::{Samples, METADATA_QUEUE_CAPACITY};
 use crate::common::gains::GainVariant;
+use crate::common::units::{Decibels, LinearGain};
 use std::collections::VecDeque;
 
 /// Represents a queued gain change event in the renderer's DSP timeline.
@@ -49,19 +51,84 @@ impl GainParameter {
     }
 }
 
+/// Fills `out_slice` with linear amplitude multipliers for a linear decibel ramp.
+///
+/// Because a constant step in decibels (`start + i * delta / duration`) corresponds to a
+/// constant ratio in linear amplitude (`10^(step_db / 20)`), we evaluate `exp2` only twice per
+/// slice in `f64` precision and advance per sample with a single multiplication (`cur *= step`).
+/// Over an audio frame (`<= 1024` samples), `f64` rounding drift stays below `1e-12`, preserving
+/// exact `f32` accuracy while eliminating per-sample transcendental calls.
+///
+/// # Arguments
+/// * `elapsed` - Number of samples already processed in this ramp prior to `out_slice`.
+/// * `duration` - Total ramp duration in samples (`> 0`).
+/// * `out_slice` - Destination slice of non-zero length to populate with linear gain multipliers.
+fn fill_linear_db_ramp(
+    start_db: Decibels,
+    end_db: Decibels,
+    elapsed: u32,
+    duration: u32,
+    out_slice: &mut [f32],
+) -> f32 {
+    const DB_TO_LOG2_SCALE: f64 = 0.05 * std::f64::consts::LOG2_10;
+    let delta_db = (end_db.0 - start_db.0) as f64;
+    let inv_duration = 1.0 / (duration as f64);
+    let init_db = (start_db.0 as f64) + delta_db * (elapsed as f64) * inv_duration;
+    let step_db = delta_db * inv_duration;
+
+    let mut cur = (init_db * DB_TO_LOG2_SCALE).exp2();
+    let step = (step_db * DB_TO_LOG2_SCALE).exp2();
+    let mut last_gain = cur as f32;
+
+    for slot in out_slice.iter_mut() {
+        let g = cur as f32;
+        *slot = g;
+        last_gain = g;
+        cur *= step;
+    }
+
+    last_gain
+}
+
+/// Fills `out_slice` with linear amplitude multipliers for a quadratic Bezier decibel curve.
+///
+/// Precomputes `1.0 / duration` once per slice and iterates over `out_slice` directly to avoid
+/// per-sample integer-to-float divisions and slice bounds checks.
+///
+/// # Arguments
+/// * `elapsed` - Number of samples already processed in this curve prior to `out_slice`.
+/// * `duration` - Total curve duration in samples (`> 0`).
+/// * `out_slice` - Destination slice of non-zero length to populate with linear gain multipliers.
+fn fill_bezier_db_curve(
+    anim: &AnimatedDecibels,
+    elapsed: u32,
+    duration: u32,
+    out_slice: &mut [f32],
+) -> f32 {
+    let inv_duration = 1.0 / (duration as f32);
+    let mut last_gain = 1.0;
+
+    for (i, slot) in out_slice.iter_mut().enumerate() {
+        let t = (elapsed + i as u32) as f32 * inv_duration;
+        let g = LinearGain::from(anim.sample(t)).0;
+        *slot = g;
+        last_gain = g;
+    }
+
+    last_gain
+}
+
 /// Generates a slice of gain multipliers for a block of audio samples by consuming
 /// or progressing the updates in the `GainParameter`.
 ///
-/// This function interpolates animated gains or applies constant gains across the
-/// requested number of `samples`, updating the `GainParameter`'s internal progress
-/// and popping finished updates from its queue.
+/// Animated gains are interpolated in the decibel (dB) domain and converted to linear
+/// multipliers. Constant and step gains convert once per slice, linear dB ramps use a geometric
+/// multiplier recurrence, and Bezier dB curves evaluate per sample via `exp2`.
 ///
 /// # Arguments
 /// * `param` - The active gain parameter state to progress.
 /// * `samples` - The number of samples to generate multipliers for.
 /// * `out_multipliers` - The output slice to fill with the calculated gain multipliers.
-// TODO(b/525080422): Avoid manual indexing in the gain multiplier generation loops (e.g. using
-// out_multipliers[idx + i]) to allow compiler auto-vectorization and avoid bounds checks.
 pub(crate) fn generate_gain_multipliers(
     param: &mut GainParameter,
     samples: usize,
@@ -73,39 +140,42 @@ pub(crate) fn generate_gain_multipliers(
             let dur = u32::from(update.duration);
             let remaining_in_update = (dur - update.elapsed) as usize;
             let count = remaining_in_update.min(samples - idx);
+            let out_slice = &mut out_multipliers[idx..idx + count];
 
-            match &update.gain {
-                GainVariant::Constant(g) => {
-                    if count > 0 {
-                        out_multipliers[idx..idx + count].fill(g.0);
+            if !out_slice.is_empty() {
+                match &update.gain {
+                    GainVariant::Constant(g) => {
+                        out_slice.fill(g.0);
                         param.last_value = g.0;
                     }
-                }
-                GainVariant::Multiple(g_arr) => {
-                    let start = update.elapsed as usize;
-                    for i in 0..count {
-                        out_multipliers[idx + i] = g_arr[start + i].0;
-                    }
-                    if count > 0 {
+                    GainVariant::Multiple(g_arr) => {
+                        let start = update.elapsed as usize;
+                        for (slot, gain) in out_slice.iter_mut().zip(&g_arr[start..start + count]) {
+                            *slot = gain.0;
+                        }
                         param.last_value = g_arr[start + count - 1].0;
                     }
-                }
-                GainVariant::Animated(anim) => {
-                    for i in 0..count {
-                        let t = (update.elapsed + i as u32) as f32 / dur as f32;
-                        let g = anim.sample(t);
-                        out_multipliers[idx + i] = g.0;
-                        param.last_value = g.0;
-                    }
+                    GainVariant::Animated(anim) => match anim {
+                        Animated::Step { value } => {
+                            let g = LinearGain::from(*value);
+                            out_slice.fill(g.0);
+                            param.last_value = g.0;
+                        }
+                        Animated::Linear { start, end } => {
+                            param.last_value =
+                                fill_linear_db_ramp(*start, *end, update.elapsed, dur, out_slice);
+                        }
+                        Animated::Bezier { .. } => {
+                            param.last_value =
+                                fill_bezier_db_curve(anim, update.elapsed, dur, out_slice);
+                        }
+                    },
                 }
             }
-            // TODO(b/525080422): Refactor the update progression loop to use iterators/chunks
-            // instead of manual index (`idx`) and elapsed tracking to improve readability and
-            // safety.
+
             update.elapsed += count as u32;
             idx += count;
-            let need_pop = update.elapsed >= dur;
-            if need_pop {
+            if update.elapsed >= dur {
                 param.updates.pop_front();
             }
         } else {
@@ -207,12 +277,34 @@ mod test {
     }
 
     #[gtest]
-    fn test_generate_multipliers_animated_linear() {
+    fn test_generate_multipliers_animated_step_converts_db_to_linear() {
+        let mut param = GainParameter::new(42);
+        param.updates.push_back(GainUpdate {
+            gain: GainVariant::Animated(Animated::Step {
+                value: crate::common::units::Decibels(-20.0),
+            }),
+            duration: Samples(3),
+            elapsed: 0,
+        });
+        let mut multipliers = vec![0.0f32; 5];
+
+        generate_gain_multipliers(&mut param, 5, &mut multipliers);
+
+        expect_that!(multipliers[0], near(0.1f32, 1e-6));
+        expect_that!(multipliers[1], near(0.1f32, 1e-6));
+        expect_that!(multipliers[2], near(0.1f32, 1e-6));
+        expect_that!(multipliers[3], near(0.1f32, 1e-6));
+        expect_that!(multipliers[4], near(0.1f32, 1e-6));
+        expect_that!(param.last_value, near(0.1f32, 1e-6));
+    }
+
+    #[gtest]
+    fn test_generate_multipliers_animated_linear_interpolates_in_db() {
         let mut param = GainParameter::new(42);
         param.updates.push_back(GainUpdate {
             gain: GainVariant::Animated(Animated::Linear {
-                start: LinearGain(0.0),
-                end: LinearGain(1.0),
+                start: crate::common::units::Decibels(0.0),
+                end: crate::common::units::Decibels(-20.0),
             }),
             duration: Samples(5),
             elapsed: 0,
@@ -221,13 +313,60 @@ mod test {
 
         generate_gain_multipliers(&mut param, 7, &mut multipliers);
 
-        // Duration is 5.
-        // i=0: t=0.0 -> 0.0
-        // i=1: t=0.2 -> 0.2
-        // i=2: t=0.4 -> 0.4
-        // i=3: t=0.6 -> 0.6
-        // i=4: t=0.8 -> 0.8
-        // i=5..7: hold last_value (0.8)
-        expect_eq!(multipliers, vec![0.0, 0.2, 0.4, 0.6, 0.8, 0.8, 0.8]);
+        // Duration is 5: samples at 0 dB, -4 dB, -8 dB, -12 dB, -16 dB, holding last_value.
+        expect_that!(multipliers[0], near(1.0f32, 1e-6));
+        expect_that!(multipliers[1], near(0.63095737f32, 1e-6));
+        expect_that!(multipliers[2], near(0.39810717f32, 1e-6));
+        expect_that!(multipliers[3], near(0.25118864f32, 1e-6));
+        expect_that!(multipliers[4], near(0.15848932f32, 1e-6));
+        expect_that!(multipliers[5], near(0.15848932f32, 1e-6));
+        expect_that!(multipliers[6], near(0.15848932f32, 1e-6));
+    }
+
+    #[gtest]
+    fn test_generate_multipliers_animated_bezier_interpolates_in_db() {
+        let mut param = GainParameter::new(42);
+        param.updates.push_back(GainUpdate {
+            gain: GainVariant::Animated(Animated::Bezier {
+                start: crate::common::units::Decibels(0.0),
+                end: crate::common::units::Decibels(-20.0),
+                control: crate::common::units::Decibels(-20.0),
+                control_relative_time: 0.5,
+            }),
+            duration: Samples(2),
+            elapsed: 0,
+        });
+        let mut multipliers = vec![0.0f32; 2];
+
+        generate_gain_multipliers(&mut param, 2, &mut multipliers);
+
+        // At t = 0.0 -> 0 dB (1.0); at t = 0.5 -> q0 = -10 dB, q1 = -20 dB -> -15 dB (0.17782794).
+        expect_that!(multipliers[0], near(1.0f32, 1e-6));
+        expect_that!(multipliers[1], near(0.17782794f32, 1e-6));
+    }
+
+    #[gtest]
+    fn test_generate_multipliers_animated_linear_split_across_blocks_preserves_continuity() {
+        let mut param = GainParameter::new(42);
+        param.updates.push_back(GainUpdate {
+            gain: GainVariant::Animated(Animated::Linear {
+                start: Decibels(0.0),
+                end: Decibels(-20.0),
+            }),
+            duration: Samples(5),
+            elapsed: 0,
+        });
+        let mut block_a = vec![0.0f32; 2];
+        let mut block_b = vec![0.0f32; 3];
+
+        generate_gain_multipliers(&mut param, 2, &mut block_a);
+        generate_gain_multipliers(&mut param, 3, &mut block_b);
+
+        expect_that!(block_a[0], near(1.0f32, 1e-6));
+        expect_that!(block_a[1], near(0.63095737f32, 1e-6));
+        expect_that!(block_b[0], near(0.39810717f32, 1e-6));
+        expect_that!(block_b[1], near(0.25118864f32, 1e-6));
+        expect_that!(block_b[2], near(0.15848932f32, 1e-6));
+        expect_true!(param.updates.is_empty());
     }
 }

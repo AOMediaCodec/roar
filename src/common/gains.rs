@@ -10,11 +10,14 @@
 
 #![forbid(unsafe_code)]
 
-use super::animation::{Animated, AnimatedFloat32, AnimatedLinearGain};
+use super::animation::{Animated, AnimatedDecibels, AnimatedFloat32};
 use super::units::{Decibels, LinearGain};
 use crate::common::definitions::OarError;
 
-/// Dynamic gain control, enforcing Decibels for creation and storing LinearGain internally.
+/// Dynamic gain control, enforcing Decibels for creation.
+///
+/// Static (`Constant` and `Multiple`) gains are converted upfront to `LinearGain`,
+/// while `Animated` gains retain `Decibels` so interpolation occurs in the dB domain.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Gain {
     pub(crate) variant: GainVariant,
@@ -24,7 +27,7 @@ pub struct Gain {
 pub(crate) enum GainVariant {
     Constant(LinearGain),
     Multiple(Vec<LinearGain>),
-    Animated(AnimatedLinearGain),
+    Animated(AnimatedDecibels),
 }
 
 impl Gain {
@@ -54,16 +57,13 @@ impl Gain {
                 if !value.is_finite() {
                     return Err(OarError::InvalidParameter);
                 }
-                Animated::Step { value: LinearGain::from(Decibels(value)) }
+                Animated::Step { value: Decibels(value) }
             }
             Animated::Linear { start, end } => {
                 if !start.is_finite() || !end.is_finite() {
                     return Err(OarError::InvalidParameter);
                 }
-                Animated::Linear {
-                    start: LinearGain::from(Decibels(start)),
-                    end: LinearGain::from(Decibels(end)),
-                }
+                Animated::Linear { start: Decibels(start), end: Decibels(end) }
             }
             Animated::Bezier { start, end, control, control_relative_time } => {
                 if !start.is_finite()
@@ -75,9 +75,9 @@ impl Gain {
                     return Err(OarError::InvalidParameter);
                 }
                 Animated::Bezier {
-                    start: LinearGain::from(Decibels(start)),
-                    end: LinearGain::from(Decibels(end)),
-                    control: LinearGain::from(Decibels(control)),
+                    start: Decibels(start),
+                    end: Decibels(end),
+                    control: Decibels(control),
                     control_relative_time,
                 }
             }
@@ -95,8 +95,9 @@ mod test {
     use googletest::prelude::*;
 
     #[gtest]
-    fn test_gain_new_constant_success() {
+    fn test_gain_new_constant_stores_linear_gain() {
         let gain = Gain::new_constant(Decibels(0.0));
+
         expect_ok!(&gain);
         expect_eq!(
             gain.unwrap(),
@@ -105,14 +106,16 @@ mod test {
     }
 
     #[gtest]
-    fn test_gain_new_constant_invalid() {
+    fn test_gain_new_constant_rejects_nan() {
         let gain = Gain::new_constant(Decibels(f32::NAN));
+
         expect_true!(gain.is_err());
     }
 
     #[gtest]
-    fn test_gain_new_multiple_success() {
+    fn test_gain_new_multiple_stores_linear_gains() {
         let gain = Gain::new_multiple(vec![Decibels(-3.0), Decibels(0.0), Decibels(3.0)]);
+
         expect_ok!(&gain);
         expect_eq!(
             gain.unwrap(),
@@ -127,8 +130,37 @@ mod test {
     }
 
     #[gtest]
-    fn test_gain_new_multiple_invalid() {
+    fn test_gain_new_multiple_rejects_non_finite() {
         let gain = Gain::new_multiple(vec![Decibels(0.1), Decibels(f32::INFINITY), Decibels(0.3)]);
+
         expect_true!(gain.is_err());
+    }
+
+    #[gtest]
+    fn test_gain_new_animated_stores_decibels() {
+        let gain = Gain::new_animated(Animated::Linear { start: 0.0, end: -12.0 });
+
+        expect_ok!(&gain);
+        expect_eq!(
+            gain.unwrap(),
+            Gain {
+                variant: GainVariant::Animated(Animated::Linear {
+                    start: Decibels(0.0),
+                    end: Decibels(-12.0),
+                }),
+            }
+        );
+    }
+
+    #[gtest]
+    fn test_gain_new_animated_bezier_rejects_out_of_range_control_time() {
+        let gain = Gain::new_animated(Animated::Bezier {
+            start: 0.0,
+            end: -12.0,
+            control: -6.0,
+            control_relative_time: 1.5,
+        });
+
+        expect_eq!(gain.unwrap_err(), OarError::InvalidParameter);
     }
 }

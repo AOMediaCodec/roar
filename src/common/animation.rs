@@ -14,7 +14,7 @@
 
 use crate::common::coordinates::{CartesianCoordinate, PolarCoordinate};
 use crate::common::definitions::{Distance, OarError};
-use crate::common::units::{LinearGain, Radians};
+use crate::common::units::{Decibels, Radians};
 
 /// Trait for types that can be animated with Step, Linear, and Bezier interpolation.
 pub trait Animatable: Interpolate + Copy {
@@ -44,7 +44,7 @@ pub enum Animated<T: Animatable> {
 
 // Type aliases for convenience.
 pub type AnimatedFloat32 = Animated<f32>;
-pub type AnimatedLinearGain = Animated<LinearGain>;
+pub type AnimatedDecibels = Animated<Decibels>;
 pub type AnimatedPolar = Animated<PolarCoordinate>;
 pub type AnimatedCartesian = Animated<CartesianCoordinate>;
 
@@ -80,9 +80,9 @@ impl Interpolate for f32 {
     }
 }
 
-impl Interpolate for LinearGain {
+impl Interpolate for Decibels {
     fn lerp(self, other: Self, t: f32) -> Self {
-        LinearGain(self.0 + t * (other.0 - self.0))
+        Decibels(self.0 + t * (other.0 - self.0))
     }
 }
 
@@ -120,7 +120,7 @@ impl Animatable for f32 {
     }
 }
 
-impl Animatable for LinearGain {
+impl Animatable for Decibels {
     type ControlRelativeTime = f32;
     fn bezier_interpolate(
         start: Self,
@@ -427,5 +427,32 @@ mod test {
         expect_that!(sample.x, near(5.0f32, 1e-5));
         expect_that!(sample.y, near(7.071068f32, 1e-5));
         expect_that!(sample.z, near(2.928932f32, 1e-5));
+    }
+
+    #[gtest]
+    fn test_animated_decibels_linear_interpolates_db_values() {
+        let anim = AnimatedDecibels::Linear { start: Decibels(0.0), end: Decibels(-12.0) };
+
+        let sample_start = anim.sample(0.0);
+        let sample_mid = anim.sample(0.5);
+        let sample_end = anim.sample(1.0);
+
+        expect_that!(sample_start.0, near(0.0f32, 1e-6));
+        expect_that!(sample_mid.0, near(-6.0f32, 1e-6));
+        expect_that!(sample_end.0, near(-12.0f32, 1e-6));
+    }
+
+    #[gtest]
+    fn test_animated_decibels_bezier_interpolates_db_values() {
+        let anim = AnimatedDecibels::Bezier {
+            start: Decibels(0.0),
+            end: Decibels(-20.0),
+            control: Decibels(-20.0),
+            control_relative_time: 0.5,
+        };
+
+        let sample_mid = anim.sample(0.5);
+
+        expect_that!(sample_mid.0, near(-15.0f32, 1e-6));
     }
 }

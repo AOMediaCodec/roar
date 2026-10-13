@@ -134,7 +134,10 @@ impl std::ops::Sub for Decibels {
 
 impl From<Decibels> for LinearGain {
     fn from(db: Decibels) -> Self {
-        LinearGain(10.0_f32.powf(0.05 * db.0))
+        // Evaluate `10^(db / 20)` as `2^(db * 0.05 * log2(10))` so per-sample dB gain
+        // interpolation calls single-argument `exp2f` rather than general `powf`.
+        const DB_TO_LOG2_SCALE: f32 = 0.05 * std::f32::consts::LOG2_10;
+        LinearGain((db.0 * DB_TO_LOG2_SCALE).exp2())
     }
 }
 
