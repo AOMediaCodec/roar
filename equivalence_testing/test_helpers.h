@@ -44,6 +44,9 @@ int roar_enable_loudness_processor(oar_t* oar, int enable);
 int roar_set_loudness(oar_t* oar, uint32_t gid, float loudness,
                       float target_loudness);
 int roar_enable_limiter(oar_t* oar, int enable);
+int roar_flush(oar_t* oar, oar_audio_block_t* output);
+int roar_set_limiter_threshold(oar_t* oar, float threshold_db);
+int roar_get_limiter_delay(const oar_t* oar);
 int roar_enable_head_tracking(oar_t* oar, int enable);
 uint32_t roar_get_samples_per_channel(oar_t* oar);
 uint32_t roar_get_sampling_rate(oar_t* oar);

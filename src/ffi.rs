@@ -25,6 +25,45 @@ use crate::common::definitions::{
 };
 use std::os::raw::c_int;
 
+/// Converts an `oar_audio_block_t` into a validated `PlanarBufferMut`.
+///
+/// # Safety
+/// `output_block.data` must be non-null and the caller must guarantee that it is properly aligned,
+/// exclusively accessed for `'a`, and points to an allocated buffer of at least
+/// `(output_block.channels as usize) * samples.value()` `f32` elements (which may be
+/// uninitialized on entry).
+unsafe fn block_to_planar_buffer_mut<'a, 'b>(
+    output_block: &'a mut oar_audio_block_t,
+    slices_array: &'b mut [&'a mut [f32]; MAX_OUTPUT_CHANNEL_COUNT],
+    samples: Samples,
+) -> Result<PlanarBufferMut<'a, 'b>, OarError> {
+    let out_channels = output_block.channels as usize;
+    if output_block.data.is_null()
+        || !output_block.data.is_aligned()
+        || out_channels == 0
+        || out_channels > MAX_OUTPUT_CHANNEL_COUNT
+    {
+        return Err(OarError::InvalidParameter);
+    }
+    output_block.samples_per_channel = samples.value();
+    let samples_usize = samples.value() as usize;
+    let total_samples = out_channels
+        .checked_mul(samples_usize)
+        .filter(|&total| total <= isize::MAX as usize / std::mem::size_of::<f32>())
+        .ok_or(OarError::InvalidParameter)?;
+    // SAFETY: `output_block.data` is verified non-null above, and the caller guarantees exclusive
+    // access for `'a` to at least `total_samples` aligned `f32` elements. Zero-writing initializes
+    // all elements to `0.0f32` prior to forming `&mut [f32]` in case they were uninitialized.
+    let full_slice = unsafe {
+        std::ptr::write_bytes(output_block.data, 0, total_samples);
+        std::slice::from_raw_parts_mut(output_block.data, total_samples)
+    };
+    for (slot, chunk) in slices_array.iter_mut().zip(full_slice.chunks_exact_mut(samples_usize)) {
+        *slot = chunk;
+    }
+    PlanarBufferMut::new(&mut slices_array[..out_channels], out_channels, samples)
+}
+
 /// Creates a new OAR renderer object.
 ///
 /// Returns a pointer to the created `oar_t` object on success, or `null_mut()` on failure.
@@ -472,10 +511,16 @@ pub unsafe extern "C" fn roar_render(oar: *mut oar_t, output: *mut oar_audio_blo
 
         // SAFETY: We checked that `output` is not null. The caller guarantees that `output`
         // points to a valid `oar_audio_block_t` structure.
-        let output_block = unsafe { &*output };
-        if output_block.channels == 0 || output_block.samples_per_channel == 0 {
+        let output_block = unsafe { &mut *output };
+        let expected_samples = wrapper.renderer.config().samples_per_channel().value();
+        let expected_channels = wrapper.renderer.config().output_layout().channels().get() as u32;
+        if output_block.data.is_null()
+            || output_block.channels != expected_channels
+            || output_block.samples_per_channel < expected_samples
+        {
             return OarError::InvalidParameter.into();
         }
+        output_block.samples_per_channel = expected_samples;
 
         // TODO(b/525080422):  Could we simplify the preparation of memory for rendering (i.e. the
         // creation the PlanarBufRef), maybe by changing the way we store inside `wrapper.inputs`?
@@ -504,33 +549,17 @@ pub unsafe extern "C" fn roar_render(oar: *mut oar_t, output: *mut oar_audio_blo
             return OarError::InvalidParameter.into();
         }
 
-        // SAFETY: We checked that `output` is not null. The caller guarantees that `output`
-        // points to a valid `oar_audio_block_t` structure with allocated planar float memory,
-        // which ensures `as_slices_mut()` can safely construct mutable slices.
-        let dest_slices = unsafe { (*output).as_slices_mut() };
-        let out_channels = output_block.channels as usize;
-        if dest_slices.len() < out_channels {
-            return OarError::InvalidParameter.into();
-        }
-
         let mut slices_array: [&mut [f32]; MAX_OUTPUT_CHANNEL_COUNT] =
             std::array::from_fn(|_| &mut [] as &mut [f32]);
-        if out_channels > MAX_OUTPUT_CHANNEL_COUNT {
-            return OarError::InvalidParameter.into();
-        }
-        for (c, slice) in dest_slices.into_iter().enumerate().take(out_channels) {
-            slices_array[c] = unsafe {
-                // Safety: MaybeUninit<f32> has same layout as f32,
-                // and we initialize it fully during render.
-                std::slice::from_raw_parts_mut(slice.as_mut_ptr() as *mut f32, slice.len())
-            };
-        }
-
-        let mut out_buf = match PlanarBufferMut::new(
-            &mut slices_array[..out_channels],
-            out_channels,
-            wrapper.renderer.config().samples_per_channel(),
-        ) {
+        // SAFETY: If non-null, the caller guarantees `output_block.data` points to aligned,
+        // exclusively accessed storage for at least `output_block.channels * samples` floats.
+        let mut out_buf = match unsafe {
+            block_to_planar_buffer_mut(
+                output_block,
+                &mut slices_array,
+                wrapper.renderer.config().samples_per_channel(),
+            )
+        } {
             Ok(r) => r,
             Err(e) => return e.into(),
         };
@@ -641,6 +670,151 @@ pub unsafe extern "C" fn roar_enable_limiter(oar: *mut oar_t, enable: c_int) -> 
         }
     })
     .unwrap_or(OarError::InvalidParameter.into())
+}
+
+/// Flushes the limiter's look-ahead delay buffer and resets limiter state.
+///
+/// On return, `output.samples_per_channel` is set to the number of flushed samples (`0` if the
+/// limiter is disabled or has zero delay).
+///
+/// Returns `OAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param)
+/// on failure.
+///
+/// # Arguments
+/// * `oar` - Pointer to the ROAR object.
+/// * `output` - Output audio block whose `data` buffer must hold at least `output_channels *
+///   roar_get_limiter_delay(oar)` floats when the limiter is enabled.
+///
+/// # Safety
+///
+/// The caller must guarantee that:
+/// - `oar` is either null or points to a valid, initialized OAR object created by `roar_create`.
+/// - `output` is either null or points to a valid, initialized `oar_audio_block_t` (`output.data`
+///   may also be null).
+/// - If `oar`, `output`, and `output.data` are non-null and the limiter is enabled with non-zero
+///   delay (`roar_get_limiter_delay(oar) > 0`), `output.data` points to an allocated, properly
+///   aligned (`f32`), and exclusively accessed buffer of at least `output.channels as usize *
+///   roar_get_limiter_delay(oar) as usize` floats (note that `output.samples_per_channel` is
+///   ignored on entry).
+/// - Neither `oar` nor `output` (nor its `data` buffer) is accessed or modified concurrently by any
+///   other thread for the duration of this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn roar_flush(oar: *mut oar_t, output: *mut oar_audio_block_t) -> c_int {
+    std::panic::catch_unwind(|| {
+        if oar.is_null() || output.is_null() {
+            return OarError::InvalidParameter.into();
+        }
+        // SAFETY: We checked that `oar` is not null. The caller guarantees `oar` points to a
+        // valid, initialized OAR object with exclusive access for the duration of this call.
+        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        // SAFETY: We checked that `output` is not null. The caller guarantees `output` points to a
+        // valid, initialized `oar_audio_block_t` with exclusive access for the duration of this
+        // call.
+        let output_block = unsafe { &mut *output };
+        let out_channels = wrapper.renderer.config().output_layout().channels().get();
+
+        if output_block.data.is_null()
+            || output_block.channels as usize != out_channels
+            || out_channels > MAX_OUTPUT_CHANNEL_COUNT
+        {
+            return OarError::InvalidParameter.into();
+        }
+
+        let delay = wrapper.renderer.limiter_delay();
+        if !wrapper.renderer.is_limiter_enabled() || delay == 0 {
+            output_block.samples_per_channel = 0;
+            return OAR_STATUS_OK;
+        }
+
+        let delay_samples = match Samples::new(delay as u32) {
+            Ok(s) => s,
+            Err(e) => return e.into(),
+        };
+
+        let mut slices_array: [&mut [f32]; MAX_OUTPUT_CHANNEL_COUNT] =
+            std::array::from_fn(|_| &mut [] as &mut [f32]);
+        // SAFETY: `output_block.data` was checked non-null above, and the limiter is enabled with
+        // `delay > 0`. The caller guarantees `output_block.data` points to an allocated, aligned
+        // (`f32`), exclusively accessed buffer of at least `output_block.channels as usize * delay`
+        // floats for the duration of this call.
+        let mut out_buf = match unsafe {
+            block_to_planar_buffer_mut(output_block, &mut slices_array, delay_samples)
+        } {
+            Ok(r) => r,
+            Err(e) => return e.into(),
+        };
+
+        match wrapper.renderer.flush(&mut out_buf) {
+            Ok(flushed) => {
+                output_block.samples_per_channel = flushed as u32;
+                OAR_STATUS_OK
+            }
+            Err(e) => {
+                output_block.samples_per_channel = 0;
+                e.into()
+            }
+        }
+    })
+    .unwrap_or(OarError::InvalidParameter.into())
+}
+
+/// Sets the peak limiter threshold in dBFS.
+///
+/// Values outside `[-60.0, 0.0]` dBFS are clamped to that range. Can be called before or after
+/// `roar_enable_limiter`, and between `roar_render` calls without resetting delay buffers.
+///
+/// Returns `OAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param)
+/// on failure.
+///
+/// # Arguments
+/// * `oar` - Pointer to the ROAR object.
+/// * `threshold_db` - Target threshold in dBFS; must be finite.
+///
+/// # Safety
+///
+/// The caller must guarantee that:
+/// - `oar` is either null or points to a valid, initialized OAR object created by `roar_create`
+///   that is not accessed or modified concurrently for the duration of this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn roar_set_limiter_threshold(oar: *mut oar_t, threshold_db: f32) -> c_int {
+    std::panic::catch_unwind(|| {
+        if oar.is_null() {
+            return OarError::InvalidParameter.into();
+        }
+        // SAFETY: We checked that `oar` is not null. The caller guarantees `oar` points to a
+        // valid, initialized OAR object with exclusive access for the duration of this call.
+        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        let threshold = match Decibels::new(threshold_db) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        match wrapper.renderer.set_limiter_threshold(threshold) {
+            Ok(()) => OAR_STATUS_OK,
+            Err(e) => e.into(),
+        }
+    })
+    .unwrap_or(OarError::InvalidParameter.into())
+}
+
+/// Returns the limiter look-ahead delay in samples per channel, or `0` if `oar` is null.
+///
+/// # Safety
+///
+/// The caller must guarantee that:
+/// - `oar` is either null or points to a valid, initialized OAR object created by `roar_create`
+///   that is not modified concurrently for the duration of this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn roar_get_limiter_delay(oar: *const oar_t) -> c_int {
+    std::panic::catch_unwind(|| {
+        if oar.is_null() {
+            return 0;
+        }
+        // SAFETY: We checked that `oar` is not null. The caller guarantees `oar` points to a
+        // valid, initialized OAR object not modified concurrently for the duration of this call.
+        let wrapper = unsafe { &*(oar as *const FfiWrapper) };
+        wrapper.renderer.limiter_delay() as c_int
+    })
+    .unwrap_or(0)
 }
 
 /// Enables/disables listener head tracking.

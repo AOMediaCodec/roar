@@ -18,8 +18,8 @@
 use crate::common::definitions::ChannelCount;
 use crate::common::definitions::{
     AudioElementConfig, Config, Decibels, DownmixMode, Gain, GroupId, HeadphonesRenderingMode,
-    Layout, LinearGain, Milliseconds, OarError, ObjectPosition, PlanarBufferMut, PlanarBufferRef,
-    Quaternion, Samples,
+    Layout, LinearGain, OarError, ObjectPosition, PlanarBufferMut, PlanarBufferRef, Quaternion,
+    Samples,
 };
 use crate::limiter::oar_limiter::OarLimiter;
 use crate::renderer::audio_elements_renderer::AudioElementsRenderer;
@@ -33,8 +33,6 @@ use crate::renderer::olr::object_renderer::ObjectRenderer;
 use std::collections::HashMap;
 
 const MAX_OUTPUT_CHANNELS: usize = 25;
-const LIMITER_RELEASE_TIME_MS: f32 = 50.0;
-const LIMITER_CEILING_DB: f32 = -1.0;
 
 /// Status of the OAR rendering engine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,7 +96,7 @@ pub struct RoarRenderer {
     /// Scratch buffer for group-level mixing.
     group_scratch: Vec<f32>,
     /// Toggle for the output peak limiter.
-    pub(crate) limiter_enabled: bool,
+    limiter_enabled: bool,
     /// Toggle for listener head tracking (binaural output only).
     pub(crate) head_tracking_enabled: bool,
     /// Toggle for group loudness normalization.
@@ -106,7 +104,7 @@ pub struct RoarRenderer {
     /// Loudness normalization gain adjustments per group.
     pub(crate) group_loudness: HashMap<GroupId, LinearGain>,
     /// Output peak limiter.
-    limiter: Option<OarLimiter>,
+    limiter: OarLimiter,
     /// Dynamic gain parameters for elements, keyed by element ID and gain ID.
     element_gains: HashMap<u32, HashMap<u32, GainParameter>>,
     /// Dynamic gain parameters for groups.
@@ -138,23 +136,64 @@ impl RoarRenderer {
         self.active_groups.contains(&gid)
     }
 
-    /// Enables or disables output peak limiter.
+    /// Enables or disables the output peak limiter.
+    ///
+    /// When transitioning from disabled to enabled, the limiter state and delay buffers are
+    /// reset to discard any stale buffered audio.
+    ///
+    /// # Arguments
+    /// * `enable` - `true` to enable output limiting, `false` to bypass it.
     pub fn enable_limiter(&mut self, enable: bool) -> Result<(), OarError> {
+        if enable && !self.limiter_enabled {
+            self.limiter.reset();
+        }
         self.limiter_enabled = enable;
-        if enable && self.limiter.is_none() {
-            self.limiter = Some(OarLimiter::new(
-                self.config.sample_rate(),
-                Milliseconds::new(LIMITER_RELEASE_TIME_MS)?,
-                Decibels::new(LIMITER_CEILING_DB)?,
-                self.config.samples_per_channel(),
-            )?);
-        }
-        for renderers in self.group_renderers.values_mut() {
-            for active_rdr in renderers {
-                let _ = active_rdr.renderer.enable_limiter(enable);
-            }
-        }
         Ok(())
+    }
+
+    /// Flushes the limiter's look-ahead delay buffer into `output` and resets limiter state.
+    ///
+    /// If the limiter is disabled or has zero look-ahead delay, returns `Ok(0)` without
+    /// modifying `output`.
+    ///
+    /// # Arguments
+    /// * `output` - Destination planar buffer with the renderer's output channel count and at least
+    ///   `limiter_delay()` samples per channel when the limiter is enabled.
+    ///
+    /// # Returns
+    /// The number of flushed samples per channel (`limiter_delay()` when enabled, `0` when
+    /// disabled).
+    pub fn flush(&mut self, output: &mut PlanarBufferMut<'_, '_>) -> Result<usize, OarError> {
+        let out_channels = self.config.output_layout().channels().get();
+        if output.num_channels() != out_channels {
+            return Err(OarError::InvalidParameter);
+        }
+        if !self.limiter_enabled || self.limiter.delay() == 0 {
+            return Ok(0);
+        }
+        self.limiter.flush(output)
+    }
+
+    /// Sets the peak limiter threshold ceiling in dBFS.
+    ///
+    /// Can be called before or after `enable_limiter` and between `render` calls without
+    /// resetting the delay buffer or gain envelope state.
+    ///
+    /// # Arguments
+    /// * `threshold_db` - Target threshold in dBFS; values outside `[-60.0, 0.0]` are clamped.
+    pub fn set_limiter_threshold(&mut self, threshold_db: Decibels) -> Result<(), OarError> {
+        self.limiter.set_threshold(threshold_db);
+        Ok(())
+    }
+
+    /// Returns the limiter look-ahead delay in samples per channel.
+    pub fn limiter_delay(&self) -> usize {
+        self.limiter.delay()
+    }
+
+    /// Returns whether the output peak limiter is currently enabled.
+    pub fn is_limiter_enabled(&self) -> bool {
+        self.limiter_enabled
     }
 
     /// Enables or disables listener head tracking.
@@ -234,10 +273,8 @@ impl RoarRenderer {
         &mut self,
         output: &mut PlanarBufferMut<'_, '_>,
     ) -> Result<(), OarError> {
-        if self.limiter_enabled
-            && let Some(ref mut limiter) = self.limiter
-        {
-            limiter.process_block(output)?;
+        if self.limiter_enabled {
+            self.limiter.process_block(output)?;
         }
         Ok(())
     }
@@ -251,6 +288,7 @@ impl RoarRenderer {
         let samples = config.samples_per_channel().value() as usize;
         let out_channels = config.output_layout().channels();
         let total_samples = out_channels.get() * samples;
+        let limiter = OarLimiter::new(config.sample_rate(), out_channels)?;
 
         Ok(RoarRenderer {
             config: *config,
@@ -266,7 +304,7 @@ impl RoarRenderer {
             head_tracking_enabled: false,
             loudness_processor_enabled: false,
             group_loudness: HashMap::new(),
-            limiter: None,
+            limiter,
             element_gains: HashMap::new(),
             group_gains: HashMap::new(),
             gain_scratch_buf: vec![1.0f32; samples],
@@ -341,7 +379,6 @@ impl RoarRenderer {
 
         let mut active_sub: Box<dyn AudioRenderer> = Box::new(router);
         active_sub.add_element(id, config)?;
-        let _ = active_sub.enable_limiter(self.limiter_enabled);
         let _ = active_sub.enable_head_tracking(self.head_tracking_enabled);
         Ok(active_sub)
     }
@@ -386,7 +423,6 @@ impl RoarRenderer {
 
                 let mut active_sub: Box<dyn AudioRenderer> = Box::new(router);
                 active_sub.add_element(id, config)?;
-                let _ = active_sub.enable_limiter(self.limiter_enabled);
                 let _ = active_sub.enable_head_tracking(self.head_tracking_enabled);
                 renderers.push(ActiveRenderer { element_id: None, renderer: active_sub });
             }

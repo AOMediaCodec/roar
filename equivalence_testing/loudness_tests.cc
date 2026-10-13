@@ -1,3 +1,14 @@
+/*
+ * Copyright (c) 2026, Alliance for Open Media. All rights reserved
+ *
+ * This source code is subject to the terms of the BSD 3-Clause Clear License
+ * and the Alliance for Open Media Patent License 1.0. If the BSD 3-Clause Clear
+ * License was not distributed with this source code in the LICENSE file, you
+ * can obtain it at www.aomedia.org/license/software-license/bsd-3-c-c. If the
+ * Alliance for Open Media Patent License 1.0 was not distributed with this
+ * source code in the PATENTS file, you can obtain it at
+ * www.aomedia.org/license/patent.
+ */
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -22,9 +33,8 @@ using ::testing::Pointwise;
 
 // Tolerable error level.
 const float kEpsilon = 1e-6;
-
-const uint32_t samples_per_channel = 1024;
-const uint32_t sampling_rate = 48000;
+const uint32_t kSamplesPerChannel = 1024;
+const uint32_t kSampleRate = 48000;
 
 // Optional params for loudness processor.
 struct LoudnessConfig {
@@ -35,16 +45,22 @@ struct LoudnessConfig {
 /**
  * Runs a test using the same config/params/input data for both oar and roar.
  *
- * @param config Config to create both both oar and roar.
+ * @param config Config to create both oar and roar.
  * @param element_config Config for the input audio.
  * @param loudness_config Optional values for loudness processor.
  * @param enable_limiter Value for `*_enable_limiter`.
  * @param input_amplitude The amplitude to scale the sinusoidal input audio.
+ * @param limiter_thresholds Per-block optional threshold (dB) set prior to
+ *        rendering each block. Defaults to a single block with default
+ *        threshold.
  */
-void RunLoudnessTest(const oar_config_t& config,
-                     const oar_audio_element_config_t& element_config,
-                     std::optional<LoudnessConfig> loudness_config,
-                     bool enable_limiter, float input_amplitude) {
+void RunLoudnessTest(
+    const oar_config_t& config,
+    const oar_audio_element_config_t& element_config,
+    std::optional<LoudnessConfig> loudness_config, bool enable_limiter,
+    float input_amplitude,
+    const std::vector<std::optional<float>>& limiter_thresholds = {
+        std::nullopt}) {
   // Wrap the C pointers in unique_ptrs with custom deleters for automatic
   // memory management.
   using OarPtr = std::unique_ptr<oar_t, decltype(&oar_destroy)>;
@@ -108,11 +124,6 @@ void RunLoudnessTest(const oar_config_t& config,
   input_block.samples_per_channel = c_samples_per_channel;
   input_block.data = input_data.data();
 
-  ASSERT_EQ(oar_update_audio_element_data(oar.get(), element_id, &input_block),
-            0);
-  ASSERT_EQ(
-      roar_update_audio_element_data(roar.get(), element_id, &input_block), 0);
-
   // Get output buffers ready
   const uint32_t c_output_channels =
       oar_get_number_of_output_channels(oar.get());
@@ -132,19 +143,53 @@ void RunLoudnessTest(const oar_config_t& config,
   r_output_block.samples_per_channel = r_samples_per_channel;
   r_output_block.data = r_output.data();
 
-  // Render
-  ASSERT_EQ(oar_render(oar.get(), &c_output_block), 0);
-  ASSERT_EQ(roar_render(roar.get(), &r_output_block), 0);
+  // Render configured sequence of blocks
+  for (const auto& threshold : limiter_thresholds) {
+    if (threshold.has_value()) {
+      ASSERT_EQ(oar_set_limiter_threshold(oar.get(), *threshold), 0);
+      ASSERT_EQ(roar_set_limiter_threshold(roar.get(), *threshold), 0);
+    }
 
-  // Compare
-  EXPECT_THAT(c_output, Pointwise(FloatNear(kEpsilon), r_output));
+    ASSERT_EQ(
+        oar_update_audio_element_data(oar.get(), element_id, &input_block), 0);
+    ASSERT_EQ(
+        roar_update_audio_element_data(roar.get(), element_id, &input_block),
+        0);
+
+    ASSERT_EQ(oar_render(oar.get(), &c_output_block), 0);
+    ASSERT_EQ(roar_render(roar.get(), &r_output_block), 0);
+
+    // Compare rendered blocks
+    EXPECT_THAT(c_output, Pointwise(FloatNear(kEpsilon), r_output));
+  }
+
+  // Verify limiter delay and flush equivalence
+  const int c_delay = oar_get_limiter_delay(oar.get());
+  const int r_delay = roar_get_limiter_delay(roar.get());
+  ASSERT_EQ(c_delay, r_delay);
+
+  auto c_flush_output = GetOutputBuffer(c_delay, c_output_channels);
+  oar_audio_block_t c_flush_block = {};
+  c_flush_block.channels = c_output_channels;
+  c_flush_block.data = c_flush_output.data();
+
+  auto r_flush_output = GetOutputBuffer(r_delay, r_output_channels);
+  oar_audio_block_t r_flush_block = {};
+  r_flush_block.channels = r_output_channels;
+  r_flush_block.data = r_flush_output.data();
+
+  ASSERT_EQ(oar_flush(oar.get(), &c_flush_block), 0);
+  ASSERT_EQ(roar_flush(roar.get(), &r_flush_block), 0);
+  EXPECT_EQ(c_flush_block.samples_per_channel,
+            r_flush_block.samples_per_channel);
+  EXPECT_THAT(c_flush_output, Pointwise(FloatNear(kEpsilon), r_flush_output));
 }
 
 TEST(LoudnessTest, LoudnessDisabled) {
   oar_config_t config = {};
   config.target_layout = ck_oar_layout_stereo;
-  config.samples_per_channel = samples_per_channel;
-  config.sampling_rate = sampling_rate;
+  config.samples_per_channel = kSamplesPerChannel;
+  config.sampling_rate = kSampleRate;
 
   oar_audio_element_config_t element_config = {};
   element_config.type = ck_channel_based;
@@ -159,8 +204,8 @@ TEST(LoudnessTest, LoudnessDisabled) {
 TEST(LoudnessTest, LoudnessBoost) {
   oar_config_t config = {};
   config.target_layout = ck_oar_layout_stereo;
-  config.samples_per_channel = samples_per_channel;
-  config.sampling_rate = sampling_rate;
+  config.samples_per_channel = kSamplesPerChannel;
+  config.sampling_rate = kSampleRate;
 
   oar_audio_element_config_t element_config = {};
   element_config.type = ck_channel_based;
@@ -174,8 +219,8 @@ TEST(LoudnessTest, LoudnessBoost) {
 TEST(LoudnessTest, LoudnessAttenuation) {
   oar_config_t config = {};
   config.target_layout = ck_oar_layout_stereo;
-  config.samples_per_channel = samples_per_channel;
-  config.sampling_rate = sampling_rate;
+  config.samples_per_channel = kSamplesPerChannel;
+  config.sampling_rate = kSampleRate;
 
   oar_audio_element_config_t element_config = {};
   element_config.type = ck_channel_based;
@@ -189,8 +234,8 @@ TEST(LoudnessTest, LoudnessAttenuation) {
 TEST(LimiterTest, LimiterDisabled) {
   oar_config_t config = {};
   config.target_layout = ck_oar_layout_stereo;
-  config.samples_per_channel = samples_per_channel;
-  config.sampling_rate = sampling_rate;
+  config.samples_per_channel = kSamplesPerChannel;
+  config.sampling_rate = kSampleRate;
 
   oar_audio_element_config_t element_config = {};
   element_config.type = ck_channel_based;
@@ -205,8 +250,8 @@ TEST(LimiterTest, LimiterDisabled) {
 TEST(LimiterTest, LimiterEnabled) {
   oar_config_t config = {};
   config.target_layout = ck_oar_layout_stereo;
-  config.samples_per_channel = samples_per_channel;
-  config.sampling_rate = sampling_rate;
+  config.samples_per_channel = kSamplesPerChannel;
+  config.sampling_rate = kSampleRate;
 
   oar_audio_element_config_t element_config = {};
   element_config.type = ck_channel_based;
@@ -222,8 +267,8 @@ TEST(LimiterTest, LimiterEnabled) {
 TEST(LimiterTest, LoudnessAndLimiterTogether) {
   oar_config_t config = {};
   config.target_layout = ck_oar_layout_stereo;
-  config.samples_per_channel = samples_per_channel;
-  config.sampling_rate = sampling_rate;
+  config.samples_per_channel = kSamplesPerChannel;
+  config.sampling_rate = kSampleRate;
 
   oar_audio_element_config_t element_config = {};
   element_config.type = ck_channel_based;
@@ -234,6 +279,21 @@ TEST(LimiterTest, LoudnessAndLimiterTogether) {
   // Output should be boosted but limited and match.
   RunLoudnessTest(config, element_config, LoudnessConfig{-30.0f, -24.0f},
                   /*enable_limiter=*/true, 0.7f);
+}
+
+TEST(LimiterTest, CustomThresholdAndFlushRendersEquivalently) {
+  oar_config_t config = {};
+  config.target_layout = ck_oar_layout_stereo;
+  config.samples_per_channel = kSamplesPerChannel;
+  config.sampling_rate = kSampleRate;
+
+  oar_audio_element_config_t element_config = {};
+  element_config.type = ck_channel_based;
+  element_config.cbc.layout = ck_oar_layout_stereo;
+
+  RunLoudnessTest(config, element_config, /*loudness_config=*/std::nullopt,
+                  /*enable_limiter=*/true, /*input_amplitude=*/2.0f,
+                  /*limiter_thresholds=*/{-6.0f, -12.0f, std::nullopt});
 }
 
 }  // namespace

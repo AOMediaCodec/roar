@@ -209,6 +209,48 @@ mod test {
     }
 
     #[gtest]
+    fn test_roar_flush_handles_nulls_gracefully() {
+        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, 128, 48000);
+        let mut output_buffer = vec![0.0f32; 480];
+        let mut valid_block = oar_audio_block_t {
+            data: output_buffer.as_mut_ptr(),
+            channels: 2,
+            samples_per_channel: 240,
+        };
+
+        // SAFETY: Testing boundary error handling; `roar_flush` explicitly documents that a null
+        // `oar` pointer is permitted and will return an error code without dereferencing, while
+        // `valid_block` points to valid, exclusively accessed memory.
+        let ret_null_oar = unsafe { roar_flush(std::ptr::null_mut(), &mut valid_block) };
+        // SAFETY: Testing boundary error handling; `oar.ptr` is a valid, exclusively accessed OAR
+        // instance, and `roar_flush` explicitly documents that a null `output` pointer is permitted
+        // and will return an error code without dereferencing.
+        let ret_null_block = unsafe { roar_flush(oar.ptr, std::ptr::null_mut()) };
+
+        expect_eq!(ret_null_oar, OarError::InvalidParameter.into());
+        expect_eq!(ret_null_block, OarError::InvalidParameter.into());
+    }
+
+    #[gtest]
+    fn test_roar_set_limiter_threshold_handles_null_gracefully() {
+        // SAFETY: Testing boundary error handling; `roar_set_limiter_threshold` explicitly
+        // documents that a null `oar` pointer is permitted and will return an error code without
+        // dereferencing.
+        let ret = unsafe { roar_set_limiter_threshold(std::ptr::null_mut(), -6.0) };
+
+        expect_eq!(ret, OarError::InvalidParameter.into());
+    }
+
+    #[gtest]
+    fn test_roar_get_limiter_delay_handles_null_gracefully() {
+        // SAFETY: Testing boundary error handling; `roar_get_limiter_delay` explicitly documents
+        // that a null `oar` pointer is permitted and will return `0` without dereferencing.
+        let ret = unsafe { roar_get_limiter_delay(std::ptr::null()) };
+
+        expect_eq!(ret, 0);
+    }
+
+    #[gtest]
     fn test_roar_enable_head_tracking_handles_null_gracefully() {
         // SAFETY: passing null renderer should return invalid status.
         let ret = unsafe { roar_enable_head_tracking(std::ptr::null_mut(), 1) };

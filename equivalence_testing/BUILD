@@ -19,7 +19,6 @@ cc_test(
         ":test_helpers",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
-        "@aom-roar//src:roar",
         "@googletest//:gtest_main",
         "@oar",
     ],
@@ -33,8 +32,6 @@ cc_test(
     ],
     deps = [
         ":test_helpers",
-        "@abseil-cpp//absl/strings:str_format",
-        "@aom-roar//src:roar",
         "@googletest//:gtest_main",
         "@oar",
     ],
@@ -45,8 +42,6 @@ cc_test(
     srcs = ["error_conditions_tests.cc"],
     deps = [
         ":test_helpers",
-        "@abseil-cpp//absl/strings:str_format",
-        "@aom-roar//src:roar",
         "@googletest//:gtest_main",
         "@oar",
     ],
@@ -60,8 +55,6 @@ cc_test(
     ],
     deps = [
         ":test_helpers",
-        "@abseil-cpp//absl/strings:str_format",
-        "@aom-roar//src:roar",
         "@googletest//:gtest_main",
         "@oar",
     ],
@@ -76,7 +69,6 @@ cc_test(
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
-        "@aom-roar//src:roar",
         "@googletest//:gtest_main",
         "@oar",
     ],
@@ -85,13 +77,8 @@ cc_test(
 cc_test(
     name = "loudness_tests",
     srcs = ["loudness_tests.cc"],
-    tags = [
-        "notap",  # TODO(b/553439367): Temporarily disabled until catching up on OAR updates.
-    ],
     deps = [
         ":test_helpers",
-        "@abseil-cpp//absl/strings:str_format",
-        "@aom-roar//src:roar",
         "@googletest//:gtest_main",
         "@oar",
     ],
@@ -118,7 +105,7 @@ cc_library(
     visibility = ["@aom-roar//equivalence_testing:__subpackages__"],
     deps = [
         "@abseil-cpp//absl/strings:str_format",
-        "@aom-roar//src:roar",
+        "@aom-roar//src:roar",  # buildcleaner: keep
         "@oar",
     ],
 )

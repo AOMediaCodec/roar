@@ -91,14 +91,6 @@ pub fn float_from_int16(input: &[i16], output: &mut [f32]) {
     }
 }
 
-/// Pointwise max absolute value: `slice[i] = slice[i].max(input[i].abs())`.
-pub fn pointwise_max_abs(slice: &mut [f32], input: &[f32]) {
-    let len = slice.len().min(input.len());
-    for i in 0..len {
-        slice[i] = slice[i].max(input[i].abs());
-    }
-}
-
 #[cfg(test)]
 mod test {
 
