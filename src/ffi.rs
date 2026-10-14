@@ -21,7 +21,7 @@ use crate::c_types::{
 };
 use crate::common::definitions::{
     Decibels, GroupId, OarError, PlanarBufferMut, PlanarBufferRef, Samples,
-    MAX_OUTPUT_CHANNEL_COUNT, OAR_STATUS_OK,
+    MAX_OUTPUT_CHANNEL_COUNT, ROAR_STATUS_OK,
 };
 use std::os::raw::c_int;
 
@@ -146,7 +146,7 @@ pub unsafe extern "C" fn roar_add_audio_group(oar: *mut oar_t) -> c_int {
 
 /// Adds a new audio element to the renderer.
 ///
-/// Returns `OAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param,
+/// Returns `ROAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param,
 /// `-12` for out of memory) on failure.
 ///
 /// # Safety
@@ -181,7 +181,7 @@ pub unsafe extern "C" fn roar_add_audio_element(
         };
 
         match wrapper.renderer.add_element(group_id, id, &safe_config) {
-            Ok(()) => OAR_STATUS_OK,
+            Ok(()) => ROAR_STATUS_OK,
             Err(e) => e.into(),
         }
     })
@@ -190,7 +190,7 @@ pub unsafe extern "C" fn roar_add_audio_element(
 
 /// Removes an audio element from the renderer.
 ///
-/// Returns `OAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` if element not
+/// Returns `ROAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` if element not
 /// found or invalid param) on failure.
 ///
 /// # Safety
@@ -208,7 +208,7 @@ pub unsafe extern "C" fn roar_remove_audio_element(oar: *mut oar_t, id: u32) -> 
         match wrapper.renderer.remove_element(id) {
             Ok(()) => {
                 wrapper.inputs.remove(&id);
-                OAR_STATUS_OK
+                ROAR_STATUS_OK
             }
             Err(e) => e.into(),
         }
@@ -229,7 +229,7 @@ pub unsafe extern "C" fn roar_remove_audio_element(oar: *mut oar_t, id: u32) -> 
 ///
 /// To update head rotation (which is always applied globally), use `roar_update_metadata` instead.
 ///
-/// Returns `OAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param,
+/// Returns `ROAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param,
 /// `-95` for unsupported metadata type) on failure.
 ///
 /// # Safety
@@ -257,7 +257,7 @@ pub unsafe extern "C" fn roar_update_audio_element_metadata(
         if meta_type == (oar_metadata_type_t::ck_metadata_gain as u32) {
             // C liboar ignores gain updates with duration <= 0.
             if meta_ref.duration <= 0 {
-                return OAR_STATUS_OK;
+                return ROAR_STATUS_OK;
             }
             let duration = match Samples::new(meta_ref.duration as u32) {
                 Ok(s) => s,
@@ -272,13 +272,13 @@ pub unsafe extern "C" fn roar_update_audio_element_metadata(
             let gain_meta = unsafe { meta_ref.value.gain };
             let gain_id = gain_meta.id;
             match wrapper.renderer.update_element_gain(id, gain_id, &gain, duration) {
-                Ok(()) => OAR_STATUS_OK,
+                Ok(()) => ROAR_STATUS_OK,
                 Err(e) => e.into(),
             }
         } else if meta_type == (oar_metadata_type_t::ck_metadata_object_positions as u32) {
             // C liboar ignores position updates with duration <= 0.
             if meta_ref.duration <= 0 {
-                return OAR_STATUS_OK;
+                return ROAR_STATUS_OK;
             }
             let duration = match Samples::new(meta_ref.duration as u32) {
                 Ok(s) => s,
@@ -289,7 +289,7 @@ pub unsafe extern "C" fn roar_update_audio_element_metadata(
                 Err(e) => return e.into(),
             };
             match wrapper.renderer.update_element_positions(id, &positions, duration) {
-                Ok(()) => OAR_STATUS_OK,
+                Ok(()) => ROAR_STATUS_OK,
                 Err(e) => e.into(),
             }
         } else if meta_type == (oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32) {
@@ -308,7 +308,7 @@ pub unsafe extern "C" fn roar_update_audio_element_metadata(
                 Err(e) => return e.into(),
             };
             match wrapper.renderer.update_element_downmix_mode(id, mode, duration) {
-                Ok(()) => OAR_STATUS_OK,
+                Ok(()) => ROAR_STATUS_OK,
                 Err(e) => e.into(),
             }
         } else {
@@ -320,8 +320,8 @@ pub unsafe extern "C" fn roar_update_audio_element_metadata(
 
 /// Updates audio element data blocks for rendering.
 ///
-/// Returns `OAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param /
-/// channels count) on failure.
+/// Returns `ROAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param
+/// / channels count) on failure.
 ///
 /// # Safety
 ///
@@ -361,14 +361,14 @@ pub unsafe extern "C" fn roar_update_audio_element_data(
         let copied_data: Vec<Vec<f32>> = data_slices.iter().map(|slice| slice.to_vec()).collect();
 
         wrapper.inputs.insert(id, copied_data);
-        OAR_STATUS_OK
+        ROAR_STATUS_OK
     })
     .unwrap_or(OarError::InvalidParameter.into())
 }
 
 /// Sets the metadata unit processing size in samples.
 ///
-/// Returns `OAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param,
+/// Returns `ROAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param,
 /// `-95` for unsupported metadata type) on failure.
 ///
 /// Matching liboar, only object positions metadata type is supported.
@@ -399,7 +399,7 @@ pub unsafe extern "C" fn roar_set_metadata_unit_to_process(
         // for the duration of this call, satisfying `&mut` validity and exclusivity.
         let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
         match wrapper.renderer.set_object_position_metadata_unit_to_process(samples) {
-            Ok(()) => OAR_STATUS_OK,
+            Ok(()) => ROAR_STATUS_OK,
             Err(e) => e.into(),
         }
     })
@@ -418,7 +418,7 @@ pub unsafe extern "C" fn roar_set_metadata_unit_to_process(
 ///   - Gain in dB, applied to all channels in the group.
 ///   - Duration must be specified.  A value <= 0 means the update will be silently dropped!
 ///
-/// Returns `OAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param,
+/// Returns `ROAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param,
 /// `-16` if renderer not in Rendering state, `-95` for unsupported metadata type) on failure.
 ///
 /// # Safety
@@ -454,7 +454,7 @@ pub unsafe extern "C" fn roar_update_metadata(
         if meta_ref.r#type == (oar_metadata_type_t::ck_metadata_gain as u32) {
             // C liboar ignores group gain updates with duration <= 0.
             if meta_ref.duration <= 0 {
-                return OAR_STATUS_OK;
+                return ROAR_STATUS_OK;
             }
             let gain = match meta_ref.to_gain() {
                 Ok(g) => g,
@@ -465,7 +465,7 @@ pub unsafe extern "C" fn roar_update_metadata(
                 Err(e) => return e.into(),
             };
             match wrapper.renderer.update_group_gain(group_id, &gain, duration) {
-                Ok(()) => OAR_STATUS_OK,
+                Ok(()) => ROAR_STATUS_OK,
                 Err(e) => e.into(),
             }
         } else if meta_ref.r#type == (oar_metadata_type_t::ck_metadata_head_rotation as u32) {
@@ -481,7 +481,7 @@ pub unsafe extern "C" fn roar_update_metadata(
                 }
                 Err(e) => return e.into(),
             }
-            OAR_STATUS_OK
+            ROAR_STATUS_OK
         } else {
             OarError::NotSupported.into()
         }
@@ -491,7 +491,7 @@ pub unsafe extern "C" fn roar_update_metadata(
 
 /// Renders all active audio elements and writes results to planar outputs.
 ///
-/// Returns `OAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid
+/// Returns `ROAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid
 /// parameters, or sub-renderer errors) on failure.
 ///
 /// # Safety
@@ -565,7 +565,7 @@ pub unsafe extern "C" fn roar_render(oar: *mut oar_t, output: *mut oar_audio_blo
         };
 
         match wrapper.renderer.render(&input_refs, &mut out_buf) {
-            Ok(()) => OAR_STATUS_OK,
+            Ok(()) => ROAR_STATUS_OK,
             Err(e) => e.into(),
         }
     })
@@ -574,7 +574,7 @@ pub unsafe extern "C" fn roar_render(oar: *mut oar_t, output: *mut oar_audio_blo
 
 /// Enables/disables the loudness processor.
 ///
-/// Returns `OAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param)
+/// Returns `ROAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param)
 /// on failure.
 ///
 /// # Safety
@@ -591,7 +591,7 @@ pub unsafe extern "C" fn roar_enable_loudness_processor(oar: *mut oar_t, enable:
         let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
         let enable_bool = enable != 0;
         match wrapper.renderer.enable_loudness_processor(enable_bool) {
-            Ok(()) => OAR_STATUS_OK,
+            Ok(()) => ROAR_STATUS_OK,
             Err(e) => e.into(),
         }
     })
@@ -600,7 +600,7 @@ pub unsafe extern "C" fn roar_enable_loudness_processor(oar: *mut oar_t, enable:
 
 /// Configures loudness adjustments for a group.
 ///
-/// Returns `OAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param/
+/// Returns `ROAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param/
 /// group ID) on failure.
 ///
 /// # Arguments
@@ -639,7 +639,7 @@ pub unsafe extern "C" fn roar_set_loudness(
             Err(e) => return e.into(),
         };
         match wrapper.renderer.set_loudness(group_id, loudness, target_loudness) {
-            Ok(()) => OAR_STATUS_OK,
+            Ok(()) => ROAR_STATUS_OK,
             Err(e) => e.into(),
         }
     })
@@ -648,7 +648,7 @@ pub unsafe extern "C" fn roar_set_loudness(
 
 /// Enables/disables the dynamics limiter.
 ///
-/// Returns `OAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param)
+/// Returns `ROAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param)
 /// on failure.
 ///
 /// # Safety
@@ -665,7 +665,7 @@ pub unsafe extern "C" fn roar_enable_limiter(oar: *mut oar_t, enable: c_int) -> 
         let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
         let enable_bool = enable != 0;
         match wrapper.renderer.enable_limiter(enable_bool) {
-            Ok(()) => OAR_STATUS_OK,
+            Ok(()) => ROAR_STATUS_OK,
             Err(e) => e.into(),
         }
     })
@@ -677,7 +677,7 @@ pub unsafe extern "C" fn roar_enable_limiter(oar: *mut oar_t, enable: c_int) -> 
 /// On return, `output.samples_per_channel` is set to the number of flushed samples (`0` if the
 /// limiter is disabled or has zero delay).
 ///
-/// Returns `OAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param)
+/// Returns `ROAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param)
 /// on failure.
 ///
 /// # Arguments
@@ -723,7 +723,7 @@ pub unsafe extern "C" fn roar_flush(oar: *mut oar_t, output: *mut oar_audio_bloc
         let delay = wrapper.renderer.limiter_delay();
         if !wrapper.renderer.is_limiter_enabled() || delay == 0 {
             output_block.samples_per_channel = 0;
-            return OAR_STATUS_OK;
+            return ROAR_STATUS_OK;
         }
 
         let delay_samples = match Samples::new(delay as u32) {
@@ -747,7 +747,7 @@ pub unsafe extern "C" fn roar_flush(oar: *mut oar_t, output: *mut oar_audio_bloc
         match wrapper.renderer.flush(&mut out_buf) {
             Ok(flushed) => {
                 output_block.samples_per_channel = flushed as u32;
-                OAR_STATUS_OK
+                ROAR_STATUS_OK
             }
             Err(e) => {
                 output_block.samples_per_channel = 0;
@@ -763,7 +763,7 @@ pub unsafe extern "C" fn roar_flush(oar: *mut oar_t, output: *mut oar_audio_bloc
 /// Values outside `[-60.0, 0.0]` dBFS are clamped to that range. Can be called before or after
 /// `roar_enable_limiter`, and between `roar_render` calls without resetting delay buffers.
 ///
-/// Returns `OAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param)
+/// Returns `ROAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param)
 /// on failure.
 ///
 /// # Arguments
@@ -789,7 +789,7 @@ pub unsafe extern "C" fn roar_set_limiter_threshold(oar: *mut oar_t, threshold_d
             Err(e) => return e.into(),
         };
         match wrapper.renderer.set_limiter_threshold(threshold) {
-            Ok(()) => OAR_STATUS_OK,
+            Ok(()) => ROAR_STATUS_OK,
             Err(e) => e.into(),
         }
     })
@@ -819,7 +819,7 @@ pub unsafe extern "C" fn roar_get_limiter_delay(oar: *const oar_t) -> c_int {
 
 /// Enables/disables listener head tracking.
 ///
-/// Returns `OAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param,
+/// Returns `ROAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param,
 /// `-95` if layout not Binaural) on failure.
 ///
 /// # Safety
@@ -836,7 +836,7 @@ pub unsafe extern "C" fn roar_enable_head_tracking(oar: *mut oar_t, enable: c_in
         let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
         let enable_bool = enable != 0;
         match wrapper.renderer.enable_head_tracking(enable_bool) {
-            Ok(()) => OAR_STATUS_OK,
+            Ok(()) => ROAR_STATUS_OK,
             Err(e) => e.into(),
         }
     })

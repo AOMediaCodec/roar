@@ -14,9 +14,8 @@
 
 use std::fmt;
 
-// TODO(b/512062316): Rename to ROAR_STATUS_OK.
 /// C-compatible status code indicating successful operations (`EOarStatus::ck_oar_ok`).
-pub const OAR_STATUS_OK: std::os::raw::c_int = 0;
+pub const ROAR_STATUS_OK: std::os::raw::c_int = 0;
 
 /// Maximum number of samples per channel supported by the renderer.
 pub const MAX_SAMPLES_PER_CHANNEL: u32 = 16384;
@@ -127,7 +126,7 @@ mod test {
 
     #[gtest]
     fn test_oar_error_discriminants() {
-        expect_that!(OAR_STATUS_OK, eq(0));
+        expect_that!(ROAR_STATUS_OK, eq(0));
         expect_that!(OarError::NoMem as i32, eq(-12));
         expect_that!(OarError::Busy as i32, eq(-16));
         expect_that!(OarError::InvalidParameter as i32, eq(-22));
