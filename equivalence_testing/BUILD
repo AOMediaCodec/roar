@@ -57,9 +57,6 @@ cc_test(
 cc_test(
     name = "head_tracking_tests",
     srcs = ["head_tracking_tests.cc"],
-    tags = [
-        "notap",  # TODO(b/553439367): Temporarily disabled until catching up on OAR updates.
-    ],
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",

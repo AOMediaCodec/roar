@@ -265,5 +265,66 @@ TEST(ErrorConditionsTest, UpdateMetadataWithInvalidType) {
   EXPECT_LT(c_res, 0);  // Should be NotSupported (-95)
 }
 
+TEST(ErrorConditionsTest,
+     RenderWithoutUpdatingAudioElementDataReturnsInvalidParameter) {
+  oar_config_t config = {};
+  config.target_layout = ck_oar_layout_stereo;
+  config.samples_per_channel = samples_per_channel;
+  config.sampling_rate = sampling_rate;
+
+  OarPtr oar(oar_create(&config), oar_destroy);
+  ASSERT_THAT(oar, NotNull());
+  RoarPtr roar(roar_create(&config), roar_destroy);
+  ASSERT_THAT(roar, NotNull());
+
+  int c_gid = oar_add_audio_group(oar.get());
+  ASSERT_THAT(c_gid, Ge(0));
+  int r_gid = roar_add_audio_group(roar.get());
+  ASSERT_THAT(r_gid, Ge(0));
+
+  oar_audio_element_config_t element_config = {};
+  element_config.type = ck_channel_based;
+  element_config.cbc.layout = ck_oar_layout_stereo;
+
+  uint32_t element_id = 10;
+  ASSERT_EQ(
+      oar_add_audio_element(oar.get(), c_gid, element_id, &element_config), 0);
+  ASSERT_EQ(
+      roar_add_audio_element(roar.get(), r_gid, element_id, &element_config),
+      0);
+
+  auto input_data = GetInputData(samples_per_channel, 2, sampling_rate);
+  oar_audio_block_t input_block = {};
+  input_block.channels = 2;
+  input_block.samples_per_channel = samples_per_channel;
+  input_block.data = input_data.data();
+
+  ASSERT_EQ(oar_update_audio_element_data(oar.get(), element_id, &input_block),
+            0);
+  ASSERT_EQ(
+      roar_update_audio_element_data(roar.get(), element_id, &input_block), 0);
+
+  auto c_output = GetOutputBuffer(samples_per_channel, 2);
+  oar_audio_block_t c_output_block = {};
+  c_output_block.channels = 2;
+  c_output_block.samples_per_channel = samples_per_channel;
+  c_output_block.data = c_output.data();
+
+  auto r_output = GetOutputBuffer(samples_per_channel, 2);
+  oar_audio_block_t r_output_block = {};
+  r_output_block.channels = 2;
+  r_output_block.samples_per_channel = samples_per_channel;
+  r_output_block.data = r_output.data();
+
+  ASSERT_EQ(oar_render(oar.get(), &c_output_block), 0);
+  ASSERT_EQ(roar_render(roar.get(), &r_output_block), 0);
+
+  int c_second_res = oar_render(oar.get(), &c_output_block);
+  int r_second_res = roar_render(roar.get(), &r_output_block);
+
+  EXPECT_EQ(c_second_res, r_second_res);
+  EXPECT_EQ(c_second_res, -22);
+}
+
 }  // namespace
 }  // namespace roar_equivalence_testing

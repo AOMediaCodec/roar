@@ -564,7 +564,12 @@ pub unsafe extern "C" fn roar_render(oar: *mut oar_t, output: *mut oar_audio_blo
             Err(e) => return e.into(),
         };
 
-        match wrapper.renderer.render(&input_refs, &mut out_buf) {
+        let render_result = wrapper.renderer.render(&input_refs, &mut out_buf);
+        drop(input_refs);
+        drop(element_slices);
+        wrapper.inputs.clear();
+
+        match render_result {
             Ok(()) => ROAR_STATUS_OK,
             Err(e) => e.into(),
         }

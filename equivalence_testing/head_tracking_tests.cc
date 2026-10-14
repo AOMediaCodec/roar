@@ -116,7 +116,7 @@ void RunTest(const oar_config_t& config, const ElementWithMetadata& element,
         << error_message;
   }
 
-  // Feed input audio the audio element.
+  // Prepare input audio for the audio element.
   const uint32_t input_channels =
       oar_get_number_of_audio_element_channels(oar.get(), element_id);
   auto input_data =
@@ -125,13 +125,6 @@ void RunTest(const oar_config_t& config, const ElementWithMetadata& element,
   input_block.channels = input_channels;
   input_block.samples_per_channel = c_samples_per_channel;
   input_block.data = input_data.data();
-
-  ASSERT_EQ(oar_update_audio_element_data(oar.get(), element_id, &input_block),
-            0)
-      << error_message;
-  ASSERT_EQ(
-      roar_update_audio_element_data(roar.get(), element_id, &input_block), 0)
-      << error_message;
 
   // Get output buffers ready
   const uint32_t c_output_channels =
@@ -160,6 +153,14 @@ void RunTest(const oar_config_t& config, const ElementWithMetadata& element,
 
   for (size_t step = 0; step < head_metadata_list.size(); ++step) {
     const auto& head_metadata = head_metadata_list[step];
+
+    // Feed input audio before each render call
+    ASSERT_EQ(
+        oar_update_audio_element_data(oar.get(), element_id, &input_block), 0)
+        << error_message << " at step " << step;
+    ASSERT_EQ(
+        roar_update_audio_element_data(roar.get(), element_id, &input_block), 0)
+        << error_message << " at step " << step;
 
     // Update head position before render
     ASSERT_EQ(oar_update_metadata(oar.get(), c_group_id, &head_metadata), 0)
