@@ -17,7 +17,7 @@ bazel_dep(name = "rules_rs", version = "0.0.26")
 # Specify the Rust toolchain to use.  Bazel does not use the Cargo.toml to determine the toolchain.
 rust.toolchain(
     edition = "2024",
-    versions = ["1.97.1"],
+    versions = ["1.92.0"],
 )
 
 # Use Cargo.toml for Rust dependencies.
