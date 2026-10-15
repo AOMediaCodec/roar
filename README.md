@@ -10,7 +10,8 @@ loudspeaker or binaural output.
 
 ### Prerequisites
 
--  Install [bazelisk](https://bazel.build/install/bazelisk) to run and manage bazel.
+-   Install [bazelisk](https://bazel.build/install/bazelisk) to run and manage
+    bazel.
 
 ### Build
 
@@ -202,14 +203,16 @@ Object-based  | `num_objects`: 1 or 2
 
 **Available Parameters**
 
-Parameter                                       | Values
-:---------------------------------------------- | :-----
-*Downmix Info (only channel-based elements)*    |
-mode                                            | Values from the [IAMF spec]
-weight_index                                    | Index into the [mapping table]
-*Rendering Config (only for binaural elements)* |
-headphones_rendering_mode                       | stereo, world-locked, or head-locked
-binaural_filter_profile                         | ambient, direct, or reverberant
+| Parameter                            | Values                               |
+| :----------------------------------- | :----------------------------------- |
+| *Downmix Info (only channel-based    |                                      |
+: elements)*                           :                                      :
+| mode                                 | Values from the [IAMF spec]          |
+| weight_index                         | Index into the [mapping table]       |
+| *Rendering Config (only for binaural |                                      |
+: elements)*                           :                                      :
+| headphones_rendering_mode            | stereo, world-locked, or head-locked |
+| binaural_filter_profile              | ambient, direct, or reverberant      |
 
 [IAMF spec]: https://aomediacodec.github.io/iamf/#dmixp_mode
 [mapping table]: https://aomediacodec.github.io/iamf/#widx-k
@@ -843,8 +846,8 @@ while rendering {
 
 ### Differences from [OAR](https://github.com/AOMediaCodec/oar)
 
-- OAR does not allow calling `set_metadata_unit_to_process` for binaural
-  output but ROAR does allow it.
+-   OAR does not allow calling `set_metadata_unit_to_process` for binaural
+    output but ROAR does allow it.
 
 ### Library architecture
 
@@ -923,12 +926,22 @@ graph TD
 
 #### Summary table
 
-Name                                | Directory               | Used for input types                     | Used for output types
-:---------------------------------- | :---------------------- | :--------------------------------------- | :--------------------
-**EAR**                             | `src/renderer/ear/`     | Channel-based, Scene-based               | Loudspeaker (including world-locked restricted)
-**Open Binaural Renderer (OBR)**    | `src/renderer/obr/`     | Channel-based, Scene-based, Object-based | Binaural
-**Open Loudspeaker Renderer (OLR)** | `src/renderer/olr/`     | Object-based                             | Loudspeaker
-**Downmix**                         | `src/renderer/downmix/` | Channel-based                            | Loudspeaker
+| Name        | Directory               | Used for input | Used for output |
+:             :                         : types          : types           :
+| :---------- | :---------------------- | :------------- | :-------------- |
+| **EAR**     | `src/renderer/ear/`     | Channel-based, | Loudspeaker     |
+:             :                         : Scene-based    : (including      :
+:             :                         :                : world-locked    :
+:             :                         :                : restricted)     :
+| **Open      | `src/renderer/obr/`     | Channel-based, | Binaural        |
+: Binaural    :                         : Scene-based,   :                 :
+: Renderer    :                         : Object-based   :                 :
+: (OBR)**     :                         :                :                 :
+| **Open      | `src/renderer/olr/`     | Object-based   | Loudspeaker     |
+: Loudspeaker :                         :                :                 :
+: Renderer    :                         :                :                 :
+: (OLR)**     :                         :                :                 :
+| **Downmix** | `src/renderer/downmix/` | Channel-based  | Loudspeaker     |
 
 ##### Selection logic and downmix parameter behavior
 
