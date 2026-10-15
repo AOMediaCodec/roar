@@ -23,7 +23,7 @@ use crate::common::definitions::{
 };
 use crate::renderer::audio_renderer_api::AudioRenderer;
 use crate::renderer::ear::ambisonic_to_channel_renderer::{
-    element_renderer_get_h2m_matrix, element_renderer_render_h2m, H2mRdr, HoaWithLfeFlag,
+    element_renderer_get_h2m_matrix, element_renderer_render_h2m, H2mRdr,
 };
 use crate::renderer::ear::channel_to_channel_renderer::{
     element_renderer_get_m2m_custom_matrix, element_renderer_get_m2m_matrix,
@@ -154,7 +154,6 @@ impl AudioRenderer for EarRenderer {
                 Err(OarError::NotSupported)
             }
             AudioElementConfig::SceneBased(sb) => {
-                let hin = HoaWithLfeFlag { order: sb.order, lfe_on: false };
                 let mut h2m = H2mRdr {
                     in_order: HighOrderAmbisonics::Zoa,
                     out_system: Layout::Mono,
@@ -165,7 +164,7 @@ impl AudioRenderer for EarRenderer {
                     m: 0,
                     n: 0,
                 };
-                if element_renderer_get_h2m_matrix(&hin, &out_pre, &mut h2m).is_ok() {
+                if element_renderer_get_h2m_matrix(sb.order, &out_pre, &mut h2m).is_ok() {
                     self.active_mode = Some(EarRenderingMode::Scene(h2m));
                     Ok(())
                 } else {

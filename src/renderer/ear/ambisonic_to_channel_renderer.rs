@@ -23,15 +23,6 @@ use crate::common::definitions::{
 use crate::renderer::ear::channel_to_channel_renderer::IamfPredefinedSpLayout;
 use crate::renderer::ear::matrix_renderer::{matrix_render, MatrixView};
 
-/// High Order Ambisonics input configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct HoaWithLfeFlag {
-    /// Order of the input ambisonic sound field.
-    pub order: HighOrderAmbisonics,
-    /// Flag indicating whether physical LFE channels should be active (true) or zeroed (false).
-    pub lfe_on: bool,
-}
-
 /// Matrix entry table structure associating input HOA order with target loudspeaker layout
 /// (`h2m_rdr_t`).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1366,22 +1357,22 @@ pub static H2M_RDR_TAB: [H2mRdr; 80] = [
     H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::Layout7154, channels: 17, lfe1: 3, lfe2: -1, mat: &H4A_IAMF7154, m: 25, n: 16 },
 ];
 
-/// Retrieves the HOA-to-multichannel conversion matrix for given input HOA layout and output
+/// Retrieves the HOA-to-multichannel conversion matrix for a given input HOA order and output
 /// speaker layout.
 ///
 /// Port of `IAMF_element_renderer_get_H2M_matrix`.
 ///
 /// # Parameters
-/// * `in_layout`: HOA input layout configuration.
+/// * `in_order`: Order of the input ambisonic sound field.
 /// * `out_layout`: Predefined output layout configuration.
 /// * `out_matrix`: Target `H2mRdr` structure to populate on match.
 pub fn element_renderer_get_h2m_matrix(
-    in_layout: &HoaWithLfeFlag,
+    in_order: HighOrderAmbisonics,
     out_layout: &IamfPredefinedSpLayout,
     out_matrix: &mut H2mRdr,
 ) -> Result<(), OarError> {
     for entry in H2M_RDR_TAB.iter() {
-        if entry.in_order == in_layout.order && entry.out_system == out_layout.system {
+        if entry.in_order == in_order && entry.out_system == out_layout.system {
             *out_matrix = *entry;
             return Ok(());
         }
@@ -1496,7 +1487,6 @@ mod tests {
 
     #[gtest]
     fn get_h2m_matrix_valid_hoa_order_and_layout_populates_matching_matrix() {
-        let in_layout = HoaWithLfeFlag { order: HighOrderAmbisonics::Zoa, lfe_on: false };
         let out_layout = IamfPredefinedSpLayout { system: Layout::Stereo, lfe1: 0, lfe2: 0 };
         let mut out_matrix = H2mRdr {
             in_order: HighOrderAmbisonics::Zoa,
@@ -1509,7 +1499,8 @@ mod tests {
             n: 0,
         };
 
-        let result = element_renderer_get_h2m_matrix(&in_layout, &out_layout, &mut out_matrix);
+        let result =
+            element_renderer_get_h2m_matrix(HighOrderAmbisonics::Zoa, &out_layout, &mut out_matrix);
 
         assert_ok!(result);
         expect_that!(out_matrix.in_order, eq(HighOrderAmbisonics::Zoa));
@@ -1523,7 +1514,6 @@ mod tests {
 
     #[gtest]
     fn get_h2m_matrix_unsupported_combination_returns_error() {
-        let in_layout = HoaWithLfeFlag { order: HighOrderAmbisonics::Order2, lfe_on: false };
         let out_layout = IamfPredefinedSpLayout { system: Layout::StereoS, lfe1: 0, lfe2: 0 };
         let mut out_matrix = H2mRdr {
             in_order: HighOrderAmbisonics::Zoa,
@@ -1536,7 +1526,11 @@ mod tests {
             n: 0,
         };
 
-        let result = element_renderer_get_h2m_matrix(&in_layout, &out_layout, &mut out_matrix);
+        let result = element_renderer_get_h2m_matrix(
+            HighOrderAmbisonics::Order2,
+            &out_layout,
+            &mut out_matrix,
+        );
 
         expect_that!(result, err(eq(OarError::NotSupported)));
     }
@@ -1618,7 +1612,6 @@ mod tests {
 
     #[gtest]
     fn get_h2m_matrix_high_channel_count_populates_matching_matrix() {
-        let in_layout = HoaWithLfeFlag { order: HighOrderAmbisonics::Order4, lfe_on: false };
         let out_layout = IamfPredefinedSpLayout { system: Layout::LayoutA293, lfe1: 0, lfe2: 0 };
         let mut out_matrix = H2mRdr {
             in_order: HighOrderAmbisonics::Zoa,
@@ -1631,7 +1624,11 @@ mod tests {
             n: 0,
         };
 
-        let result = element_renderer_get_h2m_matrix(&in_layout, &out_layout, &mut out_matrix);
+        let result = element_renderer_get_h2m_matrix(
+            HighOrderAmbisonics::Order4,
+            &out_layout,
+            &mut out_matrix,
+        );
 
         assert_ok!(result);
         expect_that!(out_matrix.in_order, eq(HighOrderAmbisonics::Order4));

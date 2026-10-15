@@ -848,6 +848,9 @@ while rendering {
 
 -   OAR does not allow calling `set_metadata_unit_to_process` for binaural
     output but ROAR does allow it.
+-   OAR offers a CMake flag, `OAR_ENABLE_HOA_LFE=ON`, that filters the
+    omnidirectional ambisonic channel and outputs it as LFE. ROAR does not have
+    an option to render HOA to LFE.
 
 ### Library architecture
 
