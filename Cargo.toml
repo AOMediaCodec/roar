@@ -11,19 +11,10 @@ rust-version = "1.97.1"
 categories = ["multimedia::audio"]
 keywords = [
   "Alliance for Open Media",
-  "ambisonic audio",
-  "ambisonics",
-  "AOM",
   "audio renderer",
-  "audio rendering",
-  "audio",
   "binaural",
-  "channel-based audio",
   "IAMF",
-  "Immersive Audio Model and Formats",
   "immersive audio",
-  "scene-based audio",
-  "spatial audio",
 ]
 
 [dependencies]
