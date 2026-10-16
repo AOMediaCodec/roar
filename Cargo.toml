@@ -10,7 +10,7 @@ edition = "2024"
 rust-version = "1.92.0"
 categories = ["multimedia::audio"]
 keywords = [
-  "Alliance for Open Media",
+  "AOMedia",
   "audio renderer",
   "binaural",
   "IAMF",
