@@ -18,9 +18,9 @@ mod test {
 
     use googletest::prelude::*;
 
-    use roar::c_types::{oar_audio_block_t, oar_layout_t, oar_metadata_t, oar_metadata_type_t};
-    use roar::ffi::*;
-    use roar::OarError;
+    use aom_roar::c_types::{oar_audio_block_t, oar_layout_t, oar_metadata_t, oar_metadata_type_t};
+    use aom_roar::ffi::*;
+    use aom_roar::OarError;
     use test_helpers::{create_channel_based_config, TestRoar};
 
     #[gtest]

@@ -16,7 +16,7 @@ loudspeaker or binaural output.
 ### Build
 
 ```shell
-bazelisk build src:roar
+bazelisk build src:aom_roar
 ```
 
 ### Run tests
@@ -494,16 +494,16 @@ roar_destroy(oar);
 Rust
 
 ```rust
-use roar::common::definitions::{
-    Config, Layout, AudioElementConfig, ChannelBasedConfig, OarError, Samples,
-    PlanarBufferRef, PlanarBufferMut, SampleRate
+use aom_roar::{
+    AudioElementConfig, ChannelBasedConfig, Config, Layout, OarError, PlanarBufferMut,
+    PlanarBufferRef, RoarRenderer, SampleRate, Samples,
 };
-use roar::renderer::RoarRenderer;
 
 fn render_audio() -> Result<(), OarError> {
+    let samples = Samples::new(1024)?;
     let config = Config::new(
         Layout::Layout51,
-        Samples::new(1024)?,
+        samples,
         SampleRate::new(48000)?,
     )?;
 
@@ -522,29 +522,22 @@ fn render_audio() -> Result<(), OarError> {
     let element_id = 42;
     rdr.add_element(group_id, element_id, &element_cfg)?;
 
-    // Transition to rendering state (optional, render() will call it automatically)
-    rdr.init_rendering()?;
-
     // Fill input data (planar format: slice of channel slices)
     let input_ch0 = vec![0.0f32; 1024];
     let input_ch1 = vec![0.0f32; 1024];
-    let input_slices = [&input_ch0[..], &input_ch1[..]];
+    let input_slices = [input_ch0.as_slice(), input_ch1.as_slice()];
     let inputs = [
-        (element_id, PlanarBufferRef::Slices(&input_slices[..]))
+        (element_id, PlanarBufferRef::new(&input_slices, 2, samples)?)
     ];
 
     // Prepare output buffer (planar format: 5.1 target has 6 channels)
-    let mut output_data = vec![0.0f32; 6 * 1024];
-    let mut output = PlanarBufferMut::Flat {
-        data: &mut output_data,
-        num_channels: 6,
-        samples_per_channel: 1024,
-    };
+    let mut output_channels: [Vec<f32>; 6] = std::array::from_fn(|_| vec![0.0f32; 1024]);
+    let mut output_slices = output_channels.each_mut().map(|ch| ch.as_mut_slice());
+    let mut output = PlanarBufferMut::new(&mut output_slices, 6, samples)?;
 
     // Render
     // This example only has one render call (and one set of inputs/outputs),
-    // but a real application would repeatedly call
-    // `roar_update_audio_element_data` and `roar_render`.
+    // but a real application would repeatedly call `rdr.render`.
     rdr.render(&inputs, &mut output)?;
     Ok(())
 }
@@ -592,9 +585,10 @@ Rust
 
 ```rust
 // 1. Create config for Stereo loudspeaker output
+let samples = Samples::new(1024)?;
 let config = Config::new(
     Layout::Stereo,
-    Samples::new(1024)?,
+    samples,
     SampleRate::new(48000)?,
 )?;
 let mut rdr = RoarRenderer::create(&config)?;
@@ -610,16 +604,13 @@ rdr.add_element(group_id, element_id, &elem_cfg)?;
 
 // 3. Prepare inputs (4 channels * 1024 samples planar)
 let inputs = [
-    (element_id, PlanarBufferRef::Slices(&input_channels[..]))
+    (element_id, PlanarBufferRef::new(&input_channels, 4, samples)?)
 ];
 
 // Prepare output buffer (planar format: Stereo has 2 channels)
-let mut output_data = vec![0.0f32; 2 * 1024];
-let mut output = PlanarBufferMut::Flat {
-    data: &mut output_data,
-    num_channels: 2,
-    samples_per_channel: 1024,
-};
+let (mut out_l, mut out_r) = (vec![0.0f32; 1024], vec![0.0f32; 1024]);
+let mut out_slices = [out_l.as_mut_slice(), out_r.as_mut_slice()];
+let mut output = PlanarBufferMut::new(&mut out_slices, 2, samples)?;
 
 // 4. Render
 rdr.render(&inputs, &mut output)?;
@@ -686,9 +677,10 @@ Rust
 
 ```rust
 // 1. Create config for 5.1 loudspeaker output
+let samples = Samples::new(1024)?;
 let config = Config::new(
     Layout::Layout51,
-    Samples::new(1024)?,
+    samples,
     SampleRate::new(48000)?,
 )?;
 let mut rdr = RoarRenderer::create(&config)?;
@@ -708,20 +700,17 @@ while rendering {
     // Update object position (panning from left to right)
     let polar = PolarCoordinate::new_from_floats(current_azimuth, 0.0f32, 1.0f32)?;
     let positions = ObjectPosition::Polar(vec![polar]);
-    rdr.update_element_positions(element_id, &positions, Some(Samples(1024)))?;
+    rdr.update_element_positions(element_id, &positions, Some(samples))?;
 
     // Prepare inputs (1 channel * 1024 samples planar)
     let inputs = [
-        (element_id, PlanarBufferRef::Slices(&object_audio[..]))
+        (element_id, PlanarBufferRef::new(&object_audio, 1, samples)?)
     ];
 
     // Prepare output buffer (planar format: 6 channels for 5.1)
-    let mut output_data = vec![0.0f32; 6 * 1024];
-    let mut output = PlanarBufferMut::Flat {
-        data: &mut output_data,
-        num_channels: 6,
-        samples_per_channel: 1024,
-    };
+    let mut output_channels: [Vec<f32>; 6] = std::array::from_fn(|_| vec![0.0f32; 1024]);
+    let mut output_slices = output_channels.each_mut().map(|ch| ch.as_mut_slice());
+    let mut output = PlanarBufferMut::new(&mut output_slices, 6, samples)?;
 
     // Render to 5.1
     rdr.render(&inputs, &mut output)?;
@@ -795,9 +784,10 @@ Rust
 
 ```rust
 // 1. Create OAR config for Binaural output
+let samples = Samples::new(1024)?;
 let config = Config::new(
     Layout::Binaural,
-    Samples::new(1024)?,
+    samples,
     SampleRate::new(48000)?,
 )?;
 let mut rdr = RoarRenderer::create(&config)?;
@@ -826,16 +816,13 @@ while rendering {
 
     // Prepare inputs (10 channels * 1024 samples planar)
     let inputs = [
-        (element_id, PlanarBufferRef::Slices(&input_channels[..]))
+        (element_id, PlanarBufferRef::new(&input_channels, 10, samples)?)
     ];
 
     // Prepare output buffer (planar format: Binaural has 2 channels)
-    let mut output_data = vec![0.0f32; 2 * 1024];
-    let mut output = PlanarBufferMut::Flat {
-        data: &mut output_data,
-        num_channels: 2,
-        samples_per_channel: 1024,
-    };
+    let (mut out_l, mut out_r) = (vec![0.0f32; 1024], vec![0.0f32; 1024]);
+    let mut out_slices = [out_l.as_mut_slice(), out_r.as_mut_slice()];
+    let mut output = PlanarBufferMut::new(&mut out_slices, 2, samples)?;
 
     // Render to Binaural (2 channels)
     rdr.render(&inputs, &mut output)?;

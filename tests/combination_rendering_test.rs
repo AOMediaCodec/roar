@@ -14,18 +14,18 @@
 #[cfg(test)]
 mod test {
 
-    use googletest::prelude::*;
-    use roar::c_types::{
+    use aom_roar::c_types::{
         coordinate_type_t, def_max_number_of_objects, oar_audio_block_t, oar_hoa_t, oar_layout_t,
         oar_metadata_object_positions_t, oar_metadata_object_positions_union_t, oar_metadata_t,
         oar_metadata_type_t, oar_metadata_union_t, oar_param_type_t, polar_t,
     };
-    use roar::ffi::*;
-    use roar::{
+    use aom_roar::ffi::*;
+    use aom_roar::{
         AudioElementConfig, ChannelBasedConfig, ChannelCount, Config, HighOrderAmbisonics, Layout,
         ObjectBasedConfig, ObjectPosition, PolarCoordinate, RoarRenderer, SampleRate, Samples,
         SceneBasedConfig,
     };
+    use googletest::prelude::*;
     use test_helpers::{
         create_channel_based_config, create_object_based_config, create_planar_buffer_mut,
         create_planar_buffer_ref, create_scene_based_config, rms, TestRoar,

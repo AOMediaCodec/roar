@@ -13,8 +13,7 @@
 #[cfg(test)]
 mod test {
 
-    use googletest::prelude::*;
-    use roar::{
+    use aom_roar::{
         c_types::{oar_audio_block_t, oar_layout_t},
         ffi::{
             roar_add_audio_element, roar_add_audio_group, roar_enable_limiter, roar_flush,
@@ -24,6 +23,7 @@ mod test {
         AudioElementConfig, ChannelBasedConfig, Config, Decibels, Layout, OarError, RoarRenderer,
         SampleRate, Samples,
     };
+    use googletest::prelude::*;
     use test_helpers::{
         create_channel_based_config, create_planar_buffer_mut, create_planar_buffer_ref, TestRoar,
     };

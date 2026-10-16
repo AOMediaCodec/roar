@@ -65,7 +65,7 @@ impl EarRenderer {
     /// # Examples
     ///
     /// ```
-    /// use roar::renderer::ear::ear_renderer::EarRenderer;
+    /// use aom_roar::renderer::ear::ear_renderer::EarRenderer;
     ///
     /// let rdr = EarRenderer::new();
     /// assert_eq!(rdr.target_layout, Layout::Stereo);

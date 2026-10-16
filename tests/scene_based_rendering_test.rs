@@ -13,13 +13,13 @@
 #[cfg(test)]
 mod test {
 
-    use googletest::prelude::*;
-    use roar::c_types::{oar_audio_block_t, oar_hoa_t, oar_layout_t};
-    use roar::ffi::*;
-    use roar::{
+    use aom_roar::c_types::{oar_audio_block_t, oar_hoa_t, oar_layout_t};
+    use aom_roar::ffi::*;
+    use aom_roar::{
         AudioElementConfig, Config, HighOrderAmbisonics, Layout, RoarRenderer, SampleRate, Samples,
         SceneBasedConfig,
     };
+    use googletest::prelude::*;
     use test_helpers::{
         create_flat_sine_input, create_planar_buffer_mut, create_planar_buffer_ref,
         create_scene_based_config, create_sine_input_channels, rms, TestRoar,

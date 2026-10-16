@@ -3,7 +3,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_static_library", "rust_test")
 
 rust_static_library(
-    name = "roar",
+    name = "aom_roar",
     srcs = [
         "c_types.rs",
         "common/animation.rs",

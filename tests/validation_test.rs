@@ -13,16 +13,16 @@
 #[cfg(test)]
 mod test {
 
-    use googletest::prelude::*;
-    use roar::c_types::{
+    use aom_roar::c_types::{
         audio_element_type_t, oar_audio_element_config_t, oar_config_t, oar_layout_t,
     };
-    use roar::ffi::*;
-    use roar::OarError;
-    use roar::{
+    use aom_roar::ffi::*;
+    use aom_roar::OarError;
+    use aom_roar::{
         AudioElementConfig, ChannelBasedConfig, Config, GroupId, Layout, RoarRenderer, SampleRate,
         Samples,
     };
+    use googletest::prelude::*;
 
     // ===== FFI C API Validation Tests =====
 

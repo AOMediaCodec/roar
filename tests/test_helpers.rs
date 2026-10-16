@@ -10,7 +10,7 @@
 
 //! Helpers for ROAR integration tests.
 
-use roar::c_types::{
+use aom_roar::c_types::{
     audio_element_rendering_config_t, audio_element_type_t, coordinate_type_t,
     def_max_number_of_objects, downmix_info_t, oar_audio_element_config_t,
     oar_audio_element_config_union_t, oar_binaural_filter_profile_t, oar_channel_based_config_t,
@@ -19,8 +19,8 @@ use roar::c_types::{
     oar_metadata_type_t, oar_metadata_union_t, oar_object_based_config_t, oar_param_type_t,
     oar_scene_based_config_t, oar_t, parameter_set_t, polar_t,
 };
-use roar::ffi::{roar_create, roar_destroy};
-use roar::{ObjectPosition, PlanarBufferMut, PlanarBufferRef, PolarCoordinate, Samples};
+use aom_roar::ffi::{roar_create, roar_destroy};
+use aom_roar::{ObjectPosition, PlanarBufferMut, PlanarBufferRef, PolarCoordinate, Samples};
 
 /// Convenience wrapper for creating and destroying the C API test renderer.
 pub struct TestRoar {

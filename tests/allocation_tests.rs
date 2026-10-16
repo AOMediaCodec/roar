@@ -21,7 +21,7 @@ mod test {
     use std::cell::Cell;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use roar::{
+    use aom_roar::{
         AudioElementConfig, ChannelBasedConfig, ChannelCount, Config, Decibels, Gain,
         HighOrderAmbisonics, Layout, ObjectBasedConfig, ObjectPosition, PolarCoordinate,
         Quaternion, RoarRenderer, SampleRate, Samples, SceneBasedConfig,

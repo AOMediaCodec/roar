@@ -57,10 +57,13 @@ pub(crate) struct ActiveRenderer {
 /// # Examples
 ///
 /// ```
-/// use roar::common::definitions::{Config, Layout, AudioElementConfig, ChannelBasedConfig};
-/// use roar::renderer::RoarRenderer;
+/// use aom_roar::{
+///     AudioElementConfig, ChannelBasedConfig, Config, Layout, PlanarBufferMut, PlanarBufferRef,
+///     RoarRenderer, SampleRate, Samples,
+/// };
 ///
-/// let config = Config::new(Layout::Stereo, Samples::new(256)?, SampleRate::new(48000)?)?;
+/// let samples = Samples::new(256).unwrap();
+/// let config = Config::new(Layout::Stereo, samples, SampleRate::new(48000).unwrap()).unwrap();
 ///
 /// let mut rdr = RoarRenderer::create(&config).unwrap();
 /// let group_id = rdr.add_audio_group().unwrap();
@@ -68,12 +71,17 @@ pub(crate) struct ActiveRenderer {
 /// let element_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
 ///     layout: Layout::Stereo,
 ///     downmix_info: None,
+///     rendering_config: None,
 /// });
 /// rdr.add_element(group_id, 42, &element_cfg).unwrap();
 ///
-/// let chans = [vec![0.0f32; 256], vec![0.0f32; 256]];
-/// let inputs = [(42, &[&chans[0][..], &chans[1][..]][..])];
-/// let mut output = vec![0.0f32; 512];
+/// let in_chans = [vec![0.0f32; 256], vec![0.0f32; 256]];
+/// let in_slices = [in_chans[0].as_slice(), in_chans[1].as_slice()];
+/// let inputs = [(42, PlanarBufferRef::new(&in_slices, 2, samples).unwrap())];
+///
+/// let (mut out_l, mut out_r) = (vec![0.0f32; 256], vec![0.0f32; 256]);
+/// let mut out_slices = [out_l.as_mut_slice(), out_r.as_mut_slice()];
+/// let mut output = PlanarBufferMut::new(&mut out_slices, 2, samples).unwrap();
 /// rdr.render(&inputs, &mut output).unwrap();
 /// ```
 pub struct RoarRenderer {

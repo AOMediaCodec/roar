@@ -107,7 +107,7 @@ cc_library(
     visibility = ["@aom-roar//equivalence_testing:__subpackages__"],
     deps = [
         "@abseil-cpp//absl/strings:str_format",
-        "@aom-roar//src:roar",  # buildcleaner: keep
+        "@aom-roar//src:aom_roar",  # buildcleaner: keep
         "@oar",
     ],
 )

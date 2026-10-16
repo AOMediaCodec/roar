@@ -146,7 +146,7 @@ impl oar_audio_element_config_t {
                 let layout = Layout::try_from(cbc.layout)?;
                 match layout {
                     Layout::SoundSystemE451 | Layout::SoundSystemF370 | Layout::SoundSystemG490 => {
-                        return Err(OarError::InvalidParameter)
+                        return Err(OarError::InvalidParameter);
                     }
                     _ => {}
                 }
