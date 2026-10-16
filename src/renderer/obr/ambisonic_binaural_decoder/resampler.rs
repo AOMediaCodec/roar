@@ -111,7 +111,6 @@ impl Resampler {
                     state_index += 1;
                     filter_index += 1;
                 }
-                offset_input_index = (offset_input_index as isize + offset) as usize;
             }
 
             while offset_input_index <= input_sample {
@@ -268,8 +267,12 @@ impl Resampler {
         self.temporary_filter_coeffs.clear();
         self.generate_sinc_filter(cutoff_frequency, sample_rate as f32, filter_length);
 
-        let transposed_length = filter_length + max_rate - (filter_length % max_rate);
-        self.coeffs_per_phase = transposed_length / max_rate;
+        // Pad out the filter length so that it can be arranged in polyphase fashion.
+        // The polyphase decomposition has `self.up_rate` branches, so the per-branch
+        // length must be derived from `self.up_rate`. Deriving it from `max_rate`
+        // would drop the tail of the filter whenever `down_rate > up_rate`.
+        let transposed_length = filter_length + self.up_rate - (filter_length % self.up_rate);
+        self.coeffs_per_phase = transposed_length / self.up_rate;
         self.arrange_filter_as_polyphase(filter_length);
     }
 
@@ -327,6 +330,7 @@ mod test {
 
     use super::*;
     use googletest::prelude::*;
+    use rstest::rstest;
 
     #[gtest]
     fn test_resampler_identity_passthrough() {
@@ -378,6 +382,150 @@ mod test {
         for i in mid_start..mid_end {
             expect_that!(output[0][i], near(1.0, 0.02)); // 2% tolerance for boundary leakage /
                                                          // ripple
+        }
+    }
+
+    const TONE_FREQUENCY_HZ: f32 = 1000.0;
+
+    /// Helper to generate a sine wave with the given frequency, sample rate, and number of samples.
+    fn generate_sine_wave(frequency_hz: f32, sample_rate: i32, num_samples: usize) -> AudioBuffer {
+        let mut buffer = AudioBuffer::new(NUM_MONO_CHANNELS, num_samples);
+        let mut ch = buffer.channel_mut(0);
+        for (i, sample) in ch.as_mut_slice().iter_mut().enumerate() {
+            let phase = (i as f32) * std::f32::consts::TAU / (sample_rate as f32) * frequency_hz;
+            *sample = phase.sin();
+        }
+        buffer
+    }
+
+    /// Computes the sine wave amplitude from the RMS of the middle half of the buffer,
+    /// skipping filter warm-up and tail transients.
+    fn middle_half_sine_amplitude(buffer: &AudioBuffer) -> f64 {
+        let begin = buffer.num_frames() / 4;
+        let end = 3 * buffer.num_frames() / 4;
+        let sum_squares: f64 =
+            buffer.channel(0).as_slice()[begin..end].iter().map(|&s| (s as f64) * (s as f64)).sum();
+        (2.0 * sum_squares / (end - begin) as f64).sqrt()
+    }
+
+    // Verifies that changing the sample rate does not change the volume of an audible (1 kHz)
+    // tone: a sine wave with amplitude 1.0 in should still have amplitude ~1.0 out.
+    #[rstest]
+    #[case(44100, 48000)]
+    #[case(48000, 44100)]
+    #[case(88200, 48000)]
+    #[case(96000, 48000)]
+    #[case(176400, 48000)]
+    #[case(192000, 48000)]
+    #[case(48000, 96000)]
+    #[case(48000, 32000)]
+    #[googletest::test]
+    fn passband_gain_is_unity_across_rate_pairs(
+        #[case] source_rate: i32,
+        #[case] destination_rate: i32,
+    ) {
+        assert!(Resampler::are_sample_rates_supported(source_rate, destination_rate));
+        let input_length = (source_rate / 10) as usize;
+        let input = generate_sine_wave(TONE_FREQUENCY_HZ, source_rate, input_length);
+        let mut resampler = Resampler::new();
+        resampler.set_rate_and_num_channels(source_rate, destination_rate, NUM_MONO_CHANNELS);
+        let mut output =
+            AudioBuffer::new(NUM_MONO_CHANNELS, resampler.get_next_output_length(input_length));
+
+        resampler.process(&input, &mut output);
+
+        // +-0.012 is roughly +-0.1 dB.
+        let amplitude = middle_half_sine_amplitude(&output);
+        expect_that!(amplitude, near(1.0, 0.012));
+    }
+
+    // Verifies that when converting to a lower sample rate, frequencies too high for the target
+    // rate to represent (above half the target sample rate, the "Nyquist" limit) are filtered out
+    // to near-silence rather than folding back ("aliasing") into the output as audible artifacts.
+    // Each test tone sits at 1.5x the destination Nyquist frequency.
+    #[rstest]
+    #[case(96000, 48000, 36000.0)]
+    #[case(192000, 48000, 72000.0)]
+    #[case(88200, 44100, 33000.0)]
+    #[case(88200, 48000, 36000.0)]
+    #[googletest::test]
+    fn downsampling_attenuates_above_destination_nyquist(
+        #[case] source_rate: i32,
+        #[case] destination_rate: i32,
+        #[case] tone_frequency_hz: f32,
+    ) {
+        let input_length = (source_rate / 10) as usize;
+        let input = generate_sine_wave(tone_frequency_hz, source_rate, input_length);
+        let mut resampler = Resampler::new();
+        resampler.set_rate_and_num_channels(source_rate, destination_rate, NUM_MONO_CHANNELS);
+        let mut output =
+            AudioBuffer::new(NUM_MONO_CHANNELS, resampler.get_next_output_length(input_length));
+
+        resampler.process(&input, &mut output);
+
+        // 0.02 is roughly -34 dB.
+        let amplitude = middle_half_sine_amplitude(&output);
+        expect_that!(amplitude, lt(0.02));
+    }
+
+    // Verifies that feeding audio to the resampler in small streaming chunks produces the exact
+    // same output samples as resampling the entire buffer in a single call, confirming that the
+    // resampler's internal history buffer (`self.state`, active length `coeffs_per_phase - 1`)
+    // preserves continuity across chunk boundaries.
+    #[rstest]
+    // 2:1 downsampling (active state = 26 samples): chunk (16) is shorter than the filter state,
+    // exercising the state-buffer shift-and-append path in `process`.
+    #[case(96000, 48000, 16)]
+    // 1:2 upsampling (active state = 13 samples): chunk (8) is shorter than the filter state.
+    #[case(48000, 96000, 8)]
+    // 4:1 downsampling (active state = 52 samples): chunk (160) is longer than the filter state,
+    // exercising the full state-buffer overwrite path in `process`.
+    #[case(192000, 48000, 160)]
+    // Non-integer 160:147 upsampling (active state = 13 samples): chunk (63) > state.
+    #[case(44100, 48000, 63)]
+    // Non-integer 147:160 downsampling (active state = 14 samples): chunk (441) > state.
+    #[case(48000, 44100, 441)]
+    // 1:2 upsampling (active state = 13 samples): chunk (100) is longer than the filter state.
+    #[case(48000, 96000, 100)]
+    #[googletest::test]
+    fn chunked_processing_matches_one_shot(
+        #[case] source_rate: i32,
+        #[case] destination_rate: i32,
+        #[case] chunk_size: usize,
+    ) {
+        let input_length = 4410;
+        let input = generate_sine_wave(TONE_FREQUENCY_HZ, source_rate, input_length);
+        let mut one_shot = Resampler::new();
+        one_shot.set_rate_and_num_channels(source_rate, destination_rate, NUM_MONO_CHANNELS);
+        let mut one_shot_output =
+            AudioBuffer::new(NUM_MONO_CHANNELS, one_shot.get_next_output_length(input_length));
+        let mut chunked = Resampler::new();
+        chunked.set_rate_and_num_channels(source_rate, destination_rate, NUM_MONO_CHANNELS);
+        let mut chunked_output = Vec::new();
+
+        // Resample the entire input in a single pass as the reference output.
+        one_shot.process(&input, &mut one_shot_output);
+        // Resample the same input incrementally in `chunk_size` blocks, concatenating each block's
+        // output into `chunked_output`.
+        let mut offset = 0;
+        while offset < input_length {
+            let this_chunk = chunk_size.min(input_length - offset);
+            let mut chunk = AudioBuffer::new(NUM_MONO_CHANNELS, this_chunk);
+            chunk
+                .channel_mut(0)
+                .as_mut_slice()
+                .copy_from_slice(&input.channel(0).as_slice()[offset..offset + this_chunk]);
+            let mut chunk_output =
+                AudioBuffer::new(NUM_MONO_CHANNELS, chunked.get_next_output_length(this_chunk));
+            chunked.process(&chunk, &mut chunk_output);
+            chunked_output.extend_from_slice(chunk_output.channel(0).as_slice());
+            offset += this_chunk;
+        }
+
+        // The concatenated chunked output must match the one-shot output sample-for-sample.
+        assert_eq!(one_shot_output.num_frames(), chunked_output.len());
+        for (i, &actual) in chunked_output.iter().enumerate() {
+            expect_that!(actual, near(one_shot_output[0][i], EPSILON_FLOAT));
         }
     }
 }

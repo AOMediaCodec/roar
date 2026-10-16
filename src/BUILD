@@ -223,6 +223,7 @@ rust_test(
     deps = [
         "@crates//:googletest",
         "@crates//:realfft",
+        "@crates//:rstest",
         "@crates//:rustfft",
     ],
 )

@@ -32,14 +32,12 @@ extern "C" {
 namespace roar_equivalence_testing {
 namespace {
 
-using ::std::vector;
 using ::testing::FloatNear;
 using ::testing::NotNull;
 using ::testing::Pointwise;
 
-// Tolerable error level.  Binaural seems to have a higher error than other
-// renders, perhaps because of use of FFT.
-const float kEpsilon = 2e-6;
+// Tolerable error level.
+const float kEpsilon = 1e-6;
 const uint32_t kSamplesPerChannel = 1024;
 
 // Simple struct to pair element and metadata.
@@ -48,12 +46,12 @@ struct ElementWithMetadata {
   std::optional<oar_metadata_t> metadata;
 };
 
-vector<oar_metadata_t> GetHeadTrackingMetadata() {
-  vector<oar_metadata_t> metadata_list;
+std::vector<oar_metadata_t> GetHeadTrackingMetadata() {
+  std::vector<oar_metadata_t> metadata_list;
   struct Rotation {
     float w, x, y, z;
   };
-  const vector<Rotation> rotations = {
+  const std::vector<Rotation> rotations = {
       {1.0f, 0.0f, 0.0f, 0.0f},     {0.707f, 0.0f, 0.707f, 0.0f},
       {0.707f, 0.707f, 0.0f, 0.0f}, {0.707f, 0.0f, 0.0f, 0.707f},
       {-0.7f, 0.3f, -0.2f, 0.6f},
@@ -183,8 +181,8 @@ void RunTest(const oar_config_t& config, const ElementWithMetadata& element,
   }
 }
 
-vector<ElementWithMetadata> GetSelectionOfElements() {
-  vector<ElementWithMetadata> output;
+std::vector<ElementWithMetadata> GetSelectionOfElements() {
+  std::vector<ElementWithMetadata> output;
   // All channel-based.
   for (auto input : GetAllChannelBasedInputs()) {
     oar_audio_element_config_t element_config = {};
@@ -234,10 +232,10 @@ TEST(RoarEquivalence, RenderingToBinauralWithRenderingConfig) {
   config.samples_per_channel = kSamplesPerChannel;
   config.sampling_rate = 48000;
 
-  const vector<oar_headphones_rendering_mode_t> modes = {
+  const std::vector<oar_headphones_rendering_mode_t> modes = {
       ck_world_locked_restricted, ck_world_locked, ck_head_locked};
-  const vector<oar_binaural_filter_profile_t> profiles = {ck_ambient, ck_direct,
-                                                          ck_reverberant};
+  const std::vector<oar_binaural_filter_profile_t> profiles = {
+      ck_ambient, ck_direct, ck_reverberant};
 
   for (auto mode : modes) {
     for (auto profile : profiles) {

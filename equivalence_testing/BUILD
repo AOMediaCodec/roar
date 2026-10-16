@@ -76,6 +76,17 @@ cc_test(
 )
 
 cc_test(
+    name = "resampling_tests",
+    srcs = ["resampling_tests.cc"],
+    deps = [
+        ":test_helpers",
+        "@abseil-cpp//absl/strings:str_format",
+        "@googletest//:gtest_main",
+        "@oar",
+    ],
+)
+
+cc_test(
     name = "simple_tests",
     srcs = ["simple_tests.cc"],
     deps = [
