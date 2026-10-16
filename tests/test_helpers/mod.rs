@@ -8,8 +8,10 @@
 // source code in the PATENTS file, you can obtain it at
 // www.aomedia.org/license/patent.
 
-//! Helpers for ROAR integration tests.
+// Because these are only used in the integration tests, they appear to be dead code.
+#![allow(dead_code)]
 
+/// Helpers for ROAR integration tests.
 use aom_roar::c_types::{
     audio_element_rendering_config_t, audio_element_type_t, coordinate_type_t,
     def_max_number_of_objects, downmix_info_t, oar_audio_element_config_t,
@@ -23,8 +25,11 @@ use aom_roar::ffi::{roar_create, roar_destroy};
 use aom_roar::{ObjectPosition, PlanarBufferMut, PlanarBufferRef, PolarCoordinate, Samples};
 
 /// Convenience wrapper for creating and destroying the C API test renderer.
+
 pub struct TestRoar {
-    pub ptr: *mut oar_t,
+    // Safety invariant: `ptr` was returned by `roar_create`, is non-null, is uniquely
+    // owned by this instance, and has not yet been destroyed.
+    ptr: *mut oar_t,
 }
 
 impl TestRoar {
@@ -34,16 +39,30 @@ impl TestRoar {
             samples_per_channel: samples,
             sampling_rate: sample_rate,
         };
-        // SAFETY: config is a valid reference on the stack.
+        // SAFETY:
+        // - `&config` is a reference to a local stack variable, guaranteeing it is non-null,
+        //   properly aligned for `oar_config_t`, and points to a fully initialized `oar_config_t`.
+        // - `config` remains live, immutable, and unmoved across the synchronous call to
+        //   `roar_create`, ensuring it is safe to read for the entire duration of the call.
         let ptr = unsafe { roar_create(&config) };
         assert!(!ptr.is_null());
         Self { ptr }
+    }
+
+    /// Returns the raw pointer to the underlying renderer for FFI calls.
+    pub fn ptr(&self) -> *mut oar_t {
+        self.ptr
     }
 }
 
 impl Drop for TestRoar {
     fn drop(&mut self) {
-        // SAFETY: self.ptr was initialized from roar_create and is non-null.
+        // SAFETY:
+        // - By the struct safety invariant and private field encapsulation, `self.ptr` was returned
+        //   by `roar_create`, is valid, and has not been destroyed yet.
+        // - `Drop::drop` takes `&mut self`, ensuring exclusive ownership and access; no concurrent
+        //   access can occur during destruction.
+        // - `roar_destroy` is called exactly once as `TestRoar` is dropped.
         unsafe { roar_destroy(self.ptr) };
     }
 }

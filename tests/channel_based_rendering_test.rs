@@ -8,21 +8,22 @@
 // source code in the PATENTS file, you can obtain it at
 // www.aomedia.org/license/patent.
 
-//! Integration tests for channel-based audio rendering (loudspeaker layouts and downmixing).
+mod test_helpers;
 
+/// Integration tests for channel-based audio rendering (loudspeaker layouts and downmixing).
 #[cfg(test)]
 mod test {
 
+    use crate::test_helpers::{
+        create_channel_based_config, create_flat_sine_input, create_planar_buffer_mut,
+        create_planar_buffer_ref, create_sine_input_channels, rms, TestRoar,
+    };
     use aom_roar::c_types::{oar_audio_block_t, oar_layout_t};
     use aom_roar::ffi::*;
     use aom_roar::{
         AudioElementConfig, ChannelBasedConfig, Config, Layout, RoarRenderer, SampleRate, Samples,
     };
     use googletest::prelude::*;
-    use test_helpers::{
-        create_channel_based_config, create_flat_sine_input, create_planar_buffer_mut,
-        create_planar_buffer_ref, create_sine_input_channels, rms, TestRoar,
-    };
 
     /// Expect at least this value for non-silent output.
     const NON_SILENT_RMS_THRESHOLD: f32 = 0.1;
@@ -42,21 +43,21 @@ mod test {
         let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
         // Create audio group and audio element.
         let element_cfg = create_channel_based_config(oar_layout_t::ck_oar_layout_51);
-        // SAFETY: `oar.ptr` is a valid pointer initialized by `TestRoar::new`.
-        let group_id = unsafe { roar_add_audio_group(oar.ptr) };
+        // SAFETY: `oar.ptr()` is a valid pointer initialized by `TestRoar::new`.
+        let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
         let element_id = 1u32;
-        // SAFETY: `oar.ptr` is valid, and `&element_cfg` is a valid temporary reference.
+        // SAFETY: `oar.ptr()` is valid, and `&element_cfg` is a valid temporary reference.
         let ret =
-            unsafe { roar_add_audio_element(oar.ptr, group_id as u32, element_id, &element_cfg) };
+            unsafe { roar_add_audio_element(oar.ptr(), group_id as u32, element_id, &element_cfg) };
         assert_eq!(ret, 0);
 
-        // SAFETY: `oar.ptr` is valid.
+        // SAFETY: `oar.ptr()` is valid.
         let actual_input_channels =
-            unsafe { roar_get_number_of_audio_element_channels(oar.ptr, element_id) };
+            unsafe { roar_get_number_of_audio_element_channels(oar.ptr(), element_id) };
         assert_eq!(actual_input_channels, input_channels as u32);
-        // SAFETY: `oar.ptr` is valid.
-        let actual_output_channels = unsafe { roar_get_number_of_output_channels(oar.ptr) };
+        // SAFETY: `oar.ptr()` is valid.
+        let actual_output_channels = unsafe { roar_get_number_of_output_channels(oar.ptr()) };
         assert_eq!(actual_output_channels, output_channels as u32);
 
         // Create input buffer, fill with sine wave, create input audio block struct.
@@ -77,11 +78,11 @@ mod test {
             samples_per_channel: frame_size as u32,
         };
 
-        // SAFETY: `oar.ptr` is valid; `input_data` buffer pointer is valid for this call.
+        // SAFETY: `oar.ptr()` is valid; `input_data` buffer pointer is valid for this call.
         let update_ret =
-            unsafe { roar_update_audio_element_data(oar.ptr, element_id, &mut input_data) };
-        // SAFETY: `oar.ptr` is valid; `output_data` buffer pointer is valid for this call.
-        let render_ret = unsafe { roar_render(oar.ptr, &mut output_data) };
+            unsafe { roar_update_audio_element_data(oar.ptr(), element_id, &mut input_data) };
+        // SAFETY: `oar.ptr()` is valid; `output_data` buffer pointer is valid for this call.
+        let render_ret = unsafe { roar_render(oar.ptr(), &mut output_data) };
 
         assert_eq!(update_ret, 0);
         assert_eq!(render_ret, 0);
@@ -102,13 +103,13 @@ mod test {
         let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
         // Create audio group and audio element.
         let element_cfg = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
-        // SAFETY: `oar.ptr` is a valid pointer initialized by `TestRoar::new`.
-        let group_id = unsafe { roar_add_audio_group(oar.ptr) };
+        // SAFETY: `oar.ptr()` is a valid pointer initialized by `TestRoar::new`.
+        let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
         let element_id = 10u32;
-        // SAFETY: `oar.ptr` is valid, and `&element_cfg` is a valid temporary reference.
+        // SAFETY: `oar.ptr()` is valid, and `&element_cfg` is a valid temporary reference.
         let ret =
-            unsafe { roar_add_audio_element(oar.ptr, group_id as u32, element_id, &element_cfg) };
+            unsafe { roar_add_audio_element(oar.ptr(), group_id as u32, element_id, &element_cfg) };
         assert_eq!(ret, 0);
         // Create input buffer, fill with constant values, create input audio block struct.
         let mut input_buffer = vec![0.0f32; channels * frame_size];
@@ -130,11 +131,11 @@ mod test {
             samples_per_channel: frame_size as u32,
         };
 
-        // SAFETY: `oar.ptr` is valid; `input_data` buffer pointer is valid for this call.
+        // SAFETY: `oar.ptr()` is valid; `input_data` buffer pointer is valid for this call.
         let update_ret =
-            unsafe { roar_update_audio_element_data(oar.ptr, element_id, &mut input_data) };
-        // SAFETY: `oar.ptr` is valid; `output_data` buffer pointer is valid for this call.
-        let render_ret = unsafe { roar_render(oar.ptr, &mut output_data) };
+            unsafe { roar_update_audio_element_data(oar.ptr(), element_id, &mut input_data) };
+        // SAFETY: `oar.ptr()` is valid; `output_data` buffer pointer is valid for this call.
+        let render_ret = unsafe { roar_render(oar.ptr(), &mut output_data) };
 
         assert_eq!(update_ret, 0);
         assert_eq!(render_ret, 0);

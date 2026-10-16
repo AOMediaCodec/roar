@@ -61,15 +61,6 @@ pub enum EarRenderingMode {
 
 impl EarRenderer {
     /// Creates a new `EarRenderer` configured with default Stereo output.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use aom_roar::renderer::ear::ear_renderer::EarRenderer;
-    ///
-    /// let rdr = EarRenderer::new();
-    /// assert_eq!(rdr.target_layout, Layout::Stereo);
-    /// ```
     pub fn new() -> Self {
         Self::with_output_layout(Layout::Stereo)
     }

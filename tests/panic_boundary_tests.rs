@@ -8,20 +8,21 @@
 // source code in the PATENTS file, you can obtain it at
 // www.aomedia.org/license/patent.
 
-//! Panic boundary and FFI safety tests for raw pointers.
-//!
-//! Verifies that all public FFI entry points handle null pointers gracefully,
-//! returning `InvalidParameter` or returning early instead of panicking.
+mod test_helpers;
 
+/// Panic boundary and FFI safety tests for raw pointers.
+///
+/// Verifies that all public FFI entry points handle null pointers gracefully,
+/// returning `InvalidParameter` or returning early instead of panicking.
 #[cfg(test)]
 mod test {
 
     use googletest::prelude::*;
 
+    use crate::test_helpers::{create_channel_based_config, TestRoar};
     use aom_roar::c_types::{oar_audio_block_t, oar_layout_t, oar_metadata_t, oar_metadata_type_t};
     use aom_roar::ffi::*;
     use aom_roar::OarError;
-    use test_helpers::{create_channel_based_config, TestRoar};
 
     #[gtest]
     fn test_roar_create_handles_null_config_gracefully() {
@@ -46,8 +47,8 @@ mod test {
     #[gtest]
     fn test_roar_add_audio_element_handles_nulls_gracefully() {
         let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, 128, 48000);
-        // SAFETY: oar.ptr is valid.
-        let group_id = unsafe { roar_add_audio_group(oar.ptr) };
+        // SAFETY: oar.ptr() is valid.
+        let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
         let valid_config = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
 
@@ -58,7 +59,8 @@ mod test {
         assert_eq!(ret, OarError::InvalidParameter.into());
 
         // SAFETY: passing null config should return invalid status.
-        let ret = unsafe { roar_add_audio_element(oar.ptr, group_id as u32, 10, std::ptr::null()) };
+        let ret =
+            unsafe { roar_add_audio_element(oar.ptr(), group_id as u32, 10, std::ptr::null()) };
         assert_eq!(ret, OarError::InvalidParameter.into());
     }
 
@@ -72,14 +74,15 @@ mod test {
     #[gtest]
     fn test_roar_update_audio_element_metadata_handles_nulls_gracefully() {
         let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, 128, 48000);
-        // SAFETY: oar.ptr is valid.
-        let group_id = unsafe { roar_add_audio_group(oar.ptr) };
+        // SAFETY: oar.ptr() is valid.
+        let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
         let valid_config = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
         let element_id = 10u32;
-        // SAFETY: oar.ptr, group_id, and valid_config are valid.
-        let ret =
-            unsafe { roar_add_audio_element(oar.ptr, group_id as u32, element_id, &valid_config) };
+        // SAFETY: oar.ptr(), group_id, and valid_config are valid.
+        let ret = unsafe {
+            roar_add_audio_element(oar.ptr(), group_id as u32, element_id, &valid_config)
+        };
         assert_eq!(ret, 0);
 
         let valid_metadata = oar_metadata_t {
@@ -96,21 +99,22 @@ mod test {
 
         // SAFETY: passing null metadata should return invalid status.
         let ret =
-            unsafe { roar_update_audio_element_metadata(oar.ptr, element_id, std::ptr::null()) };
+            unsafe { roar_update_audio_element_metadata(oar.ptr(), element_id, std::ptr::null()) };
         assert_eq!(ret, OarError::InvalidParameter.into());
     }
 
     #[gtest]
     fn test_roar_update_audio_element_data_handles_nulls_gracefully() {
         let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, 128, 48000);
-        // SAFETY: oar.ptr is valid.
-        let group_id = unsafe { roar_add_audio_group(oar.ptr) };
+        // SAFETY: oar.ptr() is valid.
+        let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
         let valid_config = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
         let element_id = 10u32;
-        // SAFETY: oar.ptr, group_id, and valid_config are valid.
-        let ret =
-            unsafe { roar_add_audio_element(oar.ptr, group_id as u32, element_id, &valid_config) };
+        // SAFETY: oar.ptr(), group_id, and valid_config are valid.
+        let ret = unsafe {
+            roar_add_audio_element(oar.ptr(), group_id as u32, element_id, &valid_config)
+        };
         assert_eq!(ret, 0);
 
         let mut input_buffer = vec![0.0f32; 256];
@@ -128,7 +132,7 @@ mod test {
 
         // SAFETY: passing null data block should return invalid status.
         let ret =
-            unsafe { roar_update_audio_element_data(oar.ptr, element_id, std::ptr::null_mut()) };
+            unsafe { roar_update_audio_element_data(oar.ptr(), element_id, std::ptr::null_mut()) };
         assert_eq!(ret, OarError::InvalidParameter.into());
     }
 
@@ -148,8 +152,8 @@ mod test {
     #[gtest]
     fn test_roar_update_metadata_handles_nulls_gracefully() {
         let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, 128, 48000);
-        // SAFETY: oar.ptr is valid.
-        let group_id = unsafe { roar_add_audio_group(oar.ptr) };
+        // SAFETY: oar.ptr() is valid.
+        let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
 
         let valid_metadata = oar_metadata_t {
@@ -164,7 +168,7 @@ mod test {
         assert_eq!(ret, OarError::InvalidParameter.into());
 
         // SAFETY: passing null metadata should return invalid status.
-        let ret = unsafe { roar_update_metadata(oar.ptr, group_id as u32, std::ptr::null()) };
+        let ret = unsafe { roar_update_metadata(oar.ptr(), group_id as u32, std::ptr::null()) };
         assert_eq!(ret, OarError::InvalidParameter.into());
     }
 
@@ -183,7 +187,7 @@ mod test {
         assert_eq!(ret, OarError::InvalidParameter.into());
 
         // SAFETY: passing null output block should return invalid status.
-        let ret = unsafe { roar_render(oar.ptr, std::ptr::null_mut()) };
+        let ret = unsafe { roar_render(oar.ptr(), std::ptr::null_mut()) };
         assert_eq!(ret, OarError::InvalidParameter.into());
     }
 
@@ -222,10 +226,10 @@ mod test {
         // `oar` pointer is permitted and will return an error code without dereferencing, while
         // `valid_block` points to valid, exclusively accessed memory.
         let ret_null_oar = unsafe { roar_flush(std::ptr::null_mut(), &mut valid_block) };
-        // SAFETY: Testing boundary error handling; `oar.ptr` is a valid, exclusively accessed OAR
+        // SAFETY: Testing boundary error handling; `oar.ptr()` is a valid, exclusively accessed OAR
         // instance, and `roar_flush` explicitly documents that a null `output` pointer is permitted
         // and will return an error code without dereferencing.
-        let ret_null_block = unsafe { roar_flush(oar.ptr, std::ptr::null_mut()) };
+        let ret_null_block = unsafe { roar_flush(oar.ptr(), std::ptr::null_mut()) };
 
         expect_eq!(ret_null_oar, OarError::InvalidParameter.into());
         expect_eq!(ret_null_block, OarError::InvalidParameter.into());

@@ -8,6 +8,8 @@
 // source code in the PATENTS file, you can obtain it at
 // www.aomedia.org/license/patent.
 
+mod test_helpers;
+
 /// Tests that rendering (and functions that would be called during rendering) do not allocate.
 ///
 /// These tests use a custom allocator and a closure to ensure that calls are not allocating memory
@@ -21,12 +23,12 @@ mod test {
     use std::cell::Cell;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    use crate::test_helpers::{create_planar_buffer_mut, create_planar_buffer_ref};
     use aom_roar::{
         AudioElementConfig, ChannelBasedConfig, ChannelCount, Config, Decibels, Gain,
         HighOrderAmbisonics, Layout, ObjectBasedConfig, ObjectPosition, PolarCoordinate,
         Quaternion, RoarRenderer, SampleRate, Samples, SceneBasedConfig,
     };
-    use test_helpers::{create_planar_buffer_mut, create_planar_buffer_ref};
 
     /// A tracking allocator to intercept heap allocations and assert that the
     /// render loops do not perform any heap allocation.

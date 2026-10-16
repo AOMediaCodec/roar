@@ -8,11 +8,17 @@
 // source code in the PATENTS file, you can obtain it at
 // www.aomedia.org/license/patent.
 
-//! Integration tests for object-based audio rendering.
+mod test_helpers;
 
+/// Integration tests for object-based audio rendering.
 #[cfg(test)]
 mod test {
 
+    use crate::test_helpers::{
+        create_flat_sine_input, create_object_based_config, create_planar_buffer_mut,
+        create_planar_buffer_ref, create_polar_position_metadata, create_polar_positions,
+        create_sine_input_channels, rms, TestRoar,
+    };
     use aom_roar::c_types::{oar_audio_block_t, oar_layout_t, oar_metadata_type_t};
     use aom_roar::ffi::*;
     use aom_roar::{
@@ -20,11 +26,6 @@ mod test {
         RoarRenderer, SampleRate, Samples,
     };
     use googletest::prelude::*;
-    use test_helpers::{
-        create_flat_sine_input, create_object_based_config, create_planar_buffer_mut,
-        create_planar_buffer_ref, create_polar_position_metadata, create_polar_positions,
-        create_sine_input_channels, rms, TestRoar,
-    };
 
     /// Expect at least this value for non-silent output.
     const NON_SILENT_RMS_THRESHOLD: f32 = 0.1;
@@ -39,13 +40,13 @@ mod test {
     ) -> TestRoar {
         let oar = TestRoar::new(layout, samples_per_channel.value(), sample_rate.value());
         let element_cfg = create_object_based_config(num_objects);
-        // SAFETY: `oar.ptr` was initialized by `TestRoar::new` and is non-null and valid.
+        // SAFETY: `oar.ptr()` was initialized by `TestRoar::new` and is non-null and valid.
         // `&element_cfg` is an aligned reference to a live stack struct. `group_id` is verified
         // non-negative before casting to u32.
         unsafe {
-            let group_id = roar_add_audio_group(oar.ptr);
+            let group_id = roar_add_audio_group(oar.ptr());
             assert!(group_id >= 0);
-            let ret = roar_add_audio_element(oar.ptr, group_id as u32, element_id, &element_cfg);
+            let ret = roar_add_audio_element(oar.ptr(), group_id as u32, element_id, &element_cfg);
             assert_eq!(ret, 0);
         }
         oar
@@ -113,12 +114,12 @@ mod test {
             samples_per_channel: frame_size.value(),
         };
 
-        // SAFETY: `oar.ptr`, metadata, input, and output pointers are valid.
+        // SAFETY: `oar.ptr()`, metadata, input, and output pointers are valid.
         let update_meta_ret =
-            unsafe { roar_update_audio_element_metadata(oar.ptr, element_id, &pos_meta) };
+            unsafe { roar_update_audio_element_metadata(oar.ptr(), element_id, &pos_meta) };
         let update_data_ret =
-            unsafe { roar_update_audio_element_data(oar.ptr, element_id, &mut input_data) };
-        let render_ret = unsafe { roar_render(oar.ptr, &mut output_data) };
+            unsafe { roar_update_audio_element_data(oar.ptr(), element_id, &mut input_data) };
+        let render_ret = unsafe { roar_render(oar.ptr(), &mut output_data) };
 
         expect_eq!(update_meta_ret, 0);
         expect_eq!(update_data_ret, 0);
@@ -171,12 +172,12 @@ mod test {
             samples_per_channel: frame_size.value(),
         };
 
-        // SAFETY: `oar.ptr`, metadata, input, and output pointers are valid.
+        // SAFETY: `oar.ptr()`, metadata, input, and output pointers are valid.
         let update_meta_ret =
-            unsafe { roar_update_audio_element_metadata(oar.ptr, element_id, &pos_meta) };
+            unsafe { roar_update_audio_element_metadata(oar.ptr(), element_id, &pos_meta) };
         let update_data_ret =
-            unsafe { roar_update_audio_element_data(oar.ptr, element_id, &mut input_data) };
-        let render_ret = unsafe { roar_render(oar.ptr, &mut output_data) };
+            unsafe { roar_update_audio_element_data(oar.ptr(), element_id, &mut input_data) };
+        let render_ret = unsafe { roar_render(oar.ptr(), &mut output_data) };
 
         expect_eq!(update_meta_ret, 0);
         expect_eq!(update_data_ret, 0);
@@ -229,19 +230,19 @@ mod test {
             samples_per_channel: frame_size.value(),
         };
 
-        // SAFETY: `oar.ptr` is initialized and valid from `create_ffi_object_renderer`.
+        // SAFETY: `oar.ptr()` is initialized and valid from `create_ffi_object_renderer`.
         // `pos_meta`, `input_data`, and `output_data` point to valid, initialized, and
         // correctly aligned data structures that remain live for the duration of these calls.
         let (set_unit_ret, update_meta_ret, update_data_ret, render_ret) = unsafe {
             (
                 roar_set_metadata_unit_to_process(
-                    oar.ptr,
+                    oar.ptr(),
                     oar_metadata_type_t::ck_metadata_object_positions,
                     sub_frame_size,
                 ),
-                roar_update_audio_element_metadata(oar.ptr, element_id, &pos_meta),
-                roar_update_audio_element_data(oar.ptr, element_id, &mut input_data),
-                roar_render(oar.ptr, &mut output_data),
+                roar_update_audio_element_metadata(oar.ptr(), element_id, &pos_meta),
+                roar_update_audio_element_data(oar.ptr(), element_id, &mut input_data),
+                roar_render(oar.ptr(), &mut output_data),
             )
         };
 
@@ -417,12 +418,12 @@ mod test {
             1,
         );
 
-        // SAFETY: `oar.ptr` was allocated by `create_ffi_object_renderer`, which asserts
+        // SAFETY: `oar.ptr()` was allocated by `create_ffi_object_renderer`, which asserts
         // non-nullness upon construction with `TestRoar::new`, and `oar` remains live across this
         // call.
         let ret = unsafe {
             roar_set_metadata_unit_to_process(
-                oar.ptr,
+                oar.ptr(),
                 oar_metadata_type_t::ck_metadata_object_positions,
                 0,
             )

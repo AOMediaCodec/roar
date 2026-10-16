@@ -8,11 +8,15 @@
 // source code in the PATENTS file, you can obtain it at
 // www.aomedia.org/license/patent.
 
-//! Integration tests for the look-ahead peak limiter.
+mod test_helpers;
 
+/// Integration tests for the look-ahead peak limiter.
 #[cfg(test)]
 mod test {
 
+    use crate::test_helpers::{
+        create_channel_based_config, create_planar_buffer_mut, create_planar_buffer_ref, TestRoar,
+    };
     use aom_roar::{
         c_types::{oar_audio_block_t, oar_layout_t},
         ffi::{
@@ -24,9 +28,6 @@ mod test {
         SampleRate, Samples,
     };
     use googletest::prelude::*;
-    use test_helpers::{
-        create_channel_based_config, create_planar_buffer_mut, create_planar_buffer_ref, TestRoar,
-    };
 
     const LIMITER_VALUE: f32 = 1.0;
     const VALUE_GREATER_THAN_LIMIT: f32 = 2.0;
@@ -52,15 +53,15 @@ mod test {
         let element_id: u32 = 10;
         // Create test ROAR instance.
         let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above with exclusive
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
         // access.
-        let group_id = unsafe { roar_add_audio_group(oar.ptr) };
+        let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         verify_that!(group_id, ge(0))?;
         let element_cfg = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above with exclusive
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
         // access, and `element_cfg` is a valid initialized `oar_audio_element_config_t`.
         let ret =
-            unsafe { roar_add_audio_element(oar.ptr, group_id as u32, element_id, &element_cfg) };
+            unsafe { roar_add_audio_element(oar.ptr(), group_id as u32, element_id, &element_cfg) };
         verify_eq!(ret, 0)?;
         // Very loud input.
         let mut input_buffer = vec![VALUE_GREATER_THAN_LIMIT; input_channels * frame_size];
@@ -83,41 +84,41 @@ mod test {
         };
 
         // 1. Render with limiter DISABLED
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above with exclusive
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
         // access.
-        let disable_ret = unsafe { roar_enable_limiter(oar.ptr, 0) };
+        let disable_ret = unsafe { roar_enable_limiter(oar.ptr(), 0) };
         verify_eq!(disable_ret, 0)?;
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above, and
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above, and
         // `input_data.data` points to `input_buffer` with `input_channels * frame_size`
         // initialized, aligned `f32` elements, both exclusively owned during this call.
         let update_ret_1 =
-            unsafe { roar_update_audio_element_data(oar.ptr, element_id, &mut input_data) };
+            unsafe { roar_update_audio_element_data(oar.ptr(), element_id, &mut input_data) };
         verify_eq!(update_ret_1, 0)?;
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above, and
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above, and
         // `out_block_1.data` points to `output_no_limiter` with capacity for
         // `output_channels * frame_size` aligned `f32` elements, both exclusively owned during
         // this call.
-        let render_ret_1 = unsafe { roar_render(oar.ptr, &mut out_block_1) };
+        let render_ret_1 = unsafe { roar_render(oar.ptr(), &mut out_block_1) };
         verify_eq!(render_ret_1, 0)?;
 
         // 2. Render with limiter ENABLED
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above with exclusive
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
         // access.
-        let enable_ret = unsafe { roar_enable_limiter(oar.ptr, 1) };
+        let enable_ret = unsafe { roar_enable_limiter(oar.ptr(), 1) };
         verify_eq!(enable_ret, 0)?;
         // Render a few blocks to let the limiter stabilize.
         for _ in 0..10 {
-            // SAFETY: `oar.ptr` is a live, valid renderer instance created above, and
+            // SAFETY: `oar.ptr()` is a live, valid renderer instance created above, and
             // `input_data.data` points to `input_buffer` with `input_channels * frame_size`
             // initialized, aligned `f32` elements, both exclusively owned during this call.
             let update_ret =
-                unsafe { roar_update_audio_element_data(oar.ptr, element_id, &mut input_data) };
+                unsafe { roar_update_audio_element_data(oar.ptr(), element_id, &mut input_data) };
             verify_eq!(update_ret, 0)?;
-            // SAFETY: `oar.ptr` is a live, valid renderer instance created above, and
+            // SAFETY: `oar.ptr()` is a live, valid renderer instance created above, and
             // `out_block_2.data` points to `output_with_limiter` with capacity for
             // `output_channels * frame_size` aligned `f32` elements, both exclusively owned during
             // this call.
-            let render_ret = unsafe { roar_render(oar.ptr, &mut out_block_2) };
+            let render_ret = unsafe { roar_render(oar.ptr(), &mut out_block_2) };
             verify_eq!(render_ret, 0)?;
         }
 
@@ -133,9 +134,9 @@ mod test {
     fn ffi_get_limiter_delay_returns_configured_look_ahead_samples() {
         let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, 480, 48000);
 
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above with no concurrent
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with no concurrent
         // mutation.
-        let delay = unsafe { roar_get_limiter_delay(oar.ptr) };
+        let delay = unsafe { roar_get_limiter_delay(oar.ptr()) };
 
         expect_eq!(delay, EXPECTED_DELAY_SAMPLES as i32);
     }
@@ -147,15 +148,15 @@ mod test {
         let channels: usize = 2;
         let element_id: u32 = 10;
         let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above with exclusive
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
         // access.
-        let group_id = unsafe { roar_add_audio_group(oar.ptr) };
+        let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         verify_that!(group_id, ge(0))?;
         let element_cfg = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above with exclusive
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
         // access, and `element_cfg` is a valid initialized `oar_audio_element_config_t`.
         let add_ret =
-            unsafe { roar_add_audio_element(oar.ptr, group_id as u32, element_id, &element_cfg) };
+            unsafe { roar_add_audio_element(oar.ptr(), group_id as u32, element_id, &element_cfg) };
         verify_eq!(add_ret, 0)?;
         let mut input_buffer = vec![0.8f32; channels * frame_size];
         let mut input_data = oar_audio_block_t {
@@ -170,27 +171,27 @@ mod test {
             samples_per_channel: frame_size as u32,
         };
 
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above with exclusive
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
         // access.
-        let enable_ret = unsafe { roar_enable_limiter(oar.ptr, 1) };
+        let enable_ret = unsafe { roar_enable_limiter(oar.ptr(), 1) };
         verify_eq!(enable_ret, 0)?;
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above with exclusive
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
         // access.
-        let nan_thresh_ret = unsafe { roar_set_limiter_threshold(oar.ptr, f32::NAN) };
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above with exclusive
+        let nan_thresh_ret = unsafe { roar_set_limiter_threshold(oar.ptr(), f32::NAN) };
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
         // access.
-        let thresh_ret = unsafe { roar_set_limiter_threshold(oar.ptr, -6.0) };
+        let thresh_ret = unsafe { roar_set_limiter_threshold(oar.ptr(), -6.0) };
         verify_eq!(thresh_ret, 0)?;
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above, and
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above, and
         // `input_data.data` points to `input_buffer` with `channels * frame_size` initialized,
         // aligned `f32` elements, both exclusively owned during this call.
         let update_ret =
-            unsafe { roar_update_audio_element_data(oar.ptr, element_id, &mut input_data) };
+            unsafe { roar_update_audio_element_data(oar.ptr(), element_id, &mut input_data) };
         verify_eq!(update_ret, 0)?;
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above, and
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above, and
         // `render_block.data` points to `render_output` with capacity for `channels * frame_size`
         // aligned `f32` elements, both exclusively owned during this call.
-        let render_ret = unsafe { roar_render(oar.ptr, &mut render_block) };
+        let render_ret = unsafe { roar_render(oar.ptr(), &mut render_block) };
         verify_eq!(render_ret, 0)?;
 
         expect_eq!(nan_thresh_ret, OarError::InvalidParameter.into());
@@ -208,15 +209,15 @@ mod test {
         let channels: usize = 2;
         let element_id: u32 = 10;
         let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above with exclusive
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
         // access.
-        let group_id = unsafe { roar_add_audio_group(oar.ptr) };
+        let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         verify_that!(group_id, ge(0))?;
         let element_cfg = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above with exclusive
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
         // access, and `element_cfg` is a valid initialized `oar_audio_element_config_t`.
         let add_ret =
-            unsafe { roar_add_audio_element(oar.ptr, group_id as u32, element_id, &element_cfg) };
+            unsafe { roar_add_audio_element(oar.ptr(), group_id as u32, element_id, &element_cfg) };
         verify_eq!(add_ret, 0)?;
         let mut input_buffer = vec![0.5f32; channels * frame_size];
         let mut input_data = oar_audio_block_t {
@@ -243,34 +244,34 @@ mod test {
         };
 
         // 1. Flush with limiter DISABLED.
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above.
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above.
         // `disabled_flush_block.data` points to `flush_output` with capacity for
         // `channels * EXPECTED_DELAY_SAMPLES` aligned `f32` elements, exclusively owned during
         // this call, which satisfies `roar_flush`'s buffer capacity requirement.
-        let disabled_flush_ret = unsafe { roar_flush(oar.ptr, &mut disabled_flush_block) };
+        let disabled_flush_ret = unsafe { roar_flush(oar.ptr(), &mut disabled_flush_block) };
         verify_eq!(disabled_flush_ret, 0)?;
 
         // 2. Enable limiter, render one block to fill look-ahead delay, then flush.
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above with exclusive
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
         // access.
-        let enable_ret = unsafe { roar_enable_limiter(oar.ptr, 1) };
+        let enable_ret = unsafe { roar_enable_limiter(oar.ptr(), 1) };
         verify_eq!(enable_ret, 0)?;
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above, and
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above, and
         // `input_data.data` points to `input_buffer` with `channels * frame_size` initialized,
         // aligned `f32` elements, both exclusively owned during this call.
         let update_ret =
-            unsafe { roar_update_audio_element_data(oar.ptr, element_id, &mut input_data) };
+            unsafe { roar_update_audio_element_data(oar.ptr(), element_id, &mut input_data) };
         verify_eq!(update_ret, 0)?;
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above, and
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above, and
         // `render_block.data` points to `render_output` with capacity for `channels * frame_size`
         // aligned `f32` elements, both exclusively owned during this call.
-        let render_ret = unsafe { roar_render(oar.ptr, &mut render_block) };
+        let render_ret = unsafe { roar_render(oar.ptr(), &mut render_block) };
         verify_eq!(render_ret, 0)?;
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above. `flush_block.data`
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above. `flush_block.data`
         // points to `flush_output` with capacity for `channels * EXPECTED_DELAY_SAMPLES` aligned
         // `f32` elements, exclusively owned during this call, which satisfies `roar_flush`'s
         // buffer capacity requirement.
-        let flush_ret = unsafe { roar_flush(oar.ptr, &mut flush_block) };
+        let flush_ret = unsafe { roar_flush(oar.ptr(), &mut flush_block) };
         verify_eq!(flush_ret, 0)?;
 
         expect_eq!(disabled_flush_block.samples_per_channel, 0);
@@ -288,16 +289,16 @@ mod test {
         let mut wrong_channels_block =
             oar_audio_block_t { data: buf.as_mut_ptr(), channels: 1, samples_per_channel: 240 };
 
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above, and
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above, and
         // `null_data_block` is a valid initialized `oar_audio_block_t` with null `data`, which
         // `roar_flush` explicitly permits under its safety contract.
-        let null_data_ret = unsafe { roar_flush(oar.ptr, &mut null_data_block) };
-        // SAFETY: `oar.ptr` is a live, valid renderer instance created above.
+        let null_data_ret = unsafe { roar_flush(oar.ptr(), &mut null_data_block) };
+        // SAFETY: `oar.ptr()` is a live, valid renderer instance created above.
         // `wrong_channels_block.data` points to `buf` with capacity for
         // `2 * EXPECTED_DELAY_SAMPLES` aligned `f32` elements (exceeding
         // `wrong_channels_block.channels * EXPECTED_DELAY_SAMPLES`), exclusively owned during this
         // call, which satisfies `roar_flush`'s buffer capacity requirement.
-        let wrong_ch_ret = unsafe { roar_flush(oar.ptr, &mut wrong_channels_block) };
+        let wrong_ch_ret = unsafe { roar_flush(oar.ptr(), &mut wrong_channels_block) };
 
         expect_eq!(null_data_ret, OarError::InvalidParameter.into());
         expect_eq!(wrong_ch_ret, OarError::InvalidParameter.into());

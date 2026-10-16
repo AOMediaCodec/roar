@@ -8,12 +8,17 @@
 // source code in the PATENTS file, you can obtain it at
 // www.aomedia.org/license/patent.
 
-//! Integration tests for rendering a combination of channel-based, scene-based, and
-//! object-based elements simultaneously.
+mod test_helpers;
 
+/// Integration tests for rendering a combination of channel-based, scene-based, and
+/// object-based elements simultaneously.
 #[cfg(test)]
 mod test {
 
+    use crate::test_helpers::{
+        create_channel_based_config, create_object_based_config, create_planar_buffer_mut,
+        create_planar_buffer_ref, create_scene_based_config, rms, TestRoar,
+    };
     use aom_roar::c_types::{
         coordinate_type_t, def_max_number_of_objects, oar_audio_block_t, oar_hoa_t, oar_layout_t,
         oar_metadata_object_positions_t, oar_metadata_object_positions_union_t, oar_metadata_t,
@@ -26,10 +31,6 @@ mod test {
         SceneBasedConfig,
     };
     use googletest::prelude::*;
-    use test_helpers::{
-        create_channel_based_config, create_object_based_config, create_planar_buffer_mut,
-        create_planar_buffer_ref, create_scene_based_config, rms, TestRoar,
-    };
 
     /// Expect at least this value for non-silent output.
     const NON_SILENT_RMS_THRESHOLD: f32 = 0.01;
@@ -51,14 +52,19 @@ mod test {
         let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
 
         // SAFETY: oar is valid.
-        let group_id = unsafe { roar_add_audio_group(oar.ptr) };
+        let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert_eq!(group_id, 0);
 
         // 1. Channel-Based Element (Stereo) -> ID 10
         let chan_based_cfg = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
         // SAFETY: config and oar are valid.
         let ret = unsafe {
-            roar_add_audio_element(oar.ptr, group_id as u32, chan_based_element_id, &chan_based_cfg)
+            roar_add_audio_element(
+                oar.ptr(),
+                group_id as u32,
+                chan_based_element_id,
+                &chan_based_cfg,
+            )
         };
         assert_eq!(ret, 0);
 
@@ -67,7 +73,7 @@ mod test {
         // SAFETY: config and oar are valid.
         let ret = unsafe {
             roar_add_audio_element(
-                oar.ptr,
+                oar.ptr(),
                 group_id as u32,
                 scene_based_element_id,
                 &scene_based_cfg,
@@ -79,7 +85,7 @@ mod test {
         let obj_based_cfg = create_object_based_config(1);
         // SAFETY: config and oar are valid.
         let ret = unsafe {
-            roar_add_audio_element(oar.ptr, group_id as u32, obj_based_element_id, &obj_based_cfg)
+            roar_add_audio_element(oar.ptr(), group_id as u32, obj_based_element_id, &obj_based_cfg)
         };
         assert_eq!(ret, 0);
 
@@ -100,8 +106,9 @@ mod test {
             duration: frame_size as i32,
         };
         // SAFETY: metadata and oar are valid.
-        let ret =
-            unsafe { roar_update_audio_element_metadata(oar.ptr, obj_based_element_id, &pos_meta) };
+        let ret = unsafe {
+            roar_update_audio_element_metadata(oar.ptr(), obj_based_element_id, &pos_meta)
+        };
         assert_eq!(ret, 0);
 
         let mut chan_based_input = vec![0.2f32; 2 * frame_size];
@@ -134,22 +141,26 @@ mod test {
 
         // SAFETY: data and oar are valid.
         let ret = unsafe {
-            roar_update_audio_element_data(oar.ptr, chan_based_element_id, &mut chan_based_block)
+            roar_update_audio_element_data(oar.ptr(), chan_based_element_id, &mut chan_based_block)
         };
         assert_eq!(ret, 0);
         // SAFETY: data and oar are valid.
         let ret = unsafe {
-            roar_update_audio_element_data(oar.ptr, scene_based_element_id, &mut scene_based_block)
+            roar_update_audio_element_data(
+                oar.ptr(),
+                scene_based_element_id,
+                &mut scene_based_block,
+            )
         };
         assert_eq!(ret, 0);
         // SAFETY: data and oar are valid.
         let ret = unsafe {
-            roar_update_audio_element_data(oar.ptr, obj_based_element_id, &mut obj_based_block)
+            roar_update_audio_element_data(oar.ptr(), obj_based_element_id, &mut obj_based_block)
         };
         assert_eq!(ret, 0);
 
         // SAFETY: output block and oar are valid.
-        let ret = unsafe { roar_render(oar.ptr, &mut out_block) };
+        let ret = unsafe { roar_render(oar.ptr(), &mut out_block) };
         assert_eq!(ret, 0);
 
         // Verify output is non-silent in planar layout.
