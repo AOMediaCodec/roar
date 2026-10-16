@@ -8,6 +8,8 @@ and this project adheres to
 
 Changes in the repo not yet in a release will appear here.
 
+## [1.0.0] - 2026-10-15
+
 ### [Added]
 
 -   [Matching the new C-API functions in OAR](https://github.com/AOMediaCodec/oar/pull/40),

@@ -1,6 +1,6 @@
 [package]
 name = "aom-roar"
-version = "0.1.0"
+version = "1.0.0"
 license-file = "LICENSE"
 description = "A Rust port of Alliance for Open Media's Open Audio Renderer (OAR)."
 readme = "README.md"
