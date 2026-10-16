@@ -11,10 +11,10 @@ rust-version = "1.92.0"
 categories = ["multimedia::audio"]
 keywords = [
   "AOMedia",
-  "audio renderer",
   "binaural",
   "IAMF",
-  "immersive audio",
+  "immersive",
+  "renderer",
 ]
 
 [dependencies]
