@@ -10,7 +10,7 @@ rust_test(
     ],
     edition = "2024",
     deps = [
-        "@aom-roar//src:aom_roar",
+        "@aom-roar//src:aom_roar_rlib",
         "@crates//:googletest",
     ],
 )
@@ -23,7 +23,7 @@ rust_test(
     ],
     edition = "2024",
     deps = [
-        "@aom-roar//src:aom_roar",
+        "@aom-roar//src:aom_roar_rlib",
         "@crates//:googletest",
     ],
 )
@@ -36,7 +36,7 @@ rust_test(
     ],
     edition = "2024",
     deps = [
-        "@aom-roar//src:aom_roar",
+        "@aom-roar//src:aom_roar_rlib",
         "@crates//:googletest",
     ],
 )
@@ -49,7 +49,7 @@ rust_test(
     ],
     edition = "2024",
     deps = [
-        "@aom-roar//src:aom_roar",
+        "@aom-roar//src:aom_roar_rlib",
         "@crates//:googletest",
     ],
 )
@@ -62,7 +62,7 @@ rust_test(
     ],
     edition = "2024",
     deps = [
-        "@aom-roar//src:aom_roar",
+        "@aom-roar//src:aom_roar_rlib",
         "@crates//:googletest",
     ],
 )
@@ -75,7 +75,7 @@ rust_test(
     ],
     edition = "2024",
     deps = [
-        "@aom-roar//src:aom_roar",
+        "@aom-roar//src:aom_roar_rlib",
         "@crates//:googletest",
     ],
 )
@@ -88,7 +88,7 @@ rust_test(
     ],
     edition = "2024",
     deps = [
-        "@aom-roar//src:aom_roar",
+        "@aom-roar//src:aom_roar_rlib",
         "@crates//:googletest",
     ],
 )
@@ -98,7 +98,7 @@ rust_test(
     srcs = ["validation_test.rs"],
     edition = "2024",
     deps = [
-        "@aom-roar//src:aom_roar",
+        "@aom-roar//src:aom_roar_rlib",
         "@crates//:googletest",
     ],
 )

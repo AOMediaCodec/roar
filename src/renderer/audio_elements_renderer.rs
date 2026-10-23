@@ -576,8 +576,8 @@ mod test {
 
     use super::*;
     use crate::common::definitions::{
-        AudioElementConfig, ChannelBasedConfig, Layout, OarError, ObjectBasedConfig,
-        ObjectPosition, PolarCoordinate,
+        AudioElementConfig, CartesianCoordinate, ChannelBasedConfig, Degrees, Distance, Layout,
+        OarError, ObjectBasedConfig, ObjectPosition, PolarCoordinate,
     };
     use googletest::prelude::*;
     use std::sync::{Arc, Mutex};
@@ -660,7 +660,7 @@ mod test {
     }
 
     #[gtest]
-    fn interpolates_metadata_across_sub_frames() {
+    fn interpolates_metadata_across_sub_frames() -> Result<()> {
         let state = Arc::new(Mutex::new(MockState::default()));
         let mock = Box::new(SharedMockRenderer::new(state.clone()));
         let mut router = AudioElementsRenderer::with_backend(
@@ -692,25 +692,41 @@ mod test {
         router.render(validated_inputs, &mut out_buf).unwrap();
 
         let state_lock = state.lock().unwrap();
-        expect_that!(state_lock.positions_updates.len(), eq(3));
-        // Sub-frame 0: c = 0.0 -> azimuth 0.0
-        expect_that!(state_lock.positions_updates[0].0, eq(10));
-        let expected_pos0 =
-            ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(0.0, 0.0, 1.0).unwrap()]);
-        expect_that!(state_lock.positions_updates[0].1, eq(&expected_pos0));
-        expect_that!(state_lock.positions_updates[0].2, eq(Samples(4)));
-        // Sub-frame 1: c = 0.5 -> azimuth 45.0
-        expect_that!(state_lock.positions_updates[1].0, eq(10));
-        let expected_pos1 =
-            ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(45.0, 0.0, 1.0).unwrap()]);
-        expect_that!(state_lock.positions_updates[1].1, eq(&expected_pos1));
-        expect_that!(state_lock.positions_updates[1].2, eq(Samples(4)));
-        // Sub-frame 2: c = 0.0 (in pos2) -> azimuth 90.0
-        expect_that!(state_lock.positions_updates[2].0, eq(10));
-        let expected_pos2 =
-            ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(90.0, 0.0, 1.0).unwrap()]);
-        expect_that!(state_lock.positions_updates[2].1, eq(&expected_pos2));
-        expect_that!(state_lock.positions_updates[2].2, eq(Samples(4)));
+        verify_that!(
+            state_lock.positions_updates,
+            elements_are![
+                // Sub-frame 0: c = 0.0 -> azimuth 0.0
+                (
+                    eq(&10),
+                    pat!(ObjectPosition::Polar(elements_are![pat!(PolarCoordinate {
+                        azimuth(): pat!(Degrees(near(0.0, 1e-5))),
+                        elevation(): pat!(Degrees(near(0.0, 1e-5))),
+                        distance(): pat!(Distance { value(): near(1.0, 1e-5) }),
+                    })])),
+                    eq(&Samples(4)),
+                ),
+                // Sub-frame 1: c = 0.5 -> azimuth 45.0
+                (
+                    eq(&10),
+                    pat!(ObjectPosition::Polar(elements_are![pat!(PolarCoordinate {
+                        azimuth(): pat!(Degrees(near(45.0, 1e-5))),
+                        elevation(): pat!(Degrees(near(0.0, 1e-5))),
+                        distance(): pat!(Distance { value(): near(1.0, 1e-5) }),
+                    })])),
+                    eq(&Samples(4)),
+                ),
+                // Sub-frame 2: c = 0.0 (in pos2) -> azimuth 90.0
+                (
+                    eq(&10),
+                    pat!(ObjectPosition::Polar(elements_are![pat!(PolarCoordinate {
+                        azimuth(): pat!(Degrees(near(90.0, 1e-5))),
+                        elevation(): pat!(Degrees(near(0.0, 1e-5))),
+                        distance(): pat!(Distance { value(): near(1.0, 1e-5) }),
+                    })])),
+                    eq(&Samples(4)),
+                ),
+            ]
+        )
     }
 
     #[gtest]
@@ -729,7 +745,7 @@ mod test {
     }
 
     #[gtest]
-    fn converts_cartesian_to_polar_at_ingestion() {
+    fn converts_cartesian_to_polar_at_ingestion() -> Result<()> {
         let state = Arc::new(Mutex::new(MockState::default()));
         let mock = Box::new(SharedMockRenderer::new(state.clone()));
         let mut router = AudioElementsRenderer::with_backend(
@@ -743,7 +759,6 @@ mod test {
         });
         router.add_element(10, &config).unwrap();
 
-        use crate::common::definitions::CartesianCoordinate;
         let pos = ObjectPosition::Cartesian(vec![CartesianCoordinate { x: 0.0, y: 1.0, z: 0.0 }]);
         router.update_element_positions(10, &pos, Samples(12)).unwrap();
 
@@ -757,18 +772,17 @@ mod test {
         router.render(validated_inputs, &mut out_buf).unwrap();
 
         let state_lock = state.lock().unwrap();
-        expect_that!(state_lock.positions_updates.len(), eq(1));
-        let (id, ref pos, samples) = state_lock.positions_updates[0];
-        expect_that!(id, eq(10));
-        expect_that!(samples, eq(Samples(12)));
-
-        if let ObjectPosition::Polar(polar_coords) = pos {
-            expect_that!(polar_coords.len(), eq(1));
-            expect_that!(polar_coords[0].azimuth().0, near(0.0f32, 1e-3));
-            expect_that!(polar_coords[0].elevation().0, near(0.0f32, 1e-3));
-            expect_that!(polar_coords[0].distance().value(), near(1.0f32, 1e-3));
-        } else {
-            panic!("Expected ObjectPosition::Polar, got {:?}", pos);
-        }
+        verify_that!(
+            state_lock.positions_updates,
+            elements_are![(
+                eq(&10),
+                pat!(ObjectPosition::Polar(elements_are![pat!(PolarCoordinate {
+                    azimuth(): pat!(Degrees(near(0.0, 1e-3))),
+                    elevation(): pat!(Degrees(near(0.0, 1e-3))),
+                    distance(): pat!(Distance { value(): near(1.0, 1e-3) }),
+                })])),
+                eq(&Samples(12)),
+            )]
+        )
     }
 }
