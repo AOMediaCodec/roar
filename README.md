@@ -6,12 +6,12 @@ reference implementation of the OAR specification.
 The library can be used to render various types of input audio into a
 loudspeaker or binaural output.
 
-## Building
+## Building and using in a Bazel C++ project
 
 ### Prerequisites
 
 -   Install [bazelisk](https://bazel.build/install/bazelisk) to run and manage
-    bazel.
+    Bazel.
 
 ### Build
 
@@ -22,10 +22,72 @@ bazelisk build src:aom_roar
 ### Run tests
 
 ```shell
-bazelisk test src:roar_test  # unit tests
-bazelisk test tests:all      # integration tests
-bazelisk test equivalence_tests:all  # equivalence tests
+bazelisk test src:roar_test                   # unit tests
+bazelisk test tests:all                       # integration tests
+bazelisk test equivalence_testing:all         # C++ equivalence tests
 bazelisk run -c opt equivalence_testing/benchmarks:benchmarks  # benchmarks
+```
+
+### Integrating
+
+1.  Add `aom-roar` to your `MODULE.bazel`:
+
+    ```
+    bazel_dep(name = "aom-roar", version = "1.0.0")
+    git_override(
+        module_name = "aom-roar",
+        commit = "<commit_sha>",
+        remote = "https://github.com/AOMediaCodec/roar",
+    )
+    ```
+
+2.  Depend on `@aom-roar//src:aom_roar` in your C++ target's `BUILD` file (or
+    `@aom-roar//src:aom_roar_rlib` for a Bazel `rust_library` / `rust_binary`
+    target):
+
+    ```
+    cc_binary(
+        name = "my_app",
+        srcs = ["main.cc"],
+        deps = [
+            "@aom-roar//src:aom_roar",
+        ],
+    )
+    ```
+
+## Building and using in a Rust / Cargo project
+
+### Prerequisites
+
+-   Install [Rust and Cargo](https://rustup.rs/) (Rust 1.92.0 or newer; edition
+    2024).
+
+### Build
+
+```shell
+cargo build --release
+```
+
+### Run tests
+
+```shell
+cargo test
+```
+
+### Integrating
+
+Add `aom-roar` to your `Cargo.toml`:
+
+```toml
+[dependencies]
+aom-roar = "1.0.0"
+```
+
+Or to depend on a specific Git revision directly:
+
+```toml
+[dependencies]
+aom-roar = { git = "https://github.com/AOMediaCodec/roar", rev = "<commit_sha>" }
 ```
 
 ## Configuration
