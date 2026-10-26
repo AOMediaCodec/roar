@@ -109,7 +109,6 @@ pub use super::coordinates::*;
 pub use super::downmix::*;
 pub use super::gains::*;
 pub use super::hoa::*;
-pub use super::ia_channel::*;
 pub use super::layout::*;
 pub use super::object_positions::*;
 pub use super::quaternion::*;

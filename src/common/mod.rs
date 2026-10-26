@@ -20,7 +20,6 @@ pub mod definitions;
 pub mod downmix;
 pub mod gains;
 pub mod hoa;
-pub mod ia_channel;
 pub mod layout;
 pub mod object_positions;
 pub mod quaternion;

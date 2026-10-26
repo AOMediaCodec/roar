@@ -16,10 +16,11 @@
 //! downmix configurations such as 5.1 to Stereo, 7.1 to 5.1, Mono downmix, and all
 //! height/surround layout transitions adhering to exact IAMF demixing modes and weight tables.
 
+use super::ia_channel::IAChannel;
 use crate::common::definitions::ChannelCount;
 use crate::common::definitions::{
-    AudioElementConfig, Coeff, DownmixMode, IAChannel, InputLayout, MixFactors, OarError,
-    OutputLayout, PlanarBufferMut, PlanarBufferRef, Samples, WeightIndex, WeightIndexShift,
+    AudioElementConfig, Coeff, DownmixMode, InputLayout, MixFactors, OarError, OutputLayout,
+    PlanarBufferMut, PlanarBufferRef, Samples, WeightIndex, WeightIndexShift,
     METADATA_QUEUE_CAPACITY,
 };
 use crate::renderer::audio_renderer_api::AudioRenderer;
@@ -200,10 +201,10 @@ impl DownmixRenderer {
             return;
         }
 
-        let Some(in_chs) = self.input_layout.physical_channels() else {
+        let Some(in_chs) = self.input_layout.downmix_channels() else {
             return;
         };
-        let Some(out_chs) = self.output_layout.physical_channels() else {
+        let Some(out_chs) = self.output_layout.downmix_channels() else {
             return;
         };
 

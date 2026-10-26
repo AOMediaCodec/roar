@@ -12,7 +12,7 @@
 
 //! Public output and input layout configurations.
 
-use crate::common::definitions::{ChannelCount, IAChannel, OarError};
+use crate::common::definitions::{ChannelCount, OarError};
 
 /// Target output loudspeaker and headphone layouts supported by the renderer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -88,16 +88,6 @@ impl OutputLayout {
             Self::Binaural => 2,
         };
         ChannelCount::new(count).unwrap()
-    }
-
-    /// Returns the height and surround channel counts for downmix validation.
-    pub fn height_and_surround(&self) -> Option<(usize, usize)> {
-        InputLayout::try_from(*self).ok().and_then(|l| l.height_and_surround())
-    }
-
-    /// Physical channel definitions per layout (`_get_channels` equivalent in `liboar`).
-    pub fn physical_channels(&self) -> Option<&'static [IAChannel]> {
-        InputLayout::try_from(*self).ok().and_then(|l| l.physical_channels())
     }
 }
 
@@ -217,118 +207,6 @@ impl InputLayout {
             Self::Top5ch => 5,
         };
         ChannelCount::new(count).unwrap()
-    }
-
-    /// Returns the height and surround channel counts for downmix validation.
-    pub fn height_and_surround(&self) -> Option<(usize, usize)> {
-        match self {
-            Self::Mono => Some((0, 1)),
-            Self::Stereo => Some((0, 2)),
-            Self::Layout51 => Some((0, 5)),
-            Self::Layout512 => Some((2, 5)),
-            Self::Layout514 => Some((4, 5)),
-            Self::Layout71 => Some((0, 7)),
-            Self::Layout712 => Some((2, 7)),
-            Self::Layout714 => Some((4, 7)),
-            Self::Layout312 => Some((2, 3)),
-            _ => None,
-        }
-    }
-
-    /// Checks whether downmix from this input layout to `target` output layout is valid.
-    pub fn is_valid_downmix_to(&self, target: OutputLayout) -> bool {
-        let (Some((hi, si)), Some((ho, so))) =
-            (self.height_and_surround(), target.height_and_surround())
-        else {
-            return false;
-        };
-        if hi > 0 && ho == 0 {
-            return false;
-        }
-        si >= so && hi >= ho
-    }
-
-    /// Physical channel definitions per layout (`_get_channels` equivalent in `liboar`).
-    pub fn physical_channels(&self) -> Option<&'static [IAChannel]> {
-        match self {
-            Self::Mono => Some(&[IAChannel::Mono]),
-            Self::Stereo => Some(&[IAChannel::L2, IAChannel::R2]),
-            Self::Layout51 => Some(&[
-                IAChannel::L5,
-                IAChannel::R5,
-                IAChannel::C,
-                IAChannel::Lfe,
-                IAChannel::Sl5,
-                IAChannel::Sr5,
-            ]),
-            Self::Layout512 => Some(&[
-                IAChannel::L5,
-                IAChannel::R5,
-                IAChannel::C,
-                IAChannel::Lfe,
-                IAChannel::Sl5,
-                IAChannel::Sr5,
-                IAChannel::Hl,
-                IAChannel::Hr,
-            ]),
-            Self::Layout514 => Some(&[
-                IAChannel::L5,
-                IAChannel::R5,
-                IAChannel::C,
-                IAChannel::Lfe,
-                IAChannel::Sl5,
-                IAChannel::Sr5,
-                IAChannel::Hfl,
-                IAChannel::Hfr,
-                IAChannel::Hbl,
-                IAChannel::Hbr,
-            ]),
-            Self::Layout71 => Some(&[
-                IAChannel::L7,
-                IAChannel::R7,
-                IAChannel::C,
-                IAChannel::Lfe,
-                IAChannel::Sl7,
-                IAChannel::Sr7,
-                IAChannel::Bl7,
-                IAChannel::Br7,
-            ]),
-            Self::Layout712 => Some(&[
-                IAChannel::L7,
-                IAChannel::R7,
-                IAChannel::C,
-                IAChannel::Lfe,
-                IAChannel::Sl7,
-                IAChannel::Sr7,
-                IAChannel::Bl7,
-                IAChannel::Br7,
-                IAChannel::Hl,
-                IAChannel::Hr,
-            ]),
-            Self::Layout714 => Some(&[
-                IAChannel::L7,
-                IAChannel::R7,
-                IAChannel::C,
-                IAChannel::Lfe,
-                IAChannel::Sl7,
-                IAChannel::Sr7,
-                IAChannel::Bl7,
-                IAChannel::Br7,
-                IAChannel::Hfl,
-                IAChannel::Hfr,
-                IAChannel::Hbl,
-                IAChannel::Hbr,
-            ]),
-            Self::Layout312 => Some(&[
-                IAChannel::L3,
-                IAChannel::R3,
-                IAChannel::C,
-                IAChannel::Lfe,
-                IAChannel::Tl,
-                IAChannel::Tr,
-            ]),
-            _ => None,
-        }
     }
 }
 
@@ -469,24 +347,5 @@ mod test {
         expect_that!(converted, ok(eq(OutputLayout::Layout512)));
         expect_that!(converted_binaural, ok(eq(OutputLayout::Binaural)));
         expect_that!(rejected_subset, err(eq(OarError::InvalidParameter)));
-    }
-
-    #[gtest]
-    fn layout_height_and_surround_returns_expected_tuples() {
-        expect_that!(InputLayout::Stereo.height_and_surround(), eq(Some((0, 2))));
-        expect_that!(InputLayout::Layout512.height_and_surround(), eq(Some((2, 5))));
-        expect_that!(OutputLayout::Layout714.height_and_surround(), eq(Some((4, 7))));
-        expect_that!(OutputLayout::Binaural.height_and_surround(), none());
-    }
-
-    #[gtest]
-    fn input_layout_is_valid_downmix_to_validates_target_hierarchy() {
-        expect_true!(InputLayout::Layout71.is_valid_downmix_to(OutputLayout::Stereo));
-        expect_true!(InputLayout::Layout714.is_valid_downmix_to(OutputLayout::Layout512));
-        expect_false!(InputLayout::Layout512.is_valid_downmix_to(OutputLayout::Layout51));
-        expect_false!(InputLayout::Layout512.is_valid_downmix_to(OutputLayout::Stereo));
-        expect_false!(InputLayout::Stereo.is_valid_downmix_to(OutputLayout::Layout51));
-        expect_false!(InputLayout::Layout512.is_valid_downmix_to(OutputLayout::Layout712));
-        expect_false!(InputLayout::Layout512.is_valid_downmix_to(OutputLayout::Layout514));
     }
 }

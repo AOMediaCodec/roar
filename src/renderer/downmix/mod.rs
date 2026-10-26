@@ -16,3 +16,4 @@
 //! loudspeaker layouts to lower channel configurations (e.g., 5.1 to Stereo, Mono fallbacks).
 
 pub mod downmix_renderer;
+mod ia_channel;
