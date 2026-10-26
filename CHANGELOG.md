@@ -14,6 +14,11 @@ Changes in the repo not yet in a release will appear here.
     and `aom_roar_rlib` (for Rust) to allow Bazel integration with either Rust
     or C++ and to allow the Rust integration tests to run with Bazel.
 
+### [Fixed]
+
+-   Fixed rendering when input and output layouts are both binaural. Previously,
+    OBR just returned an error.
+
 ## [1.0.0] - 2026-10-15
 
 ### [Added]

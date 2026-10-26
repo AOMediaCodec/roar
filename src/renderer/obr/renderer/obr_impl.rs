@@ -447,6 +447,7 @@ impl AudioRenderer for ObrAudioRendererAdapter {
                 Layout::Layout916 => AudioElementType::Layout9_1_6,
                 Layout::Layout7154 => AudioElementType::Layout7_1_5_4,
                 Layout::LayoutA293 => AudioElementType::Layout10_2_9_3,
+                Layout::Binaural => AudioElementType::PassthroughStereo,
                 _ => return Err(OarError::InvalidParameter),
             },
             OarAudioElementConfig::SceneBased(sbc) => match sbc.order {
@@ -906,5 +907,25 @@ mod test {
 
         expect_true!(adapter.obr.limiter_enabled);
         Ok(())
+    }
+
+    #[gtest]
+    fn add_element_with_binaural_layout_configures_stereo_passthrough() {
+        let mut adapter = ObrAudioRendererAdapter::new(get_buffer_size(), get_sample_rate());
+        let config =
+            OarAudioElementConfig::ChannelBased(crate::common::definitions::ChannelBasedConfig {
+                layout: Layout::Binaural,
+                downmix_info: None,
+                rendering_config: None,
+            });
+
+        let result = adapter.add_element(1, &config);
+
+        expect_ok!(result);
+        expect_eq!(adapter.obr.get_number_of_input_channels(), 2);
+        expect_eq!(
+            adapter.obr.audio_elements[0].element_type(),
+            AudioElementType::PassthroughStereo
+        );
     }
 }
