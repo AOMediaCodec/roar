@@ -12,7 +12,143 @@
 
 //! Public output and input layout configurations.
 
-use crate::common::definitions::{ChannelCount, OarError};
+use crate::common::definitions::{ChannelCount, Degrees, OarError};
+
+/// The angular position and LFE classification of a loudspeaker in a layout.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SpeakerPosition {
+    /// The azimuth angle of the loudspeaker.
+    pub azimuth: Degrees,
+    /// The elevation angle of the loudspeaker.
+    pub elevation: Degrees,
+    /// Whether this loudspeaker is a Low-Frequency Effects (LFE) channel.
+    pub is_lfe: bool,
+}
+
+// ITU-R BS.2051 loudspeaker positions (`SP_<Layer><Sign><Azimuth>`):
+// - Layer: `M` = middle (0°), `U` = upper (+30°), `UH` = upper high (+45°), `B` = bottom (-30°),
+//   `T` = top (+90°).
+// - Sign:  `P` = plus (+azimuth, left), `M` = minus (-azimuth, right).
+
+/// ITU-R BS.2051 `M+000`: Middle layer, 0° azimuth (Front Center / `C` / `FC`).
+pub(crate) const SP_MP000: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(0.0), elevation: Degrees(0.0), is_lfe: false };
+/// ITU-R BS.2051 `M+025`: Middle layer, +25° azimuth (Left Screen Edge, Sound System G).
+pub(crate) const SP_MP025: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(25.0), elevation: Degrees(0.0), is_lfe: false };
+/// ITU-R BS.2051 `M-025`: Middle layer, -25° azimuth (Right Screen Edge, Sound System G).
+pub(crate) const SP_MM025: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(-25.0), elevation: Degrees(0.0), is_lfe: false };
+/// ITU-R BS.2051 `M-030`: Middle layer, -30° azimuth (Front Right / `R` / `FRc`).
+pub(crate) const SP_MM030: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(-30.0), elevation: Degrees(0.0), is_lfe: false };
+/// ITU-R BS.2051 `M+030`: Middle layer, +30° azimuth (Front Left / `L` / `FLc`).
+pub(crate) const SP_MP030: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(30.0), elevation: Degrees(0.0), is_lfe: false };
+/// ITU-R BS.2051 `M-060`: Middle layer, -60° azimuth (Front Right Wide / `FR`).
+pub(crate) const SP_MM060: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(-60.0), elevation: Degrees(0.0), is_lfe: false };
+/// ITU-R BS.2051 `M+060`: Middle layer, +60° azimuth (Front Left Wide / `FL`).
+pub(crate) const SP_MP060: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(60.0), elevation: Degrees(0.0), is_lfe: false };
+/// ITU-R BS.2051 `M-090`: Middle layer, -90° azimuth (Side Right / `Rss` / `SiR`).
+pub(crate) const SP_MM090: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(-90.0), elevation: Degrees(0.0), is_lfe: false };
+/// ITU-R BS.2051 `M+090`: Middle layer, +90° azimuth (Side Left / `Lss` / `SiL`).
+pub(crate) const SP_MP090: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(90.0), elevation: Degrees(0.0), is_lfe: false };
+/// ITU-R BS.2051 `M-110`: Middle layer, -110° azimuth (Right Surround / `Rs`).
+pub(crate) const SP_MM110: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(-110.0), elevation: Degrees(0.0), is_lfe: false };
+/// ITU-R BS.2051 `M+110`: Middle layer, +110° azimuth (Left Surround / `Ls`).
+pub(crate) const SP_MP110: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(110.0), elevation: Degrees(0.0), is_lfe: false };
+/// ITU-R BS.2051 `M-135`: Middle layer, -135° azimuth (Rear Right / `Rrs` / `BR`).
+pub(crate) const SP_MM135: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(-135.0), elevation: Degrees(0.0), is_lfe: false };
+/// ITU-R BS.2051 `M+135`: Middle layer, +135° azimuth (Rear Left / `Lrs` / `BL`).
+pub(crate) const SP_MP135: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(135.0), elevation: Degrees(0.0), is_lfe: false };
+/// ITU-R BS.2051 `M+180`: Middle layer, 180° azimuth (Back Center / `BC`).
+pub(crate) const SP_MP180: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(180.0), elevation: Degrees(0.0), is_lfe: false };
+
+/// ITU-R BS.2051 `U+000`: Upper layer (+30° elevation), 0° azimuth (Top Front Center / `TpFC`).
+pub(crate) const SP_UP000: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(0.0), elevation: Degrees(30.0), is_lfe: false };
+/// ITU-R BS.2051 `U-030`: Upper layer (+30° elevation), -30° azimuth (Right Top Front / `Rtf`).
+pub(crate) const SP_UM030: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(-30.0), elevation: Degrees(30.0), is_lfe: false };
+/// ITU-R BS.2051 `U+030`: Upper layer (+30° elevation), +30° azimuth (Left Top Front / `Ltf`).
+pub(crate) const SP_UP030: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(30.0), elevation: Degrees(30.0), is_lfe: false };
+/// ITU-R BS.2051 `U-045`: Upper layer (+30° elevation), -45° azimuth (Right Top Front / `Rtf` /
+/// `TpFR`).
+pub(crate) const SP_UM045: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(-45.0), elevation: Degrees(30.0), is_lfe: false };
+/// ITU-R BS.2051 `U+045`: Upper layer (+30° elevation), +45° azimuth (Left Top Front / `Ltf` /
+/// `TpFL`).
+pub(crate) const SP_UP045: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(45.0), elevation: Degrees(30.0), is_lfe: false };
+/// ITU-R BS.2051 `U-090`: Upper layer (+30° elevation), -90° azimuth (Top Side Right / `TpSiR`).
+pub(crate) const SP_UM090: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(-90.0), elevation: Degrees(30.0), is_lfe: false };
+/// ITU-R BS.2051 `U+090`: Upper layer (+30° elevation), +90° azimuth (Top Side Left / `TpSiL`).
+pub(crate) const SP_UP090: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(90.0), elevation: Degrees(30.0), is_lfe: false };
+/// ITU-R BS.2051 `U-110`: Upper layer (+30° elevation), -110° azimuth (Right Top Rear / `Rtr`).
+pub(crate) const SP_UM110: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(-110.0), elevation: Degrees(30.0), is_lfe: false };
+/// ITU-R BS.2051 `U+110`: Upper layer (+30° elevation), +110° azimuth (Left Top Rear / `Ltr`).
+pub(crate) const SP_UP110: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(110.0), elevation: Degrees(30.0), is_lfe: false };
+/// ITU-R BS.2051 `U-135`: Upper layer (+30° elevation), -135° azimuth (Right Top Back / `Rtb` /
+/// `TpBR`).
+pub(crate) const SP_UM135: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(-135.0), elevation: Degrees(30.0), is_lfe: false };
+/// ITU-R BS.2051 `U+135`: Upper layer (+30° elevation), +135° azimuth (Left Top Back / `Ltb` /
+/// `TpBL`).
+pub(crate) const SP_UP135: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(135.0), elevation: Degrees(30.0), is_lfe: false };
+/// ITU-R BS.2051 `U+180`: Upper layer (+30° elevation), 180° azimuth (Top Back Center / `TpBC`).
+pub(crate) const SP_UP180: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(180.0), elevation: Degrees(30.0), is_lfe: false };
+
+/// ITU-R BS.2051 `U+180` (45° elevation): Back Center Height for Sound System F.
+pub(crate) const SP_UHP180: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(180.0), elevation: Degrees(45.0), is_lfe: false };
+
+/// ITU-R BS.2051 `B+000`: Bottom layer (-30° elevation), 0° azimuth (Bottom Front Center / `BtFC`).
+pub(crate) const SP_BP000: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(0.0), elevation: Degrees(-30.0), is_lfe: false };
+/// ITU-R BS.2051 `B-045`: Bottom layer (-30° elevation), -45° azimuth (Bottom Front Right /
+/// `BtFR`).
+pub(crate) const SP_BM045: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(-45.0), elevation: Degrees(-30.0), is_lfe: false };
+/// ITU-R BS.2051 `B+045`: Bottom layer (-30° elevation), +45° azimuth (Bottom Front Left / `BtFL`).
+pub(crate) const SP_BP045: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(45.0), elevation: Degrees(-30.0), is_lfe: false };
+/// ITU-R BS.2051 `B-135`: Bottom layer (-30° elevation), -135° azimuth (Bottom Back Right /
+/// `BtBR`).
+pub(crate) const SP_BM135: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(-135.0), elevation: Degrees(-30.0), is_lfe: false };
+/// ITU-R BS.2051 `B+135`: Bottom layer (-30° elevation), +135° azimuth (Bottom Back Left / `BtBL`).
+pub(crate) const SP_BP135: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(135.0), elevation: Degrees(-30.0), is_lfe: false };
+
+/// ITU-R BS.2051 `T+000`: Top layer (+90° elevation), 0° azimuth (Top Center / Voice of God /
+/// `TpC`).
+pub(crate) const SP_TP000: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(0.0), elevation: Degrees(90.0), is_lfe: false };
+/// Single Low-Frequency Effects (LFE) channel at 0° azimuth, -30° elevation.
+pub(crate) const SP_LFE: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(0.0), elevation: Degrees(-30.0), is_lfe: true };
+/// Primary Low-Frequency Effects (`LFE1`) channel at +45° azimuth, -30° elevation.
+pub(crate) const SP_LFE1: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(45.0), elevation: Degrees(-30.0), is_lfe: true };
+/// Secondary Low-Frequency Effects (`LFE2`) channel at -45° azimuth, -30° elevation.
+pub(crate) const SP_LFE2: SpeakerPosition =
+    SpeakerPosition { azimuth: Degrees(-45.0), elevation: Degrees(-30.0), is_lfe: true };
 
 /// Target output loudspeaker and headphone layouts supported by the renderer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -69,25 +205,30 @@ impl OutputLayout {
 
     /// Returns the number of output channels for this layout.
     pub fn channels(&self) -> ChannelCount {
-        let count = match self {
-            Self::Mono => 1,
-            Self::Stereo => 2,
-            Self::Layout51 => 6,
-            Self::Layout512 => 8,
-            Self::Layout514 => 10,
-            Self::Layout71 => 8,
-            Self::Layout712 => 10,
-            Self::Layout714 => 12,
-            Self::Layout312 => 6,
-            Self::Layout916 => 16,
-            Self::LayoutA293 => 24,
-            Self::Layout7154 => 17,
-            Self::SoundSystemE451 => 11,
-            Self::SoundSystemF370 => 12,
-            Self::SoundSystemG490 => 14,
-            Self::Binaural => 2,
-        };
+        let count = self.olr_speakers().map_or(2, <[SpeakerPosition]>::len);
         ChannelCount::new(count).unwrap()
+    }
+
+    /// Returns the OLR loudspeaker positions for this output layout, or `None` for binaural.
+    pub(crate) fn olr_speakers(&self) -> Option<&'static [SpeakerPosition]> {
+        if let Ok(input_layout) = InputLayout::try_from(*self) {
+            return input_layout.speakers();
+        }
+        match self {
+            Self::SoundSystemE451 => Some(&[
+                SP_MP030, SP_MM030, SP_MP000, SP_LFE, SP_MP110, SP_MM110, SP_UP030, SP_UM030,
+                SP_UP110, SP_UM110, SP_BP000,
+            ]),
+            Self::SoundSystemF370 => Some(&[
+                SP_MP000, SP_MP030, SP_MM030, SP_UP045, SP_UM045, SP_MP090, SP_MM090, SP_MP135,
+                SP_MM135, SP_UHP180, SP_LFE1, SP_LFE2,
+            ]),
+            Self::SoundSystemG490 => Some(&[
+                SP_MP030, SP_MM030, SP_MP000, SP_LFE, SP_MP090, SP_MM090, SP_MP135, SP_MM135,
+                SP_UP045, SP_UM045, SP_UP135, SP_UM135, SP_MP025, SP_MM025,
+            ]),
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -174,39 +315,70 @@ impl InputLayout {
 
     /// Returns the number of input channels for this layout.
     pub fn channels(&self) -> ChannelCount {
-        let count = match self {
-            Self::Mono => 1,
-            Self::Stereo => 2,
-            Self::Layout51 => 6,
-            Self::Layout512 => 8,
-            Self::Layout514 => 10,
-            Self::Layout71 => 8,
-            Self::Layout712 => 10,
-            Self::Layout714 => 12,
-            Self::Layout312 => 6,
-            Self::Layout916 => 16,
-            Self::LayoutA293 => 24,
-            Self::Layout7154 => 17,
-            Self::Binaural => 2,
-            Self::Lfe => 1,
-            Self::StereoS => 2,
-            Self::StereoSs => 2,
-            Self::StereoRs => 2,
-            Self::StereoTf => 2,
-            Self::StereoTb => 2,
-            Self::Top4ch => 4,
-            Self::ThreeCh => 3,
-            Self::StereoF => 2,
-            Self::StereoSi => 2,
-            Self::StereoTpsi => 2,
-            Self::Top6ch => 6,
-            Self::LfePair => 2,
-            Self::Bottom3ch => 3,
-            Self::Bottom4ch => 4,
-            Self::Top1ch => 1,
-            Self::Top5ch => 5,
-        };
+        let count = self.speakers().map_or(2, <[SpeakerPosition]>::len);
         ChannelCount::new(count).unwrap()
+    }
+
+    /// Returns the standard ITU-R BS.2051 loudspeaker positions for this input layout, or `None`
+    /// for binaural.
+    pub(crate) fn speakers(&self) -> Option<&'static [SpeakerPosition]> {
+        let speakers: &'static [SpeakerPosition] = match self {
+            Self::Binaural => return None,
+            Self::Mono => &[SP_MP000],
+            Self::Stereo => &[SP_MP030, SP_MM030],
+            Self::Layout51 => &[SP_MP030, SP_MM030, SP_MP000, SP_LFE, SP_MP110, SP_MM110],
+            Self::Layout512 => {
+                &[SP_MP030, SP_MM030, SP_MP000, SP_LFE, SP_MP110, SP_MM110, SP_UP030, SP_UM030]
+            }
+            Self::Layout514 => &[
+                SP_MP030, SP_MM030, SP_MP000, SP_LFE, SP_MP110, SP_MM110, SP_UP030, SP_UM030,
+                SP_UP110, SP_UM110,
+            ],
+            Self::Layout71 => {
+                &[SP_MP030, SP_MM030, SP_MP000, SP_LFE, SP_MP090, SP_MM090, SP_MP135, SP_MM135]
+            }
+            Self::Layout712 => &[
+                SP_MP030, SP_MM030, SP_MP000, SP_LFE, SP_MP090, SP_MM090, SP_MP135, SP_MM135,
+                SP_UP045, SP_UM045,
+            ],
+            Self::Layout714 => &[
+                SP_MP030, SP_MM030, SP_MP000, SP_LFE, SP_MP090, SP_MM090, SP_MP135, SP_MM135,
+                SP_UP045, SP_UM045, SP_UP135, SP_UM135,
+            ],
+            Self::Layout312 => &[SP_MP030, SP_MM030, SP_MP000, SP_LFE, SP_UP045, SP_UM045],
+            Self::Layout916 => &[
+                SP_MP060, SP_MM060, SP_MP000, SP_LFE1, SP_MP135, SP_MM135, SP_MP030, SP_MM030,
+                SP_MP090, SP_MM090, SP_UP045, SP_UM045, SP_UP135, SP_UM135, SP_UP090, SP_UM090,
+            ],
+            Self::LayoutA293 => &[
+                SP_MP060, SP_MM060, SP_MP000, SP_LFE1, SP_MP135, SP_MM135, SP_MP030, SP_MM030,
+                SP_MP180, SP_LFE2, SP_MP090, SP_MM090, SP_UP045, SP_UM045, SP_UP000, SP_TP000,
+                SP_UP135, SP_UM135, SP_UP090, SP_UM090, SP_UP180, SP_BP000, SP_BP045, SP_BM045,
+            ],
+            Self::Layout7154 => &[
+                SP_MP030, SP_MM030, SP_MP000, SP_LFE, SP_MP090, SP_MM090, SP_MP135, SP_MM135,
+                SP_UP045, SP_UM045, SP_TP000, SP_UP135, SP_UM135, SP_BP045, SP_BM045, SP_BP135,
+                SP_BM135,
+            ],
+            Self::Lfe => &[SP_LFE],
+            Self::StereoS => &[SP_MP110, SP_MM110],
+            Self::StereoSs => &[SP_MP090, SP_MM090],
+            Self::StereoRs => &[SP_MP135, SP_MM135],
+            Self::StereoTf => &[SP_UP045, SP_UM045],
+            Self::StereoTb => &[SP_UP135, SP_UM135],
+            Self::Top4ch => &[SP_UP045, SP_UM045, SP_UP135, SP_UM135],
+            Self::ThreeCh => &[SP_MP030, SP_MM030, SP_MP000],
+            Self::StereoF => &[SP_MP060, SP_MM060],
+            Self::StereoSi => &[SP_MP090, SP_MM090],
+            Self::StereoTpsi => &[SP_UP090, SP_UM090],
+            Self::Top6ch => &[SP_UP045, SP_UM045, SP_UP135, SP_UM135, SP_UP090, SP_UM090],
+            Self::LfePair => &[SP_LFE1, SP_LFE2],
+            Self::Bottom3ch => &[SP_BP000, SP_BP045, SP_BM045],
+            Self::Bottom4ch => &[SP_BP045, SP_BM045, SP_BP135, SP_BM135],
+            Self::Top1ch => &[SP_TP000],
+            Self::Top5ch => &[SP_UP045, SP_UM045, SP_TP000, SP_UP135, SP_UM135],
+        };
+        Some(speakers)
     }
 }
 
@@ -347,5 +519,20 @@ mod test {
         expect_that!(converted, ok(eq(OutputLayout::Layout512)));
         expect_that!(converted_binaural, ok(eq(OutputLayout::Binaural)));
         expect_that!(rejected_subset, err(eq(OarError::InvalidParameter)));
+    }
+
+    #[gtest]
+    fn olr_speakers_returns_expected_positions_and_none_for_binaural() {
+        let stereo = OutputLayout::Stereo.olr_speakers().unwrap();
+        let layout51 = OutputLayout::Layout51.olr_speakers().unwrap();
+        let f370 = OutputLayout::SoundSystemF370.olr_speakers().unwrap();
+        let binaural = OutputLayout::Binaural.olr_speakers();
+
+        expect_that!(stereo.len(), eq(2));
+        expect_that!(stereo[0].is_lfe, eq(false));
+        expect_that!(layout51.len(), eq(6));
+        expect_that!(layout51.iter().filter(|s| s.is_lfe).count(), eq(1));
+        expect_that!(f370[9], eq(SP_UHP180));
+        expect_that!(binaural, none());
     }
 }

@@ -28,7 +28,6 @@ pub const SENTINEL_ANGLE_DEGREES: f32 = 361.0;
 pub mod dbap;
 pub mod gain_calculator;
 pub mod interpret_object_metadata;
-pub mod layout;
 pub mod object_renderer;
 pub mod processing_block;
 pub mod vbap;

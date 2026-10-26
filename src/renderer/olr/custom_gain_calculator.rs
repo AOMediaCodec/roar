@@ -18,10 +18,10 @@
 //! panning within each layer using a combination of VBAP and DBAP.
 
 use crate::common::definitions::{Degrees, Distance, OarError, Radians, MAX_OUTPUT_CHANNEL_COUNT};
+use crate::common::layout::SpeakerPosition;
 use crate::renderer::olr::convex_hull::SpeakerNode;
 use crate::renderer::olr::dbap::DbapPanner;
 use crate::renderer::olr::gain_calculator::{GainCalculator, VogPanner};
-use crate::renderer::olr::layout::{get_layout, get_layout_without_lfe, SpeakerLayout};
 use crate::renderer::olr::vbap_2d::VbapPanner2D;
 use crate::renderer::olr::SENTINEL_ANGLE_DEGREES;
 
@@ -230,8 +230,8 @@ struct LayerInfo {
 /// and a combination of VBAP and DBAP panning in the horizontal plane of each active layer.
 #[derive(Debug)]
 pub struct CustomGainCalculator {
-    layout: &'static SpeakerLayout,
-    layout_wo_lfe: &'static SpeakerLayout,
+    speakers: &'static [SpeakerPosition],
+    num_speakers_without_lfe: usize,
     layers: Vec<LayerInfo>,
     layerwise_panner: LayerwisePanner,
     speaker_indices: Vec<usize>,
@@ -243,17 +243,16 @@ impl CustomGainCalculator {
     /// # Errors
     /// Returns `OarError::InvalidParameter` if the speaker layout is unsupported or missing.
     pub fn new(layout_enum: crate::common::definitions::OutputLayout) -> Result<Self, OarError> {
-        let layout = get_layout(layout_enum).ok_or(OarError::InvalidParameter)?;
-        if layout.speakers.len() > MAX_OUTPUT_CHANNEL_COUNT {
+        let speakers = layout_enum.olr_speakers().ok_or(OarError::InvalidParameter)?;
+        if speakers.len() > MAX_OUTPUT_CHANNEL_COUNT {
             return Err(OarError::NotSupported);
         }
-        let layout_wo_lfe =
-            get_layout_without_lfe(layout_enum).ok_or(OarError::InvalidParameter)?;
+        let num_speakers_without_lfe = speakers.iter().filter(|sp| !sp.is_lfe).count();
 
         let mut unique_elevations: Vec<f32> = Vec::new();
-        for sp in layout_wo_lfe.speakers {
-            if !unique_elevations.iter().any(|&el| (el - sp.elevation).abs() < 1e-6) {
-                unique_elevations.push(sp.elevation);
+        for sp in speakers.iter().filter(|sp| !sp.is_lfe) {
+            if !unique_elevations.iter().any(|&el| (el - sp.elevation.0).abs() < 1e-6) {
+                unique_elevations.push(sp.elevation.0);
             }
         }
 
@@ -261,11 +260,11 @@ impl CustomGainCalculator {
         for &el in &unique_elevations {
             let mut layer_speakers = Vec::new();
             let mut speaker_indices = Vec::new();
-            for (j, sp) in layout_wo_lfe.speakers.iter().enumerate() {
-                if (sp.elevation - el).abs() < 1e-6 {
+            for (j, sp) in speakers.iter().filter(|sp| !sp.is_lfe).enumerate() {
+                if (sp.elevation.0 - el).abs() < 1e-6 {
                     layer_speakers.push(SpeakerNode {
-                        x: sp.azimuth,
-                        y: sp.elevation,
+                        x: sp.azimuth.0,
+                        y: sp.elevation.0,
                         index: 0, // Will be set below
                     });
                     speaker_indices.push(j);
@@ -305,11 +304,11 @@ impl CustomGainCalculator {
 
         let ref_layers = unique_elevations.iter().map(|&el| Degrees(el)).collect::<Vec<_>>();
         let layerwise_panner = LayerwisePanner::new(ref_layers);
-        let speaker_indices = (0..layout.speakers.len()).collect();
+        let speaker_indices = (0..speakers.len()).collect();
 
         Ok(CustomGainCalculator {
-            layout,
-            layout_wo_lfe,
+            speakers,
+            num_speakers_without_lfe,
             layers,
             layerwise_panner,
             speaker_indices,
@@ -340,13 +339,13 @@ impl GainCalculator for CustomGainCalculator {
         distance: Distance,
         gains: &mut [f32],
     ) -> Result<(), OarError> {
-        let n = self.layout.speakers.len();
+        let n = self.speakers.len();
         if gains.len() < n {
             return Err(OarError::InvalidParameter);
         }
         gains[..n].fill(0.0);
 
-        let n_wo_lfe = self.layout_wo_lfe.speakers.len();
+        let n_wo_lfe = self.num_speakers_without_lfe;
         let mut gains_wo_lfe = [0.0f32; MAX_OUTPUT_CHANNEL_COUNT];
 
         let mut layer_gains = self.layerwise_panner.calculate_gains(elevation);
@@ -472,8 +471,8 @@ impl GainCalculator for CustomGainCalculator {
         let gains_wo_lfe_norm = linalg_norm(&gains_wo_lfe[..n_wo_lfe]);
 
         let mut j = 0;
-        for (i, gain) in gains.iter_mut().enumerate().take(self.layout.speakers.len()) {
-            let sp = &self.layout.speakers[i];
+        for (i, gain) in gains.iter_mut().enumerate().take(self.speakers.len()) {
+            let sp = &self.speakers[i];
             if !sp.is_lfe {
                 if gains_wo_lfe_norm != 0.0 {
                     *gain = gains_wo_lfe[j] / gains_wo_lfe_norm;
@@ -490,7 +489,7 @@ impl GainCalculator for CustomGainCalculator {
     }
 
     fn gains_count(&self) -> usize {
-        self.layout.speakers.len()
+        self.speakers.len()
     }
 
     fn speaker_indices(&self) -> &[usize] {
