@@ -18,8 +18,8 @@
 use crate::common::definitions::ChannelCount;
 use crate::common::definitions::{
     AudioElementConfig, Config, Decibels, DownmixMode, Gain, GroupId, HeadphonesRenderingMode,
-    Layout, LinearGain, OarError, ObjectPosition, PlanarBufferMut, PlanarBufferRef, Quaternion,
-    Samples,
+    LinearGain, OarError, ObjectPosition, OutputLayout, PlanarBufferMut, PlanarBufferRef,
+    Quaternion, Samples,
 };
 use crate::limiter::oar_limiter::OarLimiter;
 use crate::renderer::audio_elements_renderer::AudioElementsRenderer;
@@ -58,18 +58,18 @@ pub(crate) struct ActiveRenderer {
 ///
 /// ```
 /// use aom_roar::{
-///     AudioElementConfig, ChannelBasedConfig, Config, Layout, PlanarBufferMut, PlanarBufferRef,
-///     RoarRenderer, SampleRate, Samples,
+///     AudioElementConfig, ChannelBasedConfig, Config, InputLayout, OutputLayout, PlanarBufferMut,
+///     PlanarBufferRef, RoarRenderer, SampleRate, Samples,
 /// };
 ///
 /// let samples = Samples::new(256).unwrap();
-/// let config = Config::new(Layout::Stereo, samples, SampleRate::new(48000).unwrap()).unwrap();
+/// let config = Config::new(OutputLayout::Stereo, samples, SampleRate::new(48000).unwrap()).unwrap();
 ///
 /// let mut rdr = RoarRenderer::create(&config).unwrap();
 /// let group_id = rdr.add_audio_group().unwrap();
 ///
 /// let element_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-///     layout: Layout::Stereo,
+///     layout: InputLayout::Stereo,
 ///     downmix_info: None,
 ///     rendering_config: None,
 /// });
@@ -206,7 +206,7 @@ impl RoarRenderer {
 
     /// Enables or disables listener head tracking.
     pub fn enable_head_tracking(&mut self, enable: bool) -> Result<(), OarError> {
-        if self.config.output_layout() != Layout::Binaural {
+        if self.config.output_layout() != OutputLayout::Binaural {
             return Err(OarError::NotSupported);
         }
         self.head_tracking_enabled = enable;
@@ -321,7 +321,7 @@ impl RoarRenderer {
     }
 
     fn is_binaural_route_for_config(&self, config: &AudioElementConfig) -> bool {
-        if self.config.output_layout() != Layout::Binaural {
+        if self.config.output_layout() != OutputLayout::Binaural {
             return false;
         }
         if let AudioElementConfig::ChannelBased(cbc) = config
@@ -352,11 +352,11 @@ impl RoarRenderer {
         &self,
         id: u32,
         config: &AudioElementConfig,
-        target_layout: Layout,
+        target_layout: OutputLayout,
     ) -> Result<Box<dyn AudioRenderer>, OarError> {
         let sub: Box<dyn AudioRenderer> = match config {
             AudioElementConfig::ChannelBased(cbc) => {
-                let use_dm = target_layout != Layout::Binaural
+                let use_dm = target_layout != OutputLayout::Binaural
                     && cbc.downmix_info.is_some()
                     && cbc.layout.is_valid_downmix_to(target_layout);
 
@@ -410,7 +410,7 @@ impl RoarRenderer {
             return Err(OarError::Busy);
         }
 
-        let is_binaural = self.config.output_layout() == Layout::Binaural;
+        let is_binaural = self.config.output_layout() == OutputLayout::Binaural;
         let is_binaural_route = self.is_binaural_route_for_config(config);
 
         if is_binaural_route {
@@ -436,7 +436,7 @@ impl RoarRenderer {
             }
         } else {
             let target_layout =
-                if is_binaural { Layout::Stereo } else { self.config.output_layout() };
+                if is_binaural { OutputLayout::Stereo } else { self.config.output_layout() };
             let sub = self.instantiate_sub_renderer(id, config, target_layout)?;
             let renderers = self.group_renderers.entry(group_id).or_default();
             renderers.push(ActiveRenderer { element_id: Some(id), renderer: sub });
@@ -556,7 +556,7 @@ impl RoarRenderer {
                     let mut input_idx = 0;
 
                     for &id in &self.active_element_ids {
-                        let is_binaural_route = if output_layout != Layout::Binaural {
+                        let is_binaural_route = if output_layout != OutputLayout::Binaural {
                             false
                         } else {
                             let config =
@@ -706,7 +706,7 @@ impl RoarRenderer {
         if !self.active_elements.contains_key(&id) {
             return Err(OarError::InvalidParameter);
         }
-        if self.config.output_layout() == Layout::Binaural {
+        if self.config.output_layout() == OutputLayout::Binaural {
             return Err(OarError::NotSupported);
         }
         if !self.element_supports_downmix(id) {
@@ -743,7 +743,7 @@ impl RoarRenderer {
     /// Returns the number of channels for a given element ID.
     /// Handles Binaural group-sum mapping.
     pub fn element_channels(&self, id: u32) -> Option<ChannelCount> {
-        if self.config.output_layout() == Layout::Binaural {
+        if self.config.output_layout() == OutputLayout::Binaural {
             let group_id = self.element_to_group.get(&id)?;
             let sum: usize = self
                 .element_to_group
@@ -763,7 +763,7 @@ impl RoarRenderer {
         };
         match config {
             AudioElementConfig::ChannelBased(cbc) => {
-                self.config.output_layout() != Layout::Binaural
+                self.config.output_layout() != OutputLayout::Binaural
                     && cbc.downmix_info.is_some()
                     && cbc.layout.is_valid_downmix_to(self.config.output_layout())
             }

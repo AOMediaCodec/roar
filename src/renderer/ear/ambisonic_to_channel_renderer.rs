@@ -17,10 +17,9 @@
 //! Direct Rust port of `liboar/src/renderer/ear/h2m_rdr.c`.
 
 use crate::common::definitions::{
-    HighOrderAmbisonics, Layout, OarError, PlanarBufferMut, PlanarBufferRef,
+    HighOrderAmbisonics, OarError, OutputLayout, PlanarBufferMut, PlanarBufferRef,
     MAX_OUTPUT_CHANNEL_COUNT,
 };
-use crate::renderer::ear::channel_to_channel_renderer::IamfPredefinedSpLayout;
 use crate::renderer::ear::matrix_renderer::{matrix_render, MatrixView};
 
 /// Matrix entry table structure associating input HOA order with target loudspeaker layout
@@ -30,7 +29,7 @@ pub struct H2mRdr {
     /// Input Ambisonic order (`HighOrderAmbisonics`).
     pub in_order: HighOrderAmbisonics,
     /// Target output loudspeaker system (`BS2051`).
-    pub out_system: Layout,
+    pub out_system: OutputLayout,
     /// Total number of physical output channels (including LFE slots).
     pub channels: usize,
     /// First LFE slot index (`-1` if none).
@@ -1275,86 +1274,86 @@ pub static H4A_IAMF7154: [f32; 400] = [
 ];
 #[rustfmt::skip]
 pub static H2M_RDR_TAB: [H2mRdr; 80] = [
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::Stereo, channels: 2, lfe1: -1, lfe2: -1, mat: &ZOA_BS020, m: 1, n: 2 },
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::Layout51, channels: 6, lfe1: 3, lfe2: -1, mat: &ZOA_BS050, m: 1, n: 5 },
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::Layout512, channels: 8, lfe1: 3, lfe2: -1, mat: &ZOA_BS250, m: 1, n: 7 },
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::Layout514, channels: 10, lfe1: 3, lfe2: -1, mat: &ZOA_BS450, m: 1, n: 9 },
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::SoundSystemE451, channels: 11, lfe1: 3, lfe2: -1, mat: &ZOA_BS451, m: 1, n: 10 },
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::SoundSystemF370, channels: 12, lfe1: 10, lfe2: 11, mat: &ZOA_BS370, m: 1, n: 10 },
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::SoundSystemG490, channels: 14, lfe1: 3, lfe2: -1, mat: &ZOA_BS490, m: 1, n: 13 },
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::LayoutA293, channels: 24, lfe1: 3, lfe2: 9, mat: &ZOA_BS9A3, m: 1, n: 22 },
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::Layout71, channels: 8, lfe1: 3, lfe2: -1, mat: &ZOA_BS070, m: 1, n: 7 },
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::Layout714, channels: 12, lfe1: 3, lfe2: -1, mat: &ZOA_BS470, m: 1, n: 11 },
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::Layout312, channels: 6, lfe1: 3, lfe2: -1, mat: &ZOA_IAMF312, m: 1, n: 5 },
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::Layout712, channels: 10, lfe1: 3, lfe2: -1, mat: &ZOA_IAMF712, m: 1, n: 9 },
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::Binaural, channels: 2, lfe1: -1, lfe2: -1, mat: &ZOA_BS020, m: 1, n: 2 },
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::Mono, channels: 1, lfe1: -1, lfe2: -1, mat: &ZOA_MONO, m: 1, n: 1 },
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::Layout916, channels: 16, lfe1: 3, lfe2: -1, mat: &ZOA_IAMF916, m: 1, n: 15 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::Stereo, channels: 2, lfe1: -1, lfe2: -1, mat: &FOA_BS020, m: 4, n: 2 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::Layout51, channels: 6, lfe1: 3, lfe2: -1, mat: &FOA_BS050, m: 4, n: 5 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::Layout512, channels: 8, lfe1: 3, lfe2: -1, mat: &FOA_BS250, m: 4, n: 7 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::Layout514, channels: 10, lfe1: 3, lfe2: -1, mat: &FOA_BS450, m: 4, n: 9 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::SoundSystemE451, channels: 11, lfe1: 3, lfe2: -1, mat: &FOA_BS451, m: 4, n: 10 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::SoundSystemF370, channels: 12, lfe1: 10, lfe2: 11, mat: &FOA_BS370, m: 4, n: 10 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::SoundSystemG490, channels: 14, lfe1: 3, lfe2: -1, mat: &FOA_BS490, m: 4, n: 13 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::LayoutA293, channels: 24, lfe1: 3, lfe2: 9, mat: &FOA_BS9A3, m: 4, n: 22 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::Layout71, channels: 8, lfe1: 3, lfe2: -1, mat: &FOA_BS070, m: 4, n: 7 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::Layout714, channels: 12, lfe1: 3, lfe2: -1, mat: &FOA_BS470, m: 4, n: 11 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::Layout312, channels: 6, lfe1: 3, lfe2: -1, mat: &FOA_IAMF312, m: 4, n: 5 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::Layout712, channels: 10, lfe1: 3, lfe2: -1, mat: &FOA_IAMF712, m: 4, n: 9 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::Binaural, channels: 2, lfe1: -1, lfe2: -1, mat: &FOA_BS020, m: 4, n: 2 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::Mono, channels: 1, lfe1: -1, lfe2: -1, mat: &FOA_MONO, m: 4, n: 1 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::Layout916, channels: 16, lfe1: 3, lfe2: -1, mat: &FOA_IAMF916, m: 4, n: 15 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::Stereo, channels: 2, lfe1: -1, lfe2: -1, mat: &SOA_BS020, m: 9, n: 2 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::Layout51, channels: 6, lfe1: 3, lfe2: -1, mat: &SOA_BS050, m: 9, n: 5 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::Layout512, channels: 8, lfe1: 3, lfe2: -1, mat: &SOA_BS250, m: 9, n: 7 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::Layout514, channels: 10, lfe1: 3, lfe2: -1, mat: &SOA_BS450, m: 9, n: 9 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::SoundSystemE451, channels: 11, lfe1: 3, lfe2: -1, mat: &SOA_BS451, m: 9, n: 10 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::SoundSystemF370, channels: 12, lfe1: 10, lfe2: 11, mat: &SOA_BS370, m: 9, n: 10 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::SoundSystemG490, channels: 14, lfe1: 3, lfe2: -1, mat: &SOA_BS490, m: 9, n: 13 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::LayoutA293, channels: 24, lfe1: 3, lfe2: 9, mat: &SOA_BS9A3, m: 9, n: 22 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::Layout71, channels: 8, lfe1: 3, lfe2: -1, mat: &SOA_BS070, m: 9, n: 7 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::Layout714, channels: 12, lfe1: 3, lfe2: -1, mat: &SOA_BS470, m: 9, n: 11 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::Layout312, channels: 6, lfe1: 3, lfe2: -1, mat: &SOA_IAMF312, m: 9, n: 5 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::Layout712, channels: 10, lfe1: 3, lfe2: -1, mat: &SOA_IAMF712, m: 9, n: 9 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::Binaural, channels: 2, lfe1: -1, lfe2: -1, mat: &SOA_BS020, m: 9, n: 2 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::Mono, channels: 1, lfe1: -1, lfe2: -1, mat: &SOA_MONO, m: 9, n: 1 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::Layout916, channels: 16, lfe1: 3, lfe2: -1, mat: &SOA_IAMF916, m: 9, n: 15 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::Stereo, channels: 2, lfe1: -1, lfe2: -1, mat: &TOA_BS020, m: 16, n: 2 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::Layout51, channels: 6, lfe1: 3, lfe2: -1, mat: &TOA_BS050, m: 16, n: 5 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::Layout512, channels: 8, lfe1: 3, lfe2: -1, mat: &TOA_BS250, m: 16, n: 7 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::Layout514, channels: 10, lfe1: 3, lfe2: -1, mat: &TOA_BS450, m: 16, n: 9 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::SoundSystemE451, channels: 11, lfe1: 3, lfe2: -1, mat: &TOA_BS451, m: 16, n: 10 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::SoundSystemF370, channels: 12, lfe1: 10, lfe2: 11, mat: &TOA_BS370, m: 16, n: 10 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::SoundSystemG490, channels: 14, lfe1: 3, lfe2: -1, mat: &TOA_BS490, m: 16, n: 13 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::LayoutA293, channels: 24, lfe1: 3, lfe2: 9, mat: &TOA_BS9A3, m: 16, n: 22 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::Layout71, channels: 8, lfe1: 3, lfe2: -1, mat: &TOA_BS070, m: 16, n: 7 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::Layout714, channels: 12, lfe1: 3, lfe2: -1, mat: &TOA_BS470, m: 16, n: 11 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::Layout312, channels: 6, lfe1: 3, lfe2: -1, mat: &TOA_IAMF312, m: 16, n: 5 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::Layout712, channels: 10, lfe1: 3, lfe2: -1, mat: &TOA_IAMF712, m: 16, n: 9 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::Binaural, channels: 2, lfe1: -1, lfe2: -1, mat: &TOA_BS020, m: 16, n: 2 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::Mono, channels: 1, lfe1: -1, lfe2: -1, mat: &TOA_MONO, m: 16, n: 1 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::Layout916, channels: 16, lfe1: 3, lfe2: -1, mat: &TOA_IAMF916, m: 16, n: 15 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::Stereo, channels: 2, lfe1: -1, lfe2: -1, mat: &H4A_BS020, m: 25, n: 2 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::Layout51, channels: 6, lfe1: 3, lfe2: -1, mat: &H4A_BS050, m: 25, n: 5 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::Layout512, channels: 8, lfe1: 3, lfe2: -1, mat: &H4A_BS250, m: 25, n: 7 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::Layout514, channels: 10, lfe1: 3, lfe2: -1, mat: &H4A_BS450, m: 25, n: 9 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::SoundSystemE451, channels: 11, lfe1: 3, lfe2: -1, mat: &H4A_BS451, m: 25, n: 10 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::SoundSystemF370, channels: 12, lfe1: 10, lfe2: 11, mat: &H4A_BS370, m: 25, n: 10 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::SoundSystemG490, channels: 14, lfe1: 3, lfe2: -1, mat: &H4A_BS490, m: 25, n: 13 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::LayoutA293, channels: 24, lfe1: 3, lfe2: 9, mat: &H4A_BS9A3, m: 25, n: 22 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::Layout71, channels: 8, lfe1: 3, lfe2: -1, mat: &H4A_BS070, m: 25, n: 7 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::Layout714, channels: 12, lfe1: 3, lfe2: -1, mat: &H4A_BS470, m: 25, n: 11 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::Layout312, channels: 6, lfe1: 3, lfe2: -1, mat: &H4A_IAMF312, m: 25, n: 5 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::Layout712, channels: 10, lfe1: 3, lfe2: -1, mat: &H4A_IAMF712, m: 25, n: 9 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::Binaural, channels: 2, lfe1: -1, lfe2: -1, mat: &H4A_BS020, m: 25, n: 2 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::Mono, channels: 1, lfe1: -1, lfe2: -1, mat: &H4A_MONO, m: 25, n: 1 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::Layout916, channels: 16, lfe1: 3, lfe2: -1, mat: &H4A_IAMF916, m: 25, n: 15 },
-    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: Layout::Layout7154, channels: 17, lfe1: 3, lfe2: -1, mat: &ZOA_IAMF7154, m: 1, n: 16 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: Layout::Layout7154, channels: 17, lfe1: 3, lfe2: -1, mat: &FOA_IAMF7154, m: 4, n: 16 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: Layout::Layout7154, channels: 17, lfe1: 3, lfe2: -1, mat: &SOA_IAMF7154, m: 9, n: 16 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: Layout::Layout7154, channels: 17, lfe1: 3, lfe2: -1, mat: &TOA_IAMF7154, m: 16, n: 16 },
-    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: Layout::Layout7154, channels: 17, lfe1: 3, lfe2: -1, mat: &H4A_IAMF7154, m: 25, n: 16 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::Stereo, channels: 2, lfe1: -1, lfe2: -1, mat: &ZOA_BS020, m: 1, n: 2 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::Layout51, channels: 6, lfe1: 3, lfe2: -1, mat: &ZOA_BS050, m: 1, n: 5 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::Layout512, channels: 8, lfe1: 3, lfe2: -1, mat: &ZOA_BS250, m: 1, n: 7 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::Layout514, channels: 10, lfe1: 3, lfe2: -1, mat: &ZOA_BS450, m: 1, n: 9 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::SoundSystemE451, channels: 11, lfe1: 3, lfe2: -1, mat: &ZOA_BS451, m: 1, n: 10 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::SoundSystemF370, channels: 12, lfe1: 10, lfe2: 11, mat: &ZOA_BS370, m: 1, n: 10 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::SoundSystemG490, channels: 14, lfe1: 3, lfe2: -1, mat: &ZOA_BS490, m: 1, n: 13 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::LayoutA293, channels: 24, lfe1: 3, lfe2: 9, mat: &ZOA_BS9A3, m: 1, n: 22 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::Layout71, channels: 8, lfe1: 3, lfe2: -1, mat: &ZOA_BS070, m: 1, n: 7 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::Layout714, channels: 12, lfe1: 3, lfe2: -1, mat: &ZOA_BS470, m: 1, n: 11 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::Layout312, channels: 6, lfe1: 3, lfe2: -1, mat: &ZOA_IAMF312, m: 1, n: 5 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::Layout712, channels: 10, lfe1: 3, lfe2: -1, mat: &ZOA_IAMF712, m: 1, n: 9 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::Binaural, channels: 2, lfe1: -1, lfe2: -1, mat: &ZOA_BS020, m: 1, n: 2 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::Mono, channels: 1, lfe1: -1, lfe2: -1, mat: &ZOA_MONO, m: 1, n: 1 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::Layout916, channels: 16, lfe1: 3, lfe2: -1, mat: &ZOA_IAMF916, m: 1, n: 15 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::Stereo, channels: 2, lfe1: -1, lfe2: -1, mat: &FOA_BS020, m: 4, n: 2 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::Layout51, channels: 6, lfe1: 3, lfe2: -1, mat: &FOA_BS050, m: 4, n: 5 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::Layout512, channels: 8, lfe1: 3, lfe2: -1, mat: &FOA_BS250, m: 4, n: 7 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::Layout514, channels: 10, lfe1: 3, lfe2: -1, mat: &FOA_BS450, m: 4, n: 9 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::SoundSystemE451, channels: 11, lfe1: 3, lfe2: -1, mat: &FOA_BS451, m: 4, n: 10 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::SoundSystemF370, channels: 12, lfe1: 10, lfe2: 11, mat: &FOA_BS370, m: 4, n: 10 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::SoundSystemG490, channels: 14, lfe1: 3, lfe2: -1, mat: &FOA_BS490, m: 4, n: 13 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::LayoutA293, channels: 24, lfe1: 3, lfe2: 9, mat: &FOA_BS9A3, m: 4, n: 22 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::Layout71, channels: 8, lfe1: 3, lfe2: -1, mat: &FOA_BS070, m: 4, n: 7 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::Layout714, channels: 12, lfe1: 3, lfe2: -1, mat: &FOA_BS470, m: 4, n: 11 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::Layout312, channels: 6, lfe1: 3, lfe2: -1, mat: &FOA_IAMF312, m: 4, n: 5 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::Layout712, channels: 10, lfe1: 3, lfe2: -1, mat: &FOA_IAMF712, m: 4, n: 9 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::Binaural, channels: 2, lfe1: -1, lfe2: -1, mat: &FOA_BS020, m: 4, n: 2 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::Mono, channels: 1, lfe1: -1, lfe2: -1, mat: &FOA_MONO, m: 4, n: 1 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::Layout916, channels: 16, lfe1: 3, lfe2: -1, mat: &FOA_IAMF916, m: 4, n: 15 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::Stereo, channels: 2, lfe1: -1, lfe2: -1, mat: &SOA_BS020, m: 9, n: 2 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::Layout51, channels: 6, lfe1: 3, lfe2: -1, mat: &SOA_BS050, m: 9, n: 5 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::Layout512, channels: 8, lfe1: 3, lfe2: -1, mat: &SOA_BS250, m: 9, n: 7 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::Layout514, channels: 10, lfe1: 3, lfe2: -1, mat: &SOA_BS450, m: 9, n: 9 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::SoundSystemE451, channels: 11, lfe1: 3, lfe2: -1, mat: &SOA_BS451, m: 9, n: 10 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::SoundSystemF370, channels: 12, lfe1: 10, lfe2: 11, mat: &SOA_BS370, m: 9, n: 10 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::SoundSystemG490, channels: 14, lfe1: 3, lfe2: -1, mat: &SOA_BS490, m: 9, n: 13 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::LayoutA293, channels: 24, lfe1: 3, lfe2: 9, mat: &SOA_BS9A3, m: 9, n: 22 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::Layout71, channels: 8, lfe1: 3, lfe2: -1, mat: &SOA_BS070, m: 9, n: 7 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::Layout714, channels: 12, lfe1: 3, lfe2: -1, mat: &SOA_BS470, m: 9, n: 11 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::Layout312, channels: 6, lfe1: 3, lfe2: -1, mat: &SOA_IAMF312, m: 9, n: 5 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::Layout712, channels: 10, lfe1: 3, lfe2: -1, mat: &SOA_IAMF712, m: 9, n: 9 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::Binaural, channels: 2, lfe1: -1, lfe2: -1, mat: &SOA_BS020, m: 9, n: 2 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::Mono, channels: 1, lfe1: -1, lfe2: -1, mat: &SOA_MONO, m: 9, n: 1 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::Layout916, channels: 16, lfe1: 3, lfe2: -1, mat: &SOA_IAMF916, m: 9, n: 15 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::Stereo, channels: 2, lfe1: -1, lfe2: -1, mat: &TOA_BS020, m: 16, n: 2 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::Layout51, channels: 6, lfe1: 3, lfe2: -1, mat: &TOA_BS050, m: 16, n: 5 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::Layout512, channels: 8, lfe1: 3, lfe2: -1, mat: &TOA_BS250, m: 16, n: 7 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::Layout514, channels: 10, lfe1: 3, lfe2: -1, mat: &TOA_BS450, m: 16, n: 9 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::SoundSystemE451, channels: 11, lfe1: 3, lfe2: -1, mat: &TOA_BS451, m: 16, n: 10 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::SoundSystemF370, channels: 12, lfe1: 10, lfe2: 11, mat: &TOA_BS370, m: 16, n: 10 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::SoundSystemG490, channels: 14, lfe1: 3, lfe2: -1, mat: &TOA_BS490, m: 16, n: 13 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::LayoutA293, channels: 24, lfe1: 3, lfe2: 9, mat: &TOA_BS9A3, m: 16, n: 22 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::Layout71, channels: 8, lfe1: 3, lfe2: -1, mat: &TOA_BS070, m: 16, n: 7 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::Layout714, channels: 12, lfe1: 3, lfe2: -1, mat: &TOA_BS470, m: 16, n: 11 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::Layout312, channels: 6, lfe1: 3, lfe2: -1, mat: &TOA_IAMF312, m: 16, n: 5 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::Layout712, channels: 10, lfe1: 3, lfe2: -1, mat: &TOA_IAMF712, m: 16, n: 9 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::Binaural, channels: 2, lfe1: -1, lfe2: -1, mat: &TOA_BS020, m: 16, n: 2 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::Mono, channels: 1, lfe1: -1, lfe2: -1, mat: &TOA_MONO, m: 16, n: 1 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::Layout916, channels: 16, lfe1: 3, lfe2: -1, mat: &TOA_IAMF916, m: 16, n: 15 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::Stereo, channels: 2, lfe1: -1, lfe2: -1, mat: &H4A_BS020, m: 25, n: 2 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::Layout51, channels: 6, lfe1: 3, lfe2: -1, mat: &H4A_BS050, m: 25, n: 5 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::Layout512, channels: 8, lfe1: 3, lfe2: -1, mat: &H4A_BS250, m: 25, n: 7 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::Layout514, channels: 10, lfe1: 3, lfe2: -1, mat: &H4A_BS450, m: 25, n: 9 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::SoundSystemE451, channels: 11, lfe1: 3, lfe2: -1, mat: &H4A_BS451, m: 25, n: 10 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::SoundSystemF370, channels: 12, lfe1: 10, lfe2: 11, mat: &H4A_BS370, m: 25, n: 10 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::SoundSystemG490, channels: 14, lfe1: 3, lfe2: -1, mat: &H4A_BS490, m: 25, n: 13 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::LayoutA293, channels: 24, lfe1: 3, lfe2: 9, mat: &H4A_BS9A3, m: 25, n: 22 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::Layout71, channels: 8, lfe1: 3, lfe2: -1, mat: &H4A_BS070, m: 25, n: 7 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::Layout714, channels: 12, lfe1: 3, lfe2: -1, mat: &H4A_BS470, m: 25, n: 11 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::Layout312, channels: 6, lfe1: 3, lfe2: -1, mat: &H4A_IAMF312, m: 25, n: 5 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::Layout712, channels: 10, lfe1: 3, lfe2: -1, mat: &H4A_IAMF712, m: 25, n: 9 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::Binaural, channels: 2, lfe1: -1, lfe2: -1, mat: &H4A_BS020, m: 25, n: 2 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::Mono, channels: 1, lfe1: -1, lfe2: -1, mat: &H4A_MONO, m: 25, n: 1 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::Layout916, channels: 16, lfe1: 3, lfe2: -1, mat: &H4A_IAMF916, m: 25, n: 15 },
+    H2mRdr { in_order: HighOrderAmbisonics::Zoa, out_system: OutputLayout::Layout7154, channels: 17, lfe1: 3, lfe2: -1, mat: &ZOA_IAMF7154, m: 1, n: 16 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order1, out_system: OutputLayout::Layout7154, channels: 17, lfe1: 3, lfe2: -1, mat: &FOA_IAMF7154, m: 4, n: 16 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order2, out_system: OutputLayout::Layout7154, channels: 17, lfe1: 3, lfe2: -1, mat: &SOA_IAMF7154, m: 9, n: 16 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order3, out_system: OutputLayout::Layout7154, channels: 17, lfe1: 3, lfe2: -1, mat: &TOA_IAMF7154, m: 16, n: 16 },
+    H2mRdr { in_order: HighOrderAmbisonics::Order4, out_system: OutputLayout::Layout7154, channels: 17, lfe1: 3, lfe2: -1, mat: &H4A_IAMF7154, m: 25, n: 16 },
 ];
 
 /// Retrieves the HOA-to-multichannel conversion matrix for a given input HOA order and output
@@ -1364,15 +1363,15 @@ pub static H2M_RDR_TAB: [H2mRdr; 80] = [
 ///
 /// # Parameters
 /// * `in_order`: Order of the input ambisonic sound field.
-/// * `out_layout`: Predefined output layout configuration.
+/// * `out_system`: Target output layout.
 /// * `out_matrix`: Target `H2mRdr` structure to populate on match.
 pub fn element_renderer_get_h2m_matrix(
     in_order: HighOrderAmbisonics,
-    out_layout: &IamfPredefinedSpLayout,
+    out_system: OutputLayout,
     out_matrix: &mut H2mRdr,
 ) -> Result<(), OarError> {
     for entry in H2M_RDR_TAB.iter() {
-        if entry.in_order == in_order && entry.out_system == out_layout.system {
+        if entry.in_order == in_order && entry.out_system == out_system {
             *out_matrix = *entry;
             return Ok(());
         }
@@ -1487,37 +1486,9 @@ mod tests {
 
     #[gtest]
     fn get_h2m_matrix_valid_hoa_order_and_layout_populates_matching_matrix() {
-        let out_layout = IamfPredefinedSpLayout { system: Layout::Stereo, lfe1: 0, lfe2: 0 };
         let mut out_matrix = H2mRdr {
             in_order: HighOrderAmbisonics::Zoa,
-            out_system: Layout::Mono,
-            channels: 0,
-            lfe1: 0,
-            lfe2: 0,
-            mat: &[],
-            m: 0,
-            n: 0,
-        };
-
-        let result =
-            element_renderer_get_h2m_matrix(HighOrderAmbisonics::Zoa, &out_layout, &mut out_matrix);
-
-        assert_ok!(result);
-        expect_that!(out_matrix.in_order, eq(HighOrderAmbisonics::Zoa));
-        expect_that!(out_matrix.out_system, eq(Layout::Stereo));
-        expect_that!(out_matrix.channels, eq(2));
-        expect_that!(out_matrix.lfe1, eq(-1));
-        expect_that!(out_matrix.lfe2, eq(-1));
-        expect_that!(out_matrix.m, eq(1));
-        expect_that!(out_matrix.n, eq(2));
-    }
-
-    #[gtest]
-    fn get_h2m_matrix_unsupported_combination_returns_error() {
-        let out_layout = IamfPredefinedSpLayout { system: Layout::StereoS, lfe1: 0, lfe2: 0 };
-        let mut out_matrix = H2mRdr {
-            in_order: HighOrderAmbisonics::Zoa,
-            out_system: Layout::StereoS,
+            out_system: OutputLayout::Mono,
             channels: 0,
             lfe1: 0,
             lfe2: 0,
@@ -1527,19 +1498,26 @@ mod tests {
         };
 
         let result = element_renderer_get_h2m_matrix(
-            HighOrderAmbisonics::Order2,
-            &out_layout,
+            HighOrderAmbisonics::Zoa,
+            OutputLayout::Stereo,
             &mut out_matrix,
         );
 
-        expect_that!(result, err(eq(OarError::NotSupported)));
+        assert_ok!(result);
+        expect_that!(out_matrix.in_order, eq(HighOrderAmbisonics::Zoa));
+        expect_that!(out_matrix.out_system, eq(OutputLayout::Stereo));
+        expect_that!(out_matrix.channels, eq(2));
+        expect_that!(out_matrix.lfe1, eq(-1));
+        expect_that!(out_matrix.lfe2, eq(-1));
+        expect_that!(out_matrix.m, eq(1));
+        expect_that!(out_matrix.n, eq(2));
     }
 
     #[gtest]
     fn render_h2m_zoa_to_stereo_no_lfe_produces_expected_scaled_outputs() {
         let h2m_matrix = H2mRdr {
             in_order: HighOrderAmbisonics::Zoa,
-            out_system: Layout::Stereo,
+            out_system: OutputLayout::Stereo,
             channels: 2,
             lfe1: -1,
             lfe2: -1,
@@ -1569,7 +1547,7 @@ mod tests {
     fn render_h2m_zoa_to_51_remaps_channels_and_zeroes_lfe_slot() {
         let h2m_matrix = H2mRdr {
             in_order: HighOrderAmbisonics::Zoa,
-            out_system: Layout::Layout51,
+            out_system: OutputLayout::Layout51,
             channels: 6,
             lfe1: 3,
             lfe2: -1,
@@ -1612,10 +1590,9 @@ mod tests {
 
     #[gtest]
     fn get_h2m_matrix_high_channel_count_populates_matching_matrix() {
-        let out_layout = IamfPredefinedSpLayout { system: Layout::LayoutA293, lfe1: 0, lfe2: 0 };
         let mut out_matrix = H2mRdr {
             in_order: HighOrderAmbisonics::Zoa,
-            out_system: Layout::Mono,
+            out_system: OutputLayout::Mono,
             channels: 0,
             lfe1: 0,
             lfe2: 0,
@@ -1626,13 +1603,13 @@ mod tests {
 
         let result = element_renderer_get_h2m_matrix(
             HighOrderAmbisonics::Order4,
-            &out_layout,
+            OutputLayout::LayoutA293,
             &mut out_matrix,
         );
 
         assert_ok!(result);
         expect_that!(out_matrix.in_order, eq(HighOrderAmbisonics::Order4));
-        expect_that!(out_matrix.out_system, eq(Layout::LayoutA293));
+        expect_that!(out_matrix.out_system, eq(OutputLayout::LayoutA293));
         expect_that!(out_matrix.channels, eq(24));
         expect_that!(out_matrix.lfe1, eq(3));
         expect_that!(out_matrix.lfe2, eq(9));
@@ -1644,7 +1621,7 @@ mod tests {
     fn render_h2m_zero_samples_succeeds_without_modifying_outputs() {
         let h2m_matrix = H2mRdr {
             in_order: HighOrderAmbisonics::Zoa,
-            out_system: Layout::Layout51,
+            out_system: OutputLayout::Layout51,
             channels: 6,
             lfe1: 3,
             lfe2: -1,
@@ -1682,7 +1659,7 @@ mod tests {
     fn render_h2m_lfe2_at_high_index_remaps_and_zeroes() {
         let h2m_matrix = H2mRdr {
             in_order: HighOrderAmbisonics::Zoa,
-            out_system: Layout::LayoutA293,
+            out_system: OutputLayout::LayoutA293,
             channels: 24,
             lfe1: 3,
             lfe2: 9,

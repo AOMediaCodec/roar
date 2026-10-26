@@ -63,11 +63,11 @@ pub use common::gains::Gain;
 // Higher Order Ambisonics
 pub use common::hoa::HighOrderAmbisonics;
 
-// IA Channel Layout
+// IAMF Channels
 pub use common::ia_channel::IAChannel;
 
 // Layouts
-pub use common::layout::Layout;
+pub use common::layout::{InputLayout, OutputLayout};
 
 // Object Positions
 pub use common::object_positions::ObjectPosition;

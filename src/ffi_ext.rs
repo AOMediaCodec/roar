@@ -102,8 +102,8 @@ impl oar_audio_element_config_t {
     {
         use crate::common::definitions::{
             AudioElementConfig, BinauralFilterProfile, ChannelBasedConfig, DownmixInfo,
-            ElementRenderingConfig, HeadphonesRenderingMode, HighOrderAmbisonics, Layout, OarError,
-            ObjectBasedConfig, SceneBasedConfig,
+            ElementRenderingConfig, HeadphonesRenderingMode, HighOrderAmbisonics, InputLayout,
+            OarError, ObjectBasedConfig, SceneBasedConfig,
         };
 
         let rendering_config = if (self.parameters.flags
@@ -143,13 +143,7 @@ impl oar_audio_element_config_t {
                 // `self.type` is 0 (corresponding to ck_channel_based), meaning this variant of the
                 // union is active.
                 let cbc = unsafe { self.config.cbc };
-                let layout = Layout::try_from(cbc.layout)?;
-                match layout {
-                    Layout::SoundSystemE451 | Layout::SoundSystemF370 | Layout::SoundSystemG490 => {
-                        return Err(OarError::InvalidParameter);
-                    }
-                    _ => {}
-                }
+                let layout = InputLayout::try_from(cbc.layout)?;
                 let downmix_info = if (self.parameters.flags
                     & crate::c_types::parameter_set_t::def_parameter_set_flag_iamf_downmix_info)
                     != 0
@@ -405,12 +399,12 @@ impl TryFrom<crate::c_types::quaternion_t> for crate::common::definitions::Quate
     }
 }
 
-impl TryFrom<i32> for crate::common::definitions::Layout {
+impl TryFrom<i32> for crate::common::definitions::OutputLayout {
     type Error = crate::common::definitions::OarError;
 
     fn try_from(layout: i32) -> Result<Self, Self::Error> {
         use crate::c_types::oar_layout_t;
-        use crate::common::definitions::{Layout, OarError};
+        use crate::common::definitions::{OarError, OutputLayout};
 
         const MONO: i32 = oar_layout_t::ck_oar_layout_mono as i32;
         const STEREO: i32 = oar_layout_t::ck_oar_layout_stereo as i32;
@@ -427,6 +421,49 @@ impl TryFrom<i32> for crate::common::definitions::Layout {
         const E451: i32 = oar_layout_t::ck_oar_layout_sound_system_e_451 as i32;
         const F370: i32 = oar_layout_t::ck_oar_layout_sound_system_f_370 as i32;
         const G490: i32 = oar_layout_t::ck_oar_layout_sound_system_g_490 as i32;
+        const BINAURAL: i32 = oar_layout_t::ck_oar_layout_binaural as i32;
+
+        match layout {
+            MONO => Ok(OutputLayout::Mono),
+            STEREO => Ok(OutputLayout::Stereo),
+            L51 => Ok(OutputLayout::Layout51),
+            L512 => Ok(OutputLayout::Layout512),
+            L514 => Ok(OutputLayout::Layout514),
+            L71 => Ok(OutputLayout::Layout71),
+            L712 => Ok(OutputLayout::Layout712),
+            L714 => Ok(OutputLayout::Layout714),
+            L312 => Ok(OutputLayout::Layout312),
+            L916 => Ok(OutputLayout::Layout916),
+            LA293 => Ok(OutputLayout::LayoutA293),
+            L7154 => Ok(OutputLayout::Layout7154),
+            E451 => Ok(OutputLayout::SoundSystemE451),
+            F370 => Ok(OutputLayout::SoundSystemF370),
+            G490 => Ok(OutputLayout::SoundSystemG490),
+            BINAURAL => Ok(OutputLayout::Binaural),
+            _ => Err(OarError::InvalidParameter),
+        }
+    }
+}
+
+impl TryFrom<i32> for crate::common::definitions::InputLayout {
+    type Error = crate::common::definitions::OarError;
+
+    fn try_from(layout: i32) -> Result<Self, Self::Error> {
+        use crate::c_types::oar_layout_t;
+        use crate::common::definitions::{InputLayout, OarError};
+
+        const MONO: i32 = oar_layout_t::ck_oar_layout_mono as i32;
+        const STEREO: i32 = oar_layout_t::ck_oar_layout_stereo as i32;
+        const L51: i32 = oar_layout_t::ck_oar_layout_51 as i32;
+        const L512: i32 = oar_layout_t::ck_oar_layout_512 as i32;
+        const L514: i32 = oar_layout_t::ck_oar_layout_514 as i32;
+        const L71: i32 = oar_layout_t::ck_oar_layout_71 as i32;
+        const L712: i32 = oar_layout_t::ck_oar_layout_712 as i32;
+        const L714: i32 = oar_layout_t::ck_oar_layout_714 as i32;
+        const L312: i32 = oar_layout_t::ck_oar_layout_312 as i32;
+        const L916: i32 = oar_layout_t::ck_oar_layout_916 as i32;
+        const LA293: i32 = oar_layout_t::ck_oar_layout_a293 as i32;
+        const L7154: i32 = oar_layout_t::ck_oar_layout_7154 as i32;
         const BINAURAL: i32 = oar_layout_t::ck_oar_layout_binaural as i32;
         const LFE: i32 = oar_layout_t::ck_oar_layout_lfe as i32;
         const STEREOS: i32 = oar_layout_t::ck_oar_layout_stereo_s as i32;
@@ -447,39 +484,36 @@ impl TryFrom<i32> for crate::common::definitions::Layout {
         const TOP5CH: i32 = oar_layout_t::ck_oar_layout_top_5ch as i32;
 
         match layout {
-            MONO => Ok(Layout::Mono),
-            STEREO => Ok(Layout::Stereo),
-            L51 => Ok(Layout::Layout51),
-            L512 => Ok(Layout::Layout512),
-            L514 => Ok(Layout::Layout514),
-            L71 => Ok(Layout::Layout71),
-            L712 => Ok(Layout::Layout712),
-            L714 => Ok(Layout::Layout714),
-            L312 => Ok(Layout::Layout312),
-            L916 => Ok(Layout::Layout916),
-            LA293 => Ok(Layout::LayoutA293),
-            L7154 => Ok(Layout::Layout7154),
-            E451 => Ok(Layout::SoundSystemE451),
-            F370 => Ok(Layout::SoundSystemF370),
-            G490 => Ok(Layout::SoundSystemG490),
-            BINAURAL => Ok(Layout::Binaural),
-            LFE => Ok(Layout::Lfe),
-            STEREOS => Ok(Layout::StereoS),
-            STEREOSS => Ok(Layout::StereoSs),
-            STEREO_RS => Ok(Layout::StereoRs),
-            STEREO_TF => Ok(Layout::StereoTf),
-            STEREO_TB => Ok(Layout::StereoTb),
-            TOP4CH => Ok(Layout::Top4ch),
-            THREECH => Ok(Layout::ThreeCh),
-            STEREO_F => Ok(Layout::StereoF),
-            STEREO_SI => Ok(Layout::StereoSi),
-            STEREO_TPSI => Ok(Layout::StereoTpsi),
-            TOP6CH => Ok(Layout::Top6ch),
-            LFE_PAIR => Ok(Layout::LfePair),
-            BOTTOM3CH => Ok(Layout::Bottom3ch),
-            BOTTOM4CH => Ok(Layout::Bottom4ch),
-            TOP1CH => Ok(Layout::Top1ch),
-            TOP5CH => Ok(Layout::Top5ch),
+            MONO => Ok(InputLayout::Mono),
+            STEREO => Ok(InputLayout::Stereo),
+            L51 => Ok(InputLayout::Layout51),
+            L512 => Ok(InputLayout::Layout512),
+            L514 => Ok(InputLayout::Layout514),
+            L71 => Ok(InputLayout::Layout71),
+            L712 => Ok(InputLayout::Layout712),
+            L714 => Ok(InputLayout::Layout714),
+            L312 => Ok(InputLayout::Layout312),
+            L916 => Ok(InputLayout::Layout916),
+            LA293 => Ok(InputLayout::LayoutA293),
+            L7154 => Ok(InputLayout::Layout7154),
+            BINAURAL => Ok(InputLayout::Binaural),
+            LFE => Ok(InputLayout::Lfe),
+            STEREOS => Ok(InputLayout::StereoS),
+            STEREOSS => Ok(InputLayout::StereoSs),
+            STEREO_RS => Ok(InputLayout::StereoRs),
+            STEREO_TF => Ok(InputLayout::StereoTf),
+            STEREO_TB => Ok(InputLayout::StereoTb),
+            TOP4CH => Ok(InputLayout::Top4ch),
+            THREECH => Ok(InputLayout::ThreeCh),
+            STEREO_F => Ok(InputLayout::StereoF),
+            STEREO_SI => Ok(InputLayout::StereoSi),
+            STEREO_TPSI => Ok(InputLayout::StereoTpsi),
+            TOP6CH => Ok(InputLayout::Top6ch),
+            LFE_PAIR => Ok(InputLayout::LfePair),
+            BOTTOM3CH => Ok(InputLayout::Bottom3ch),
+            BOTTOM4CH => Ok(InputLayout::Bottom4ch),
+            TOP1CH => Ok(InputLayout::Top1ch),
+            TOP5CH => Ok(InputLayout::Top5ch),
             _ => Err(OarError::InvalidParameter),
         }
     }
@@ -488,8 +522,8 @@ impl TryFrom<i32> for crate::common::definitions::Layout {
 impl TryFrom<crate::c_types::oar_config_t> for crate::common::definitions::Config {
     type Error = crate::common::definitions::OarError;
     fn try_from(c: crate::c_types::oar_config_t) -> Result<Self, Self::Error> {
-        use crate::common::definitions::{Config, Layout, SampleRate, Samples};
-        let target_layout = Layout::try_from(c.target_layout)?;
+        use crate::common::definitions::{Config, OutputLayout, SampleRate, Samples};
+        let target_layout = OutputLayout::try_from(c.target_layout)?;
         let spc = Samples::new(c.samples_per_channel)?;
         let sr = SampleRate::new(c.sampling_rate)?;
         Config::new(target_layout, spc, sr)

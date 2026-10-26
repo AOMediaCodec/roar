@@ -17,7 +17,7 @@
 //! gains (via VBAP or DBAP), and rendering them to a target loudspeaker layout.
 
 use crate::common::definitions::{
-    AudioElementConfig, Layout, OarError, ObjectPosition, PlanarBufferMut, PlanarBufferRef,
+    AudioElementConfig, OarError, ObjectPosition, OutputLayout, PlanarBufferMut, PlanarBufferRef,
     SampleRate, Samples,
 };
 use crate::renderer::audio_renderer_api::AudioRenderer;
@@ -40,7 +40,7 @@ struct ObjectElement {
 #[derive(Debug)]
 pub struct ObjectRenderer {
     #[allow(dead_code)]
-    output_layout: Layout,
+    output_layout: OutputLayout,
     gain_calculator: Arc<dyn GainCalculator>,
     sample_rate: SampleRate,
     elements: HashMap<u32, ObjectElement>,
@@ -57,7 +57,7 @@ impl ObjectRenderer {
     ///
     /// Returns `OarError::InvalidParameter` if the speaker layout is unsupported.
     pub fn new(
-        output_layout: Layout,
+        output_layout: OutputLayout,
         sample_rate: SampleRate,
         max_block_size: Samples,
     ) -> Result<Self, OarError> {
@@ -196,7 +196,7 @@ mod test {
     #[gtest]
     fn test_object_renderer_adds_valid_object_based_element() {
         let mut rdr = ObjectRenderer::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             SampleRate::new(48000).unwrap(),
             Samples::new(8).unwrap(),
         )
@@ -212,14 +212,14 @@ mod test {
     #[gtest]
     fn test_object_renderer_rejects_channel_based_element() {
         let mut rdr = ObjectRenderer::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             SampleRate::new(48000).unwrap(),
             Samples::new(8).unwrap(),
         )
         .unwrap();
         let config_cb =
             AudioElementConfig::ChannelBased(crate::common::definitions::ChannelBasedConfig {
-                layout: Layout::Stereo,
+                layout: crate::common::definitions::InputLayout::Stereo,
                 downmix_info: None,
                 rendering_config: None,
             });
@@ -230,7 +230,7 @@ mod test {
     #[gtest]
     fn test_object_renderer_renders_correct_gains_for_stereo() {
         let mut rdr = ObjectRenderer::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             SampleRate::new(48000).unwrap(),
             Samples::new(8).unwrap(),
         )
@@ -265,7 +265,7 @@ mod test {
     #[gtest]
     fn test_object_renderer_advances_offset() {
         let mut rdr = ObjectRenderer::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             SampleRate::new(48000).unwrap(),
             Samples::new(8).unwrap(),
         )

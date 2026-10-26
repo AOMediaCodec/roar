@@ -18,8 +18,8 @@
 
 use crate::common::definitions::ChannelCount;
 use crate::common::definitions::{
-    AudioElementConfig, Coeff, DownmixMode, IAChannel, Layout, MixFactors, OarError,
-    PlanarBufferMut, PlanarBufferRef, Samples, WeightIndex, WeightIndexShift,
+    AudioElementConfig, Coeff, DownmixMode, IAChannel, InputLayout, MixFactors, OarError,
+    OutputLayout, PlanarBufferMut, PlanarBufferRef, Samples, WeightIndex, WeightIndexShift,
     METADATA_QUEUE_CAPACITY,
 };
 use crate::renderer::audio_renderer_api::AudioRenderer;
@@ -106,8 +106,8 @@ fn get_channel_weight(
 /// updates (`update_metadata`) to adhere to a zero-allocation policy inside the `render` loop.
 #[derive(Debug, Clone)]
 pub struct DownmixRenderer {
-    input_layout: Layout,
-    output_layout: Layout,
+    input_layout: InputLayout,
+    output_layout: OutputLayout,
     input_channels: ChannelCount,
     output_channels: ChannelCount,
     weights: Vec<f32>,
@@ -129,7 +129,7 @@ impl DownmixRenderer {
     ///
     /// * `input_layout`: The source layout config of input audio.
     /// * `output_layout`: The target layout config of output audio.
-    pub fn new(input_layout: Layout, output_layout: Layout) -> Self {
+    pub fn new(input_layout: InputLayout, output_layout: OutputLayout) -> Self {
         let input_channels = input_layout.channels();
         let output_channels = output_layout.channels();
 
@@ -180,7 +180,7 @@ impl DownmixRenderer {
             }
         };
 
-        if self.input_layout != self.output_layout {
+        if OutputLayout::try_from(self.input_layout).ok() != Some(self.output_layout) {
             self.compute_weights();
         }
         Ok(())
@@ -191,7 +191,7 @@ impl DownmixRenderer {
             return;
         }
 
-        if self.input_layout == self.output_layout {
+        if OutputLayout::try_from(self.input_layout).ok() == Some(self.output_layout) {
             // Identity matrix pass-through
             self.weights.fill(0.0);
             for i in 0..self.input_channels.get() {
@@ -368,19 +368,19 @@ mod test {
 
     #[gtest]
     fn new_initializes_correct_dimensions() {
-        let renderer = DownmixRenderer::new(Layout::Layout51, Layout::Stereo);
+        let renderer = DownmixRenderer::new(InputLayout::Layout51, OutputLayout::Stereo);
 
-        expect_that!(renderer.input_layout, eq(Layout::Layout51));
-        expect_that!(renderer.output_layout, eq(Layout::Stereo));
+        expect_that!(renderer.input_layout, eq(InputLayout::Layout51));
+        expect_that!(renderer.output_layout, eq(OutputLayout::Stereo));
         expect_that!(renderer.input_channels.get(), eq(6));
         expect_that!(renderer.output_channels.get(), eq(2));
     }
 
     #[gtest]
     fn add_element_succeeds_for_matching_layout() {
-        let mut renderer = DownmixRenderer::new(Layout::Layout51, Layout::Stereo);
+        let mut renderer = DownmixRenderer::new(InputLayout::Layout51, OutputLayout::Stereo);
         let config = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-            layout: Layout::Layout51,
+            layout: InputLayout::Layout51,
             downmix_info: None,
             rendering_config: None,
         });
@@ -392,9 +392,9 @@ mod test {
 
     #[gtest]
     fn add_element_fails_for_mismatched_layout() {
-        let mut renderer = DownmixRenderer::new(Layout::Layout51, Layout::Stereo);
+        let mut renderer = DownmixRenderer::new(InputLayout::Layout51, OutputLayout::Stereo);
         let wrong_config = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-            layout: Layout::Layout71,
+            layout: InputLayout::Layout71,
             downmix_info: None,
             rendering_config: None,
         });
@@ -406,7 +406,7 @@ mod test {
 
     #[gtest]
     fn update_metadata_succeeds() {
-        let mut renderer = DownmixRenderer::new(Layout::Layout51, Layout::Stereo);
+        let mut renderer = DownmixRenderer::new(InputLayout::Layout51, OutputLayout::Stereo);
         let result = renderer.update_element_downmix_mode(1, DownmixMode::Mode1NegOffset, None);
 
         expect_ok!(result);
@@ -414,7 +414,7 @@ mod test {
 
     #[gtest]
     fn downmix_51_to_stereo_calculates_correct_gains() {
-        let mut renderer = DownmixRenderer::new(Layout::Layout51, Layout::Stereo);
+        let mut renderer = DownmixRenderer::new(InputLayout::Layout51, OutputLayout::Stereo);
         let samples = 100;
         let mut inputs = vec![vec![0.0f32; samples]; 6];
         inputs[0].fill(1.0); // L
@@ -442,7 +442,7 @@ mod test {
 
     #[gtest]
     fn downmix_71_to_stereo_calculates_correct_gains() {
-        let mut renderer = DownmixRenderer::new(Layout::Layout71, Layout::Stereo);
+        let mut renderer = DownmixRenderer::new(InputLayout::Layout71, OutputLayout::Stereo);
         let samples = 50;
         let mut inputs = vec![vec![0.0f32; samples]; 8];
         inputs[0].fill(1.0); // L
@@ -470,7 +470,7 @@ mod test {
 
     #[gtest]
     fn downmix_stereo_to_mono_calculates_correct_gains() {
-        let mut renderer = DownmixRenderer::new(Layout::Stereo, Layout::Mono);
+        let mut renderer = DownmixRenderer::new(InputLayout::Stereo, OutputLayout::Mono);
         let samples = 20;
         let mut inputs = vec![vec![0.0f32; samples]; 2];
         inputs[0].fill(1.0); // L
@@ -492,7 +492,7 @@ mod test {
 
     #[gtest]
     fn downmix_71_to_51_default_mode_0_calculates_correct_gains() {
-        let mut renderer = DownmixRenderer::new(Layout::Layout71, Layout::Layout51);
+        let mut renderer = DownmixRenderer::new(InputLayout::Layout71, OutputLayout::Layout51);
         let samples = 10;
         let mut inputs = vec![vec![0.0f32; samples]; 8];
         inputs[0].fill(1.0); // L
@@ -528,7 +528,7 @@ mod test {
 
     #[gtest]
     fn downmix_71_to_51_mode_1_calculates_correct_gains() {
-        let mut renderer = DownmixRenderer::new(Layout::Layout71, Layout::Layout51);
+        let mut renderer = DownmixRenderer::new(InputLayout::Layout71, OutputLayout::Layout51);
         let samples = 10;
         let mut inputs = vec![vec![0.0f32; samples]; 8];
         inputs[0].fill(1.0); // L
@@ -565,7 +565,7 @@ mod test {
 
     #[gtest]
     fn downmix_height_layouts_updates_metadata_mode() {
-        let mut renderer = DownmixRenderer::new(Layout::Layout714, Layout::Layout312);
+        let mut renderer = DownmixRenderer::new(InputLayout::Layout714, OutputLayout::Layout312);
         let samples = 100;
         let inputs = vec![vec![0.0f32; samples]; 12];
         let inputs_ref: Vec<&[f32]> = inputs.iter().map(|v| v.as_slice()).collect();
@@ -591,7 +591,7 @@ mod test {
 
     #[gtest]
     fn render_fails_with_empty_inputs() {
-        let mut renderer = DownmixRenderer::new(Layout::Layout51, Layout::Stereo);
+        let mut renderer = DownmixRenderer::new(InputLayout::Layout51, OutputLayout::Stereo);
         let mut output = vec![0.0f32; 20];
         let mut out_slices: [&mut [f32]; 2] = std::array::from_fn(|_| &mut [] as &mut [f32]);
         let mut out_buf = make_planar_mut(&mut output, 2, 10, &mut out_slices);
@@ -603,7 +603,7 @@ mod test {
 
     #[gtest]
     fn render_fails_with_mismatched_channel_count() {
-        let mut renderer = DownmixRenderer::new(Layout::Layout51, Layout::Stereo);
+        let mut renderer = DownmixRenderer::new(InputLayout::Layout51, OutputLayout::Stereo);
         let mut output = vec![0.0f32; 20];
         let inputs_3ch = vec![vec![0.0f32; 10]; 3];
         let input_refs_3ch: Vec<&[f32]> = inputs_3ch.iter().map(|v| v.as_slice()).collect();

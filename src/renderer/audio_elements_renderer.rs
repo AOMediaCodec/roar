@@ -576,8 +576,8 @@ mod test {
 
     use super::*;
     use crate::common::definitions::{
-        AudioElementConfig, CartesianCoordinate, ChannelBasedConfig, Degrees, Distance, Layout,
-        OarError, ObjectBasedConfig, ObjectPosition, PolarCoordinate,
+        AudioElementConfig, CartesianCoordinate, ChannelBasedConfig, Degrees, Distance,
+        InputLayout, OarError, ObjectBasedConfig, ObjectPosition, PolarCoordinate,
     };
     use googletest::prelude::*;
     use std::sync::{Arc, Mutex};
@@ -733,7 +733,7 @@ mod test {
     fn audio_elements_router_fails_to_add_duplicate_element() {
         let mut router = AudioElementsRenderer::new(ChannelCount::new(2).unwrap(), None);
         let config = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-            layout: Layout::Stereo,
+            layout: InputLayout::Stereo,
             downmix_info: None,
             rendering_config: None,
         });

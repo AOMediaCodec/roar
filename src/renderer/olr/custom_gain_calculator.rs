@@ -242,7 +242,7 @@ impl CustomGainCalculator {
     ///
     /// # Errors
     /// Returns `OarError::InvalidParameter` if the speaker layout is unsupported or missing.
-    pub fn new(layout_enum: crate::common::definitions::Layout) -> Result<Self, OarError> {
+    pub fn new(layout_enum: crate::common::definitions::OutputLayout) -> Result<Self, OarError> {
         let layout = get_layout(layout_enum).ok_or(OarError::InvalidParameter)?;
         if layout.speakers.len() > MAX_OUTPUT_CHANNEL_COUNT {
             return Err(OarError::NotSupported);
@@ -508,14 +508,14 @@ impl GainCalculator for CustomGainCalculator {
 mod test {
 
     use super::*;
-    use crate::common::definitions::Layout;
+    use crate::common::definitions::OutputLayout;
     use googletest::prelude::*;
 
     const EPSILON: f32 = 1e-4;
 
     #[gtest]
     fn test_custom_gain_calculator_stereo_exact_alignment() {
-        let calculator = CustomGainCalculator::new(Layout::Stereo).unwrap();
+        let calculator = CustomGainCalculator::new(OutputLayout::Stereo).unwrap();
         let mut gains = [0.0; 2];
 
         let result = calculator.calculate_gains(
@@ -532,7 +532,7 @@ mod test {
 
     #[gtest]
     fn test_custom_gain_calculator_stereo_midpoint() {
-        let calculator = CustomGainCalculator::new(Layout::Stereo).unwrap();
+        let calculator = CustomGainCalculator::new(OutputLayout::Stereo).unwrap();
         let mut gains = [0.0; 2];
 
         let result = calculator.calculate_gains(

@@ -18,8 +18,8 @@
 //! and scene-based audio elements according to target loudspeaker layouts.
 
 use crate::common::definitions::{
-    AudioElementConfig, HighOrderAmbisonics, Layout, OarError, PlanarBufferMut, PlanarBufferRef,
-    MAX_OUTPUT_CHANNEL_COUNT,
+    AudioElementConfig, HighOrderAmbisonics, InputLayout, OarError, OutputLayout, PlanarBufferMut,
+    PlanarBufferRef, MAX_OUTPUT_CHANNEL_COUNT,
 };
 use crate::renderer::audio_renderer_api::AudioRenderer;
 use crate::renderer::ear::ambisonic_to_channel_renderer::{
@@ -27,8 +27,8 @@ use crate::renderer::ear::ambisonic_to_channel_renderer::{
 };
 use crate::renderer::ear::channel_to_channel_renderer::{
     element_renderer_get_m2m_custom_matrix, element_renderer_get_m2m_matrix,
-    element_renderer_render_m2m, element_renderer_render_m2m_custom, IamfCustomSpLayout,
-    IamfPredefinedSpLayout, IamfSpLayout, IamfSpLayoutData, M2mRdr,
+    element_renderer_render_m2m, element_renderer_render_m2m_custom, is_predefined_input_layout,
+    layout_to_subset_custom, M2mRdr,
 };
 
 /// A spatially-oriented headphone/binaural renderer.
@@ -38,7 +38,7 @@ use crate::renderer::ear::channel_to_channel_renderer::{
 #[derive(Debug, Clone)]
 pub struct EarRenderer {
     /// Target output layout for this renderer instance.
-    pub target_layout: Layout,
+    pub target_layout: OutputLayout,
     /// Active rendering matrix mode configured for the current audio element.
     active_mode: Option<EarRenderingMode>,
 }
@@ -62,12 +62,11 @@ pub enum EarRenderingMode {
 impl EarRenderer {
     /// Creates a new `EarRenderer` configured with default Stereo output.
     pub fn new() -> Self {
-        Self::with_output_layout(Layout::Stereo)
+        Self::with_output_layout(OutputLayout::Stereo)
     }
 
     /// Creates a new `EarRenderer` with specified target output layout.
-    /// rate.
-    pub fn with_output_layout(target_layout: Layout) -> Self {
+    pub fn with_output_layout(target_layout: OutputLayout) -> Self {
         Self { target_layout, active_mode: None }
     }
 }
@@ -82,32 +81,20 @@ impl AudioRenderer for EarRenderer {
     /// Configures an audio element within the renderer (`_open` equivalent).
     fn add_element(&mut self, _id: u32, config: &AudioElementConfig) -> Result<(), OarError> {
         self.active_mode = None;
-        if !is_predefined_output_layout(self.target_layout) {
-            return Err(OarError::InvalidParameter);
-        }
         let out_system = self.target_layout;
-        let (out_lfe1, out_lfe2) = layout_lfe_indices(self.target_layout);
-        let out_pre = IamfPredefinedSpLayout { system: out_system, lfe1: out_lfe1, lfe2: out_lfe2 };
-        let out_layout =
-            IamfSpLayout { sp_type: 0, layout: IamfSpLayoutData::Predefined(&out_pre) };
 
         match *config {
             AudioElementConfig::ChannelBased(cb) => {
                 // Determine if this is a full predefined input layout or custom subset
                 if is_predefined_input_layout(cb.layout) {
-                    let (in_lfe1, in_lfe2) = layout_lfe_indices(cb.layout);
-                    let in_pre =
-                        IamfPredefinedSpLayout { system: cb.layout, lfe1: in_lfe1, lfe2: in_lfe2 };
-                    let in_layout =
-                        IamfSpLayout { sp_type: 0, layout: IamfSpLayoutData::Predefined(&in_pre) };
                     let mut m2m = M2mRdr {
-                        in_system: Layout::Mono,
-                        out_system: Layout::Mono,
+                        in_system: InputLayout::Mono,
+                        out_system: OutputLayout::Mono,
                         mat: &[],
                         m: 0,
                         n: 0,
                     };
-                    if element_renderer_get_m2m_matrix(&in_layout, &out_layout, &mut m2m).is_ok() {
+                    if element_renderer_get_m2m_matrix(cb.layout, out_system, &mut m2m).is_ok() {
                         self.active_mode = Some(EarRenderingMode::ChannelPredefined(m2m));
                         return Ok(());
                     }
@@ -115,20 +102,18 @@ impl AudioRenderer for EarRenderer {
 
                 // Try subset custom layout check (`_rid_sp_labels_map`)
                 if let Some((base_system, flags)) = layout_to_subset_custom(cb.layout) {
-                    let in_cust = IamfCustomSpLayout { system: base_system, sp_flags: flags };
-                    let in_layout =
-                        IamfSpLayout { sp_type: 1, layout: IamfSpLayoutData::Custom(&in_cust) };
                     let mut m2m = M2mRdr {
-                        in_system: Layout::Mono,
-                        out_system: Layout::Mono,
+                        in_system: InputLayout::Mono,
+                        out_system: OutputLayout::Mono,
                         mat: &[],
                         m: 0,
                         n: 0,
                     };
                     let mut chmap_buf = [0usize; MAX_OUTPUT_CHANNEL_COUNT];
                     if element_renderer_get_m2m_custom_matrix(
-                        &in_layout,
-                        &out_layout,
+                        base_system,
+                        flags,
+                        out_system,
                         &mut m2m,
                         &mut chmap_buf,
                     )
@@ -147,7 +132,7 @@ impl AudioRenderer for EarRenderer {
             AudioElementConfig::SceneBased(sb) => {
                 let mut h2m = H2mRdr {
                     in_order: HighOrderAmbisonics::Zoa,
-                    out_system: Layout::Mono,
+                    out_system: OutputLayout::Mono,
                     channels: 0,
                     lfe1: 0,
                     lfe2: 0,
@@ -155,7 +140,7 @@ impl AudioRenderer for EarRenderer {
                     m: 0,
                     n: 0,
                 };
-                if element_renderer_get_h2m_matrix(sb.order, &out_pre, &mut h2m).is_ok() {
+                if element_renderer_get_h2m_matrix(sb.order, out_system, &mut h2m).is_ok() {
                     self.active_mode = Some(EarRenderingMode::Scene(h2m));
                     Ok(())
                 } else {
@@ -204,11 +189,6 @@ impl AudioRenderer for EarRenderer {
         }
     }
 }
-
-pub use crate::renderer::ear::channel_to_channel_renderer::{
-    is_predefined_input_layout, is_predefined_output_layout, layout_lfe_indices,
-    layout_to_subset_custom,
-};
 
 // ===== Tests =====
 
@@ -261,7 +241,7 @@ mod tests {
     fn ear_renderer_add_element_channel_predefined_sets_active_mode_and_renders() {
         let mut rdr = EarRenderer::new();
         let config = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-            layout: Layout::Mono,
+            layout: InputLayout::Mono,
             downmix_info: None,
             rendering_config: None,
         });
@@ -281,7 +261,7 @@ mod tests {
 
     #[gtest]
     fn ear_renderer_add_element_scene_based_sets_active_mode_and_renders() {
-        let mut rdr = EarRenderer::with_output_layout(Layout::Layout51);
+        let mut rdr = EarRenderer::with_output_layout(OutputLayout::Layout51);
         let config = AudioElementConfig::SceneBased(SceneBasedConfig {
             order: HighOrderAmbisonics::Zoa,
             rendering_config: None,
@@ -318,9 +298,9 @@ mod tests {
 
     #[gtest]
     fn ear_renderer_add_element_channel_custom_sets_active_mode_and_renders() {
-        let mut rdr = EarRenderer::with_output_layout(Layout::Layout51);
+        let mut rdr = EarRenderer::with_output_layout(OutputLayout::Layout51);
         let config = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-            layout: Layout::StereoS,
+            layout: InputLayout::StereoS,
             downmix_info: None,
             rendering_config: None,
         });

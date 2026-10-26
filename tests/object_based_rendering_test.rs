@@ -22,7 +22,7 @@ mod test {
     use aom_roar::c_types::{oar_audio_block_t, oar_layout_t, oar_metadata_type_t};
     use aom_roar::ffi::*;
     use aom_roar::{
-        AudioElementConfig, ChannelCount, Config, Layout, OarError, ObjectBasedConfig,
+        AudioElementConfig, ChannelCount, Config, OarError, ObjectBasedConfig, OutputLayout,
         RoarRenderer, SampleRate, Samples,
     };
     use googletest::prelude::*;
@@ -55,7 +55,7 @@ mod test {
     /// Creates a Rust `RoarRenderer` instance with a group and object-based audio element
     /// registered.
     fn create_rust_object_renderer(
-        layout: Layout,
+        layout: OutputLayout,
         samples_per_channel: Samples,
         sample_rate: SampleRate,
         element_id: u32,
@@ -268,7 +268,7 @@ mod test {
         let element_id: u32 = 10;
 
         let mut renderer = create_rust_object_renderer(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             frame_size,
             sample_rate,
             element_id,
@@ -317,7 +317,7 @@ mod test {
         let element_id: u32 = 10;
 
         let mut renderer = create_rust_object_renderer(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             frame_size,
             sample_rate,
             element_id,
@@ -366,7 +366,7 @@ mod test {
         let element_id: u32 = 10;
 
         let mut renderer = create_rust_object_renderer(
-            Layout::Binaural,
+            OutputLayout::Binaural,
             frame_size,
             sample_rate,
             element_id,
@@ -438,7 +438,7 @@ mod test {
         let frame_size = Samples::new(128)?;
         let sample_rate = SampleRate::new(48000)?;
         let mut renderer =
-            create_rust_object_renderer(Layout::Stereo, frame_size, sample_rate, 10, 1)?;
+            create_rust_object_renderer(OutputLayout::Stereo, frame_size, sample_rate, 10, 1)?;
         let invalid_samples = Samples::new(256)?;
 
         let result = renderer.set_object_position_metadata_unit_to_process(invalid_samples);

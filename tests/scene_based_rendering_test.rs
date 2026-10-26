@@ -21,8 +21,8 @@ mod test {
     use aom_roar::c_types::{oar_audio_block_t, oar_hoa_t, oar_layout_t};
     use aom_roar::ffi::*;
     use aom_roar::{
-        AudioElementConfig, Config, HighOrderAmbisonics, Layout, RoarRenderer, SampleRate, Samples,
-        SceneBasedConfig,
+        AudioElementConfig, Config, HighOrderAmbisonics, OutputLayout, RoarRenderer, SampleRate,
+        Samples, SceneBasedConfig,
     };
     use googletest::prelude::*;
 
@@ -103,7 +103,7 @@ mod test {
 
         // Create test ROAR instance and renderer.
         let config = Config::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             Samples::new(frame_size as u32).unwrap(),
             SampleRate::new(sample_rate).unwrap(),
         )

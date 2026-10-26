@@ -27,7 +27,7 @@ use crate::common::audio_buffer::simd_utils::add_pointwise_in_place;
 use crate::common::audio_buffer::AudioBuffer;
 use crate::common::definitions::ChannelCount;
 use crate::common::definitions::{
-    AudioElementConfig as OarAudioElementConfig, Gain, HighOrderAmbisonics, Layout, OarError,
+    AudioElementConfig as OarAudioElementConfig, Gain, HighOrderAmbisonics, InputLayout, OarError,
     ObjectPosition,
 };
 use crate::common::definitions::{
@@ -435,19 +435,19 @@ impl AudioRenderer for ObrAudioRendererAdapter {
         }
         let elem_type = match config {
             OarAudioElementConfig::ChannelBased(cbc) => match cbc.layout {
-                Layout::Mono => AudioElementType::LayoutMono,
-                Layout::Stereo => AudioElementType::LayoutStereo,
-                Layout::Layout51 => AudioElementType::Layout5_1_0,
-                Layout::Layout512 => AudioElementType::Layout5_1_2,
-                Layout::Layout514 => AudioElementType::Layout5_1_4,
-                Layout::Layout71 => AudioElementType::Layout7_1_0,
-                Layout::Layout712 => AudioElementType::Layout7_1_2,
-                Layout::Layout714 => AudioElementType::Layout7_1_4,
-                Layout::Layout312 => AudioElementType::Layout3_1_2,
-                Layout::Layout916 => AudioElementType::Layout9_1_6,
-                Layout::Layout7154 => AudioElementType::Layout7_1_5_4,
-                Layout::LayoutA293 => AudioElementType::Layout10_2_9_3,
-                Layout::Binaural => AudioElementType::PassthroughStereo,
+                InputLayout::Mono => AudioElementType::LayoutMono,
+                InputLayout::Stereo => AudioElementType::LayoutStereo,
+                InputLayout::Layout51 => AudioElementType::Layout5_1_0,
+                InputLayout::Layout512 => AudioElementType::Layout5_1_2,
+                InputLayout::Layout514 => AudioElementType::Layout5_1_4,
+                InputLayout::Layout71 => AudioElementType::Layout7_1_0,
+                InputLayout::Layout712 => AudioElementType::Layout7_1_2,
+                InputLayout::Layout714 => AudioElementType::Layout7_1_4,
+                InputLayout::Layout312 => AudioElementType::Layout3_1_2,
+                InputLayout::Layout916 => AudioElementType::Layout9_1_6,
+                InputLayout::Layout7154 => AudioElementType::Layout7_1_5_4,
+                InputLayout::LayoutA293 => AudioElementType::Layout10_2_9_3,
+                InputLayout::Binaural => AudioElementType::PassthroughStereo,
                 _ => return Err(OarError::InvalidParameter),
             },
             OarAudioElementConfig::SceneBased(sbc) => match sbc.order {
@@ -914,7 +914,7 @@ mod test {
         let mut adapter = ObrAudioRendererAdapter::new(get_buffer_size(), get_sample_rate());
         let config =
             OarAudioElementConfig::ChannelBased(crate::common::definitions::ChannelBasedConfig {
-                layout: Layout::Binaural,
+                layout: InputLayout::Binaural,
                 downmix_info: None,
                 rendering_config: None,
             });

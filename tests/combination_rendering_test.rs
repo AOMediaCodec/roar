@@ -26,9 +26,9 @@ mod test {
     };
     use aom_roar::ffi::*;
     use aom_roar::{
-        AudioElementConfig, ChannelBasedConfig, ChannelCount, Config, HighOrderAmbisonics, Layout,
-        ObjectBasedConfig, ObjectPosition, PolarCoordinate, RoarRenderer, SampleRate, Samples,
-        SceneBasedConfig,
+        AudioElementConfig, ChannelBasedConfig, ChannelCount, Config, HighOrderAmbisonics,
+        InputLayout, ObjectBasedConfig, ObjectPosition, OutputLayout, PolarCoordinate,
+        RoarRenderer, SampleRate, Samples, SceneBasedConfig,
     };
     use googletest::prelude::*;
 
@@ -179,7 +179,7 @@ mod test {
         let output_channels: usize = 2;
 
         let config = Config::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             Samples::new(frame_size as u32).unwrap(),
             SampleRate::new(sample_rate).unwrap(),
         )
@@ -190,7 +190,7 @@ mod test {
         // 1. Channel-Based Element (Stereo)
         let chan_based_element_id: u32 = 10;
         let chan_based_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-            layout: Layout::Stereo,
+            layout: InputLayout::Stereo,
             downmix_info: None,
             rendering_config: None,
         });

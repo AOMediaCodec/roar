@@ -104,7 +104,7 @@ instance is created and contains the following:
 #### Valid output types
 
 Output layouts are defined in `oar_layout_t` in `c_types.rs` for C++ or in the
-`Layout` enum.
+`OutputLayout` enum.
 
 -   **Loudspeaker layouts**: From `ck_oar_layout_mono` to
     `ck_oar_layout_sound_system_g_490`.
@@ -125,7 +125,7 @@ Rust
 
 ```rust
 let config = Config::new(
-    Layout::Layout51,
+    OutputLayout::Layout51,
     Samples::new(1024)?,
     SampleRate::new(48000)?,
 )?;
@@ -316,7 +316,7 @@ let rendering_cfg = ElementRenderingConfig {
     binaural_filter_profile: BinauralFilterProfile::Ambient, // or Direct, Reverberant
 };
 let elem_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-    layout: Layout::Stereo,
+    layout: InputLayout::Stereo,
     downmix_info: None,
     rendering_config: Some(rendering_cfg),
 });
@@ -557,14 +557,14 @@ Rust
 
 ```rust
 use aom_roar::{
-    AudioElementConfig, ChannelBasedConfig, Config, Layout, OarError, PlanarBufferMut,
-    PlanarBufferRef, RoarRenderer, SampleRate, Samples,
+    AudioElementConfig, ChannelBasedConfig, Config, InputLayout, OarError, OutputLayout,
+    PlanarBufferMut, PlanarBufferRef, RoarRenderer, SampleRate, Samples,
 };
 
 fn render_audio() -> Result<(), OarError> {
     let samples = Samples::new(1024)?;
     let config = Config::new(
-        Layout::Layout51,
+        OutputLayout::Layout51,
         samples,
         SampleRate::new(48000)?,
     )?;
@@ -577,7 +577,7 @@ fn render_audio() -> Result<(), OarError> {
 
     // Configure and add audio element
     let element_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-        layout: Layout::Stereo,
+        layout: InputLayout::Stereo,
         downmix_info: None,
         rendering_config: None,
     });
@@ -649,7 +649,7 @@ Rust
 // 1. Create config for Stereo loudspeaker output
 let samples = Samples::new(1024)?;
 let config = Config::new(
-    Layout::Stereo,
+    OutputLayout::Stereo,
     samples,
     SampleRate::new(48000)?,
 )?;
@@ -741,7 +741,7 @@ Rust
 // 1. Create config for 5.1 loudspeaker output
 let samples = Samples::new(1024)?;
 let config = Config::new(
-    Layout::Layout51,
+    OutputLayout::Layout51,
     samples,
     SampleRate::new(48000)?,
 )?;
@@ -848,7 +848,7 @@ Rust
 // 1. Create OAR config for Binaural output
 let samples = Samples::new(1024)?;
 let config = Config::new(
-    Layout::Binaural,
+    OutputLayout::Binaural,
     samples,
     SampleRate::new(48000)?,
 )?;
@@ -861,7 +861,7 @@ let rendering_cfg = ElementRenderingConfig {
     binaural_filter_profile: BinauralFilterProfile::Ambient,
 };
 let elem_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-    layout: Layout::Layout514,
+    layout: InputLayout::Layout514,
     downmix_info: None,
     rendering_config: Some(rendering_cfg),
 });

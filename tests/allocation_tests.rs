@@ -26,8 +26,8 @@ mod test {
     use crate::test_helpers::{create_planar_buffer_mut, create_planar_buffer_ref};
     use aom_roar::{
         AudioElementConfig, ChannelBasedConfig, ChannelCount, Config, Decibels, Gain,
-        HighOrderAmbisonics, Layout, ObjectBasedConfig, ObjectPosition, PolarCoordinate,
-        Quaternion, RoarRenderer, SampleRate, Samples, SceneBasedConfig,
+        HighOrderAmbisonics, InputLayout, ObjectBasedConfig, ObjectPosition, OutputLayout,
+        PolarCoordinate, Quaternion, RoarRenderer, SampleRate, Samples, SceneBasedConfig,
     };
 
     /// A tracking allocator to intercept heap allocations and assert that the
@@ -99,7 +99,7 @@ mod test {
         let element_id: u32 = 1;
 
         let config = Config::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             Samples::new(frame_size as u32).unwrap(),
             SampleRate::new(sample_rate).unwrap(),
         )
@@ -108,7 +108,7 @@ mod test {
         let group_id = renderer.add_audio_group().unwrap();
 
         let element_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-            layout: Layout::Layout51,
+            layout: InputLayout::Layout51,
             downmix_info: None,
             rendering_config: None,
         });
@@ -142,7 +142,7 @@ mod test {
         let element_id: u32 = 1;
 
         let config = Config::new(
-            Layout::Binaural,
+            OutputLayout::Binaural,
             Samples::new(frame_size as u32).unwrap(),
             SampleRate::new(sample_rate).unwrap(),
         )
@@ -183,7 +183,7 @@ mod test {
         let element_id: u32 = 1;
 
         let config = Config::new(
-            Layout::Layout51,
+            OutputLayout::Layout51,
             Samples::new(frame_size as u32).unwrap(),
             SampleRate::new(sample_rate).unwrap(),
         )
@@ -224,7 +224,7 @@ mod test {
         let element_id: u32 = 1;
 
         let config = Config::new(
-            Layout::Layout51,
+            OutputLayout::Layout51,
             Samples::new(frame_size as u32).unwrap(),
             SampleRate::new(sample_rate).unwrap(),
         )
@@ -270,7 +270,7 @@ mod test {
         let element_id: u32 = 1;
 
         let config = Config::new(
-            Layout::Binaural,
+            OutputLayout::Binaural,
             Samples::new(frame_size as u32).unwrap(),
             SampleRate::new(sample_rate).unwrap(),
         )
@@ -324,7 +324,7 @@ mod test {
         let element_id: u32 = 1;
 
         let config = Config::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             Samples::new(frame_size as u32).unwrap(),
             SampleRate::new(sample_rate).unwrap(),
         )
@@ -368,7 +368,7 @@ mod test {
         let element_id: u32 = 1;
 
         let config = Config::new(
-            Layout::Binaural,
+            OutputLayout::Binaural,
             Samples::new(frame_size as u32).unwrap(),
             SampleRate::new(sample_rate).unwrap(),
         )

@@ -14,6 +14,11 @@ Changes in the repo not yet in a release will appear here.
     and `aom_roar_rlib` (for Rust) to allow Bazel integration with either Rust
     or C++ and to allow the Rust integration tests to run with Bazel.
 
+### [Changed]
+
+-   Separated `Layout` type into `InputLayout` and `OutputLayout` for the Rust
+    API. The C API remains unchanged.
+
 ### [Fixed]
 
 -   Fixed rendering when input and output layouts are both binaural. Previously,

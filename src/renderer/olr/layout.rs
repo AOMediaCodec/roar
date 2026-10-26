@@ -16,7 +16,7 @@
 //! and other multi-channel layouts) matching the C reference implementation, including
 //! spatial coordinates and LFE status for each speaker position.
 
-use crate::common::definitions::Layout;
+use crate::common::definitions::OutputLayout;
 
 // TODO(b/525080422): Combine this Layout information with the common and OBR layout information and
 // use one unified representation (where it makes sense).
@@ -39,8 +39,8 @@ pub struct SpeakerPosition {
 pub struct SpeakerLayout {
     /// The descriptive name of the layout.
     pub name: &'static str,
-    /// The corresponding Layout identifier.
-    pub layout: Layout,
+    /// The corresponding OutputLayout identifier.
+    pub layout: OutputLayout,
     /// The array of speakers included in this layout.
     pub speakers: &'static [SpeakerPosition],
 }
@@ -133,25 +133,25 @@ const SP_LFE2: SpeakerPosition =
 
 // Speaker layouts with LFE
 static SPEAKER_LAYOUTS: &[SpeakerLayout] = &[
-    SpeakerLayout { name: "layout_1.0.0(mono)", layout: Layout::Mono, speakers: &[SP_MP000] },
+    SpeakerLayout { name: "layout_1.0.0(mono)", layout: OutputLayout::Mono, speakers: &[SP_MP000] },
     SpeakerLayout {
         name: "layout_2.0.0(stereo)",
-        layout: Layout::Stereo,
+        layout: OutputLayout::Stereo,
         speakers: &[SP_MP030, SP_MM030],
     },
     SpeakerLayout {
         name: "layout_5.1.0",
-        layout: Layout::Layout51,
+        layout: OutputLayout::Layout51,
         speakers: &[SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP110, SP_MM110],
     },
     SpeakerLayout {
         name: "layout_5.1.2",
-        layout: Layout::Layout512,
+        layout: OutputLayout::Layout512,
         speakers: &[SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP110, SP_MM110, SP_UP030, SP_UM030],
     },
     SpeakerLayout {
         name: "layout_5.1.4",
-        layout: Layout::Layout514,
+        layout: OutputLayout::Layout514,
         speakers: &[
             SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP110, SP_MM110, SP_UP030, SP_UM030,
             SP_UP110, SP_UM110,
@@ -159,12 +159,12 @@ static SPEAKER_LAYOUTS: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_7.1.0",
-        layout: Layout::Layout71,
+        layout: OutputLayout::Layout71,
         speakers: &[SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP090, SP_MM090, SP_MP135, SP_MM135],
     },
     SpeakerLayout {
         name: "layout_7.1.2",
-        layout: Layout::Layout712,
+        layout: OutputLayout::Layout712,
         speakers: &[
             SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP090, SP_MM090, SP_MP135, SP_MM135,
             SP_UP045, SP_UM045,
@@ -172,7 +172,7 @@ static SPEAKER_LAYOUTS: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_7.1.4",
-        layout: Layout::Layout714,
+        layout: OutputLayout::Layout714,
         speakers: &[
             SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP090, SP_MM090, SP_MP135, SP_MM135,
             SP_UP045, SP_UM045, SP_UP135, SP_UM135,
@@ -180,12 +180,12 @@ static SPEAKER_LAYOUTS: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_3.1.2",
-        layout: Layout::Layout312,
+        layout: OutputLayout::Layout312,
         speakers: &[SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_UP045, SP_UM045],
     },
     SpeakerLayout {
         name: "layout_9.1.6",
-        layout: Layout::Layout916,
+        layout: OutputLayout::Layout916,
         speakers: &[
             SP_MP060, SP_MM060, SP_MP000, SP_LFE1, SP_MP135, SP_MM135, SP_MP030, SP_MM030,
             SP_MP090, SP_MM090, SP_UP045, SP_UM045, SP_UP135, SP_UM135, SP_UP090, SP_UM090,
@@ -193,7 +193,7 @@ static SPEAKER_LAYOUTS: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_7.1.5.4",
-        layout: Layout::Layout7154,
+        layout: OutputLayout::Layout7154,
         speakers: &[
             SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP090, SP_MM090, SP_MP135, SP_MM135,
             SP_UP045, SP_UM045, SP_TP000, SP_UP135, SP_UM135, SP_BP045, SP_BM045, SP_BP135,
@@ -202,7 +202,7 @@ static SPEAKER_LAYOUTS: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_10.2.9.3",
-        layout: Layout::LayoutA293,
+        layout: OutputLayout::LayoutA293,
         speakers: &[
             SP_MP060, SP_MM060, SP_MP000, SP_LFE1, SP_MP135, SP_MM135, SP_MP030, SP_MM030,
             SP_MP180, SP_LFE2, SP_MP090, SP_MM090, SP_UP045, SP_UM045, SP_UP000, SP_TP000,
@@ -211,7 +211,7 @@ static SPEAKER_LAYOUTS: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_sound_system_e",
-        layout: Layout::SoundSystemE451,
+        layout: OutputLayout::SoundSystemE451,
         speakers: &[
             SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP110, SP_MM110, SP_UP030, SP_UM030,
             SP_UP110, SP_UM110, SP_BP000,
@@ -219,7 +219,7 @@ static SPEAKER_LAYOUTS: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_sound_system_f",
-        layout: Layout::SoundSystemF370,
+        layout: OutputLayout::SoundSystemF370,
         speakers: &[
             SP_MP000, SP_MP030, SP_MM030, SP_UP045, SP_UM045, SP_MP090, SP_MM090, SP_MP135,
             SP_MM135, SP_UHP180, SP_LFE1, SP_LFE2,
@@ -227,7 +227,7 @@ static SPEAKER_LAYOUTS: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_sound_system_g",
-        layout: Layout::SoundSystemG490,
+        layout: OutputLayout::SoundSystemG490,
         speakers: &[
             SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP090, SP_MM090, SP_MP135, SP_MM135,
             SP_UP045, SP_UM045, SP_UP135, SP_UM135, SP_MP025, SP_MM025,
@@ -237,25 +237,25 @@ static SPEAKER_LAYOUTS: &[SpeakerLayout] = &[
 
 // Speaker layouts without LFE
 static SPEAKER_LAYOUTS_WITHOUT_LFE: &[SpeakerLayout] = &[
-    SpeakerLayout { name: "layout_1.0.0(mono)", layout: Layout::Mono, speakers: &[SP_MP000] },
+    SpeakerLayout { name: "layout_1.0.0(mono)", layout: OutputLayout::Mono, speakers: &[SP_MP000] },
     SpeakerLayout {
         name: "layout_2.0.0(stereo)",
-        layout: Layout::Stereo,
+        layout: OutputLayout::Stereo,
         speakers: &[SP_MP030, SP_MM030],
     },
     SpeakerLayout {
         name: "layout_5.0.0",
-        layout: Layout::Layout51,
+        layout: OutputLayout::Layout51,
         speakers: &[SP_MP030, SP_MM030, SP_MP000, SP_MP110, SP_MM110],
     },
     SpeakerLayout {
         name: "layout_5.0.2",
-        layout: Layout::Layout512,
+        layout: OutputLayout::Layout512,
         speakers: &[SP_MP030, SP_MM030, SP_MP000, SP_MP110, SP_MM110, SP_UP030, SP_UM030],
     },
     SpeakerLayout {
         name: "layout_5.0.4",
-        layout: Layout::Layout514,
+        layout: OutputLayout::Layout514,
         speakers: &[
             SP_MP030, SP_MM030, SP_MP000, SP_MP110, SP_MM110, SP_UP030, SP_UM030, SP_UP110,
             SP_UM110,
@@ -263,12 +263,12 @@ static SPEAKER_LAYOUTS_WITHOUT_LFE: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_7.0.0",
-        layout: Layout::Layout71,
+        layout: OutputLayout::Layout71,
         speakers: &[SP_MP030, SP_MM030, SP_MP000, SP_MP090, SP_MM090, SP_MP135, SP_MM135],
     },
     SpeakerLayout {
         name: "layout_7.0.2",
-        layout: Layout::Layout712,
+        layout: OutputLayout::Layout712,
         speakers: &[
             SP_MP030, SP_MM030, SP_MP000, SP_MP090, SP_MM090, SP_MP135, SP_MM135, SP_UP045,
             SP_UM045,
@@ -276,7 +276,7 @@ static SPEAKER_LAYOUTS_WITHOUT_LFE: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_7.0.4",
-        layout: Layout::Layout714,
+        layout: OutputLayout::Layout714,
         speakers: &[
             SP_MP030, SP_MM030, SP_MP000, SP_MP090, SP_MM090, SP_MP135, SP_MM135, SP_UP045,
             SP_UM045, SP_UP135, SP_UM135,
@@ -284,12 +284,12 @@ static SPEAKER_LAYOUTS_WITHOUT_LFE: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_3.0.2",
-        layout: Layout::Layout312,
+        layout: OutputLayout::Layout312,
         speakers: &[SP_MP030, SP_MM030, SP_MP000, SP_UP045, SP_UM045],
     },
     SpeakerLayout {
         name: "layout_9.0.6",
-        layout: Layout::Layout916,
+        layout: OutputLayout::Layout916,
         speakers: &[
             SP_MP060, SP_MM060, SP_MP000, SP_MP135, SP_MM135, SP_MP030, SP_MM030, SP_MP090,
             SP_MM090, SP_UP045, SP_UM045, SP_UP135, SP_UM135, SP_UP090, SP_UM090,
@@ -297,7 +297,7 @@ static SPEAKER_LAYOUTS_WITHOUT_LFE: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_7.0.5.4",
-        layout: Layout::Layout7154,
+        layout: OutputLayout::Layout7154,
         speakers: &[
             SP_MP030, SP_MM030, SP_MP000, SP_MP090, SP_MM090, SP_MP135, SP_MM135, SP_UP045,
             SP_UM045, SP_TP000, SP_UP135, SP_UM135, SP_BP045, SP_BM045, SP_BP135, SP_BM135,
@@ -305,7 +305,7 @@ static SPEAKER_LAYOUTS_WITHOUT_LFE: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_10.0.9.3",
-        layout: Layout::LayoutA293,
+        layout: OutputLayout::LayoutA293,
         speakers: &[
             SP_MP060, SP_MM060, SP_MP000, SP_MP135, SP_MM135, SP_MP030, SP_MM030, SP_MP180,
             SP_MP090, SP_MM090, SP_UP045, SP_UM045, SP_UP000, SP_TP000, SP_UP135, SP_UM135,
@@ -314,7 +314,7 @@ static SPEAKER_LAYOUTS_WITHOUT_LFE: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_sound_system_e",
-        layout: Layout::SoundSystemE451,
+        layout: OutputLayout::SoundSystemE451,
         speakers: &[
             SP_MP030, SP_MM030, SP_MP000, SP_MP110, SP_MM110, SP_UP030, SP_UM030, SP_UP110,
             SP_UM110, SP_BP000,
@@ -322,7 +322,7 @@ static SPEAKER_LAYOUTS_WITHOUT_LFE: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_sound_system_f",
-        layout: Layout::SoundSystemF370,
+        layout: OutputLayout::SoundSystemF370,
         speakers: &[
             SP_MP000, SP_MP030, SP_MM030, SP_UP045, SP_UM045, SP_MP090, SP_MM090, SP_MP135,
             SP_MM135, SP_UHP180,
@@ -330,7 +330,7 @@ static SPEAKER_LAYOUTS_WITHOUT_LFE: &[SpeakerLayout] = &[
     },
     SpeakerLayout {
         name: "layout_sound_system_g",
-        layout: Layout::SoundSystemG490,
+        layout: OutputLayout::SoundSystemG490,
         speakers: &[
             SP_MP030, SP_MM030, SP_MP000, SP_MP090, SP_MM090, SP_MP135, SP_MM135, SP_UP045,
             SP_UM045, SP_UP135, SP_UM135, SP_MP025, SP_MM025,
@@ -341,7 +341,7 @@ static SPEAKER_LAYOUTS_WITHOUT_LFE: &[SpeakerLayout] = &[
 /// Returns the loudspeaker layout corresponding to the given layout enum value.
 ///
 /// Returns `None` if the layout is not defined or supported.
-pub fn get_layout(layout: Layout) -> Option<&'static SpeakerLayout> {
+pub fn get_layout(layout: OutputLayout) -> Option<&'static SpeakerLayout> {
     SPEAKER_LAYOUTS.iter().find(|l| l.layout == layout)
 }
 
@@ -349,7 +349,7 @@ pub fn get_layout(layout: Layout) -> Option<&'static SpeakerLayout> {
 /// excluding any Low-Frequency Effects (LFE) channels.
 ///
 /// Returns `None` if the layout is not defined or supported.
-pub fn get_layout_without_lfe(layout: Layout) -> Option<&'static SpeakerLayout> {
+pub fn get_layout_without_lfe(layout: OutputLayout) -> Option<&'static SpeakerLayout> {
     SPEAKER_LAYOUTS_WITHOUT_LFE.iter().find(|l| l.layout == layout)
 }
 
@@ -363,7 +363,7 @@ mod test {
 
     #[gtest]
     fn test_get_layout_returns_correct_stereo_config() {
-        let stereo = get_layout(Layout::Stereo).unwrap();
+        let stereo = get_layout(OutputLayout::Stereo).unwrap();
 
         expect_eq!(stereo.speakers.len(), 2);
         expect_false!(stereo.speakers[0].is_lfe);
@@ -372,7 +372,7 @@ mod test {
 
     #[gtest]
     fn test_get_layout_returns_correct_51_config() {
-        let layout51 = get_layout(Layout::Layout51).unwrap();
+        let layout51 = get_layout(OutputLayout::Layout51).unwrap();
 
         expect_eq!(layout51.speakers.len(), 6);
         let lfe_count = layout51.speakers.iter().filter(|s| s.is_lfe).count();
@@ -381,12 +381,12 @@ mod test {
 
     #[gtest]
     fn test_get_layout_returns_none_for_unsupported_binaural() {
-        expect_true!(get_layout(Layout::Binaural).is_none());
+        expect_true!(get_layout(OutputLayout::Binaural).is_none());
     }
 
     #[gtest]
     fn test_get_layout_without_lfe_returns_correct_51_config() {
-        let layout50 = get_layout_without_lfe(Layout::Layout51).unwrap();
+        let layout50 = get_layout_without_lfe(OutputLayout::Layout51).unwrap();
 
         expect_eq!(layout50.speakers.len(), 5);
         let lfe_count = layout50.speakers.iter().filter(|s| s.is_lfe).count();
@@ -395,7 +395,7 @@ mod test {
 
     #[gtest]
     fn test_get_layout_without_lfe_returns_correct_stereo_config() {
-        let stereo = get_layout_without_lfe(Layout::Stereo).unwrap();
+        let stereo = get_layout_without_lfe(OutputLayout::Stereo).unwrap();
 
         expect_eq!(stereo.speakers.len(), 2);
     }

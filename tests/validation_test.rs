@@ -19,8 +19,8 @@ mod test {
     use aom_roar::ffi::*;
     use aom_roar::OarError;
     use aom_roar::{
-        AudioElementConfig, ChannelBasedConfig, Config, GroupId, Layout, RoarRenderer, SampleRate,
-        Samples,
+        AudioElementConfig, ChannelBasedConfig, Config, GroupId, InputLayout, OutputLayout,
+        RoarRenderer, SampleRate, Samples,
     };
     use googletest::prelude::*;
 
@@ -143,7 +143,7 @@ mod test {
     #[gtest]
     fn rust_adding_third_group_fails_with_invalid_parameter() {
         let config = Config::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             Samples::new(128).unwrap(),
             SampleRate::new(48000).unwrap(),
         )
@@ -164,7 +164,7 @@ mod test {
     #[gtest]
     fn rust_adding_duplicate_element_id_fails_with_busy() {
         let config = Config::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             Samples::new(128).unwrap(),
             SampleRate::new(48000).unwrap(),
         )
@@ -173,7 +173,7 @@ mod test {
         let group_id_0 = renderer.add_audio_group().unwrap();
 
         let element_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-            layout: Layout::Stereo,
+            layout: InputLayout::Stereo,
             downmix_info: None,
             rendering_config: None,
         });
@@ -190,7 +190,7 @@ mod test {
     #[gtest]
     fn rust_adding_element_to_inactive_group_fails_with_invalid_parameter() {
         let config = Config::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             Samples::new(128).unwrap(),
             SampleRate::new(48000).unwrap(),
         )
@@ -198,7 +198,7 @@ mod test {
         let mut renderer = RoarRenderer::create(&config).unwrap();
 
         let element_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-            layout: Layout::Stereo,
+            layout: InputLayout::Stereo,
             downmix_info: None,
             rendering_config: None,
         });

@@ -21,7 +21,8 @@ mod test {
     use aom_roar::c_types::{oar_audio_block_t, oar_layout_t};
     use aom_roar::ffi::*;
     use aom_roar::{
-        AudioElementConfig, ChannelBasedConfig, Config, Layout, RoarRenderer, SampleRate, Samples,
+        AudioElementConfig, ChannelBasedConfig, Config, InputLayout, OutputLayout, RoarRenderer,
+        SampleRate, Samples,
     };
     use googletest::prelude::*;
 
@@ -157,7 +158,7 @@ mod test {
 
         // Create test ROAR instance and renderer.
         let config = Config::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             Samples::new(frame_size as u32).unwrap(),
             SampleRate::new(sample_rate).unwrap(),
         )
@@ -166,7 +167,7 @@ mod test {
         // Create audio group and audio element.
         let group_id = renderer.add_audio_group().unwrap();
         let element_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-            layout: Layout::Layout51,
+            layout: InputLayout::Layout51,
             downmix_info: None,
             rendering_config: None,
         });
@@ -209,7 +210,7 @@ mod test {
 
         // Create test ROAR instance and renderer.
         let config = Config::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             Samples::new(frame_size as u32).unwrap(),
             SampleRate::new(sample_rate).unwrap(),
         )
@@ -218,7 +219,7 @@ mod test {
         // Create audio group and audio element.
         let group_id = renderer.add_audio_group().unwrap();
         let element_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-            layout: Layout::Stereo,
+            layout: InputLayout::Stereo,
             downmix_info: None,
             rendering_config: None,
         });

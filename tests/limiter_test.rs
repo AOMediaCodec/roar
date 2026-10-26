@@ -24,8 +24,8 @@ mod test {
             roar_get_limiter_delay, roar_render, roar_set_limiter_threshold,
             roar_update_audio_element_data,
         },
-        AudioElementConfig, ChannelBasedConfig, Config, Decibels, Layout, OarError, RoarRenderer,
-        SampleRate, Samples,
+        AudioElementConfig, ChannelBasedConfig, Config, Decibels, InputLayout, OarError,
+        OutputLayout, RoarRenderer, SampleRate, Samples,
     };
     use googletest::prelude::*;
 
@@ -317,14 +317,14 @@ mod test {
         let output_channels: usize = 2;
         let element_id: u32 = 10;
         let config = Config::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             Samples::new(frame_size as u32)?,
             SampleRate::new(sample_rate)?,
         )?;
         let mut renderer = RoarRenderer::create(&config)?;
         let group_id = renderer.add_audio_group()?;
         let element_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-            layout: Layout::Stereo,
+            layout: InputLayout::Stereo,
             downmix_info: None,
             rendering_config: None,
         });
@@ -372,7 +372,8 @@ mod test {
 
     #[gtest]
     fn rust_limiter_delay_returns_configured_look_ahead_samples() -> Result<()> {
-        let config = Config::new(Layout::Stereo, Samples::new(480)?, SampleRate::new(48000)?)?;
+        let config =
+            Config::new(OutputLayout::Stereo, Samples::new(480)?, SampleRate::new(48000)?)?;
         let renderer = RoarRenderer::create(&config)?;
 
         let delay = renderer.limiter_delay();
@@ -388,14 +389,14 @@ mod test {
         let channels: usize = 2;
         let element_id: u32 = 10;
         let config = Config::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             Samples::new(frame_size as u32)?,
             SampleRate::new(sample_rate)?,
         )?;
         let mut renderer = RoarRenderer::create(&config)?;
         let group_id = renderer.add_audio_group()?;
         let element_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-            layout: Layout::Stereo,
+            layout: InputLayout::Stereo,
             downmix_info: None,
             rendering_config: None,
         });
@@ -425,14 +426,14 @@ mod test {
         let channels: usize = 2;
         let element_id: u32 = 10;
         let config = Config::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             Samples::new(frame_size as u32)?,
             SampleRate::new(sample_rate)?,
         )?;
         let mut renderer = RoarRenderer::create(&config)?;
         let group_id = renderer.add_audio_group()?;
         let element_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-            layout: Layout::Stereo,
+            layout: InputLayout::Stereo,
             downmix_info: None,
             rendering_config: None,
         });
@@ -483,14 +484,14 @@ mod test {
         let channels: usize = 2;
         let element_id: u32 = 10;
         let config = Config::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             Samples::new(frame_size as u32)?,
             SampleRate::new(sample_rate)?,
         )?;
         let mut renderer = RoarRenderer::create(&config)?;
         let group_id = renderer.add_audio_group()?;
         let element_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
-            layout: Layout::Stereo,
+            layout: InputLayout::Stereo,
             downmix_info: None,
             rendering_config: None,
         });

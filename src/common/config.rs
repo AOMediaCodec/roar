@@ -12,7 +12,7 @@
 
 use super::downmix::DownmixInfo;
 use super::hoa::HighOrderAmbisonics;
-use super::layout::Layout;
+use super::layout::{InputLayout, OutputLayout};
 use super::units::{SampleRate, Samples};
 use crate::common::definitions::{OarError, MAX_SAMPLES_PER_CHANNEL};
 use std::num::NonZeroUsize;
@@ -24,7 +24,7 @@ pub type ChannelCount = NonZeroUsize;
 #[derive(Debug, Clone, Copy)]
 pub struct Config {
     /// The target output layout.
-    target_layout: Layout,
+    target_layout: OutputLayout,
     /// Number of samples per channel per render call.
     samples_per_channel: Samples,
     /// The sample rate in Hz.
@@ -33,7 +33,7 @@ pub struct Config {
 
 impl Config {
     pub fn new(
-        target_layout: Layout,
+        target_layout: OutputLayout,
         samples_per_channel: Samples,
         sample_rate: SampleRate,
     ) -> Result<Self, OarError> {
@@ -44,7 +44,7 @@ impl Config {
     }
 
     /// Get output (target) layout.
-    pub fn output_layout(&self) -> Layout {
+    pub fn output_layout(&self) -> OutputLayout {
         self.target_layout
     }
 
@@ -97,8 +97,8 @@ pub struct ElementRenderingConfig {
 /// Configuration for channel-based audio element.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ChannelBasedConfig {
-    /// The loudspeaker layout configuration.
-    pub layout: Layout,
+    /// The input loudspeaker or channel-subset layout configuration.
+    pub layout: InputLayout,
     /// Optional initial downmix parameters.
     pub downmix_info: Option<DownmixInfo>,
     ///Optional binaural rendering config.
@@ -165,13 +165,13 @@ mod test {
     #[gtest]
     fn test_oar_config_accessors() {
         let config = Config::new(
-            Layout::Layout714,
+            OutputLayout::Layout714,
             Samples::new(512).unwrap(),
             SampleRate::new(48000).unwrap(),
         )
         .unwrap();
 
-        expect_that!(config.output_layout(), eq(Layout::Layout714));
+        expect_that!(config.output_layout(), eq(OutputLayout::Layout714));
         expect_that!(config.sample_rate().value(), eq(48000));
         expect_that!(config.samples_per_channel().value(), eq(512));
     }
@@ -180,13 +180,13 @@ mod test {
     fn test_oar_config_validation() {
         // Valid configuration
         expect_ok!(Config::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             Samples::new(512).unwrap(),
             SampleRate::new(48000).unwrap(),
         ));
         // Invalid samples (too large for config limit of 16384)
         expect_true!(Config::new(
-            Layout::Stereo,
+            OutputLayout::Stereo,
             Samples::new(20000).unwrap(),
             SampleRate::new(48000).unwrap(),
         )
@@ -196,7 +196,7 @@ mod test {
     #[gtest]
     fn test_audio_element_config_comparisons_and_traits() {
         let ch_config = ChannelBasedConfig {
-            layout: Layout::Stereo,
+            layout: InputLayout::Stereo,
             downmix_info: None,
             rendering_config: None,
         };
