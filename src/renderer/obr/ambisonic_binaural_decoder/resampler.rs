@@ -16,7 +16,7 @@
 //! audio sample rates cleanly between different target rates.
 
 use super::dsp_utils::generate_hann_window;
-use crate::renderer::obr::audio_buffer::AudioBuffer;
+use crate::common::audio_buffer::AudioBuffer;
 use crate::renderer::obr::common::constants::{
     EPSILON_FLOAT, MAX_SUPPORTED_AMBISONIC_ORDER, MAX_SUPPORTED_NUM_FRAMES, NUM_MONO_CHANNELS,
 };

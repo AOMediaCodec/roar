@@ -23,7 +23,6 @@
 pub mod ambisonic_binaural_decoder;
 pub mod ambisonic_encoder;
 pub mod ambisonic_rotator;
-pub mod audio_buffer;
 pub mod common;
 pub mod peak_limiter;
 pub mod renderer;

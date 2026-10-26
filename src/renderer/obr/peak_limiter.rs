@@ -15,8 +15,8 @@
 //! Provides the DSP logic for dynamic range compression and peak signal limiting
 //! used on OBR stereo binaural outputs.
 
+use crate::common::audio_buffer::AudioBuffer;
 use crate::common::definitions::{Decibels, LinearGain, Milliseconds, SampleRate, Samples};
-use crate::renderer::obr::audio_buffer::AudioBuffer;
 use crate::renderer::obr::common::constants::{
     PEAK_LIMITER_DEFAULT_CEILING, PEAK_LIMITER_DEFAULT_RELEASE_TIME,
 };
@@ -150,8 +150,8 @@ impl PeakLimiter {
 mod test {
 
     use super::*;
+    use crate::common::audio_buffer::AudioBuffer;
     use crate::common::definitions::{Decibels, Milliseconds, SampleRate, Samples};
-    use crate::renderer::obr::audio_buffer::AudioBuffer;
     use googletest::prelude::*;
 
     #[gtest]

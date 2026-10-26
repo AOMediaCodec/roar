@@ -24,7 +24,7 @@ pub mod resampler;
 pub mod sh_hrir_creator;
 pub mod wav;
 
-use crate::renderer::obr::audio_buffer::{AudioBuffer, ChannelViewMut};
+use crate::common::audio_buffer::{AudioBuffer, ChannelViewMut};
 use crate::renderer::obr::common::constants::{
     NUM_BINAURAL_CHANNELS, NUM_MONO_CHANNELS, NUM_STEREO_CHANNELS,
 };

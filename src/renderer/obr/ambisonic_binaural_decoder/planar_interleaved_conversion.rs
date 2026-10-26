@@ -15,8 +15,8 @@
 //! Provides routines to translate between interleaved sample buffers (used in external systems)
 //! and internal planar representations managed by `AudioBuffer`.
 
-use crate::renderer::obr::audio_buffer::simd_utils::float_from_int16;
-use crate::renderer::obr::audio_buffer::AudioBuffer;
+use crate::common::audio_buffer::simd_utils::float_from_int16;
+use crate::common::audio_buffer::AudioBuffer;
 
 /// Copies interleaved 16-bit PCM samples into a planar `AudioBuffer`.
 pub fn fill_audio_buffer_from_i16(

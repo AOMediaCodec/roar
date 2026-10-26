@@ -23,6 +23,8 @@
 use super::audio_element_config::{AudioElementConfig, BinauralFilterProfile};
 use super::audio_element_type::AudioElementType;
 use super::processing_group::{ProcessingGroup, ProcessingGroupKey};
+use crate::common::audio_buffer::simd_utils::add_pointwise_in_place;
+use crate::common::audio_buffer::AudioBuffer;
 use crate::common::definitions::ChannelCount;
 use crate::common::definitions::{
     AudioElementConfig as OarAudioElementConfig, Gain, HighOrderAmbisonics, Layout, OarError,
@@ -34,8 +36,6 @@ use crate::common::definitions::{
 use crate::renderer::audio_renderer_api::AudioRenderer;
 use crate::renderer::gain_parameter::{generate_gain_multipliers, GainParameter, GainUpdate};
 use crate::renderer::obr::ambisonic_binaural_decoder::{FftManager, Resampler};
-use crate::renderer::obr::audio_buffer::simd_utils::add_pointwise_in_place;
-use crate::renderer::obr::audio_buffer::AudioBuffer;
 use crate::renderer::obr::common::constants::{
     MAX_SUPPORTED_NUM_INPUT_CHANNELS, NUM_BINAURAL_CHANNELS,
 };

@@ -16,10 +16,10 @@
 //! into planar HOA representations using spherical harmonics.
 
 pub mod associated_legendre_polynomials_generator;
-use crate::renderer::obr::audio_buffer::simd_utils::{
+use crate::common::audio_buffer::simd_utils::{
     ramp_multiply_and_accumulate, scalar_multiply_and_accumulate,
 };
-use crate::renderer::obr::audio_buffer::AudioBuffer;
+use crate::common::audio_buffer::AudioBuffer;
 use crate::renderer::obr::common::ambisonic_utils::{
     acn_sequence, get_num_periphonic_components, sn3d_normalization,
 };

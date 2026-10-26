@@ -15,7 +15,7 @@
 //! Wraps real-to-complex FFT routines and handles conversion between time domain signals
 //! and canonical frequency-domain representations without real-time allocations.
 
-use crate::renderer::obr::audio_buffer::{ChannelView, ChannelViewMut};
+use crate::common::audio_buffer::{ChannelView, ChannelViewMut};
 use crate::renderer::obr::common::misc_math::next_pow_two;
 use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 use rustfft::num_complex::Complex;
@@ -204,7 +204,7 @@ impl FftManager {
 mod test {
 
     use super::*;
-    use crate::renderer::obr::audio_buffer::AudioBuffer;
+    use crate::common::audio_buffer::AudioBuffer;
     use googletest::prelude::*;
 
     #[gtest]

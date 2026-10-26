@@ -16,7 +16,7 @@
 
 use super::dsp_utils::ceil_to_multiple_of_frames_per_buffer;
 use super::fft_manager::FftManager;
-use crate::renderer::obr::audio_buffer::{AudioBuffer, ChannelView, ChannelViewMut};
+use crate::common::audio_buffer::{AudioBuffer, ChannelView, ChannelViewMut};
 use crate::renderer::obr::common::constants::NUM_MONO_CHANNELS;
 
 /// Overlap-add partitioned FFT convolving filter.

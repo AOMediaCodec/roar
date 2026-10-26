@@ -15,8 +15,8 @@
 //! Rotates a sound field block by a given target rotation. Used to align the spatial audio
 //! scene with the listener's head movements.
 
+use crate::common::audio_buffer::AudioBuffer;
 use crate::common::definitions::Quaternion;
-use crate::renderer::obr::audio_buffer::AudioBuffer;
 use crate::renderer::obr::common::ambisonic_utils::{
     get_num_nth_order_periphonic_components, get_num_periphonic_components,
 };

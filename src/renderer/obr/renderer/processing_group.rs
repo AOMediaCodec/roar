@@ -17,13 +17,13 @@
 //! rotations, convolutions, and FFT operations.
 
 use super::audio_element_config::{AudioElementConfig, BinauralFilterProfile};
+use crate::common::audio_buffer::AudioBuffer;
 use crate::common::definitions::{LinearGain, OarError, Quaternion, SampleRate, Samples};
 use crate::renderer::obr::ambisonic_binaural_decoder::{
     create_sh_hrirs_from_assets, AmbisonicBinauralDecoder, FftManager, Resampler,
 };
 use crate::renderer::obr::ambisonic_encoder::AmbisonicEncoder;
 use crate::renderer::obr::ambisonic_rotator::AmbisonicRotator;
-use crate::renderer::obr::audio_buffer::AudioBuffer;
 use crate::renderer::obr::common::ambisonic_utils::get_num_periphonic_components;
 use crate::renderer::obr::common::constants::{
     MAX_SUPPORTED_AMBISONIC_ORDER, MIN_SUPPORTED_AMBISONIC_ORDER, NUM_BINAURAL_CHANNELS,

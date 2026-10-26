@@ -19,7 +19,7 @@ use super::binaural_filters::BinauralFiltersWrapper;
 use super::planar_interleaved_conversion::fill_audio_buffer_from_i16;
 use super::resampler::Resampler;
 use super::wav::Wav;
-use crate::renderer::obr::audio_buffer::AudioBuffer;
+use crate::common::audio_buffer::AudioBuffer;
 use crate::renderer::obr::common::ambisonic_utils::is_valid_ambisonic_order;
 
 use crate::common::definitions::SampleRate;
