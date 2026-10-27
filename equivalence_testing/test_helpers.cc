@@ -35,10 +35,18 @@ std::vector<oar_hoa_t> GetAllAmbisonicOrders() {
 
 std::vector<oar_layout_t> GetAllChannelBasedInputs() {
   return {
-      ck_oar_layout_mono,     ck_oar_layout_stereo, ck_oar_layout_51,
-      ck_oar_layout_512,      ck_oar_layout_514,    ck_oar_layout_71,
-      ck_oar_layout_712,      ck_oar_layout_714,    ck_oar_layout_312,
-      ck_oar_layout_916,      ck_oar_layout_a293,   ck_oar_layout_7154,
+      ck_oar_layout_mono,
+      ck_oar_layout_stereo,
+      ck_oar_layout_51,
+      ck_oar_layout_512,
+      ck_oar_layout_514,
+      ck_oar_layout_71,
+      ck_oar_layout_712,
+      ck_oar_layout_714,
+      ck_oar_layout_312,
+      ck_oar_layout_916,
+      // ck_oar_layout_a293,
+      ck_oar_layout_7154,
       ck_oar_layout_binaural,
   };
 }
