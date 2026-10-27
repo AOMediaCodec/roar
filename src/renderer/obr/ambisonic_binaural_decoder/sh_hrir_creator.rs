@@ -13,49 +13,56 @@
 //! Spherical harmonic HRIR loading and creation.
 //!
 //! Provides routines to synthesize and load spherical harmonic Head-Related Impulse Response (HRIR)
-//! filters from audio files or embedded assets.
+//! filters from embedded Rice-encoded static data.
 
 use super::binaural_filters::BinauralFiltersWrapper;
-use super::planar_interleaved_conversion::fill_audio_buffer_from_i16;
 use super::resampler::Resampler;
-use super::wav::Wav;
+use super::rice_coding::RiceFilterDecoder;
 use crate::common::audio_buffer::AudioBuffer;
 use crate::renderer::obr::common::ambisonic_utils::is_valid_ambisonic_order;
 
 use crate::common::definitions::SampleRate;
 
-/// Synthesizes an `AudioBuffer` of planar SH-HRIR filters from a parsed `Wav` structure.
+/// Native sampling rate (in Hz) of the embedded spherical harmonic HRIR filter assets.
+const HRIR_NATIVE_SAMPLE_RATE_HZ: i32 = 48000;
+
+/// Synthesizes an `AudioBuffer` of planar SH-HRIR filters from Rice-encoded planar filter bytes.
 ///
-/// Resamples the filters if the target rate differs from the WAV's sampling rate.
-pub fn create_sh_hrirs_from_wav(
-    wav: &Wav,
+/// # Arguments
+/// * `encoded_bytes` - Rice-encoded planar filter asset starting with `[num_channels,
+///   blocks_per_channel]`.
+/// * `target_sample_rate` - Desired output sampling rate; resamples if different from 48 kHz.
+/// * `resampler` - Reusable resampler instance used when `target_sample_rate` differs from 48 kHz.
+pub fn create_sh_hrirs_from_encoded_bytes(
+    encoded_bytes: &[u8],
     target_sample_rate: SampleRate,
     resampler: &mut Resampler,
-) -> AudioBuffer {
-    let num_channels = wav.num_channels();
-    assert!(is_valid_ambisonic_order(num_channels));
+) -> Option<AudioBuffer> {
+    let sh_hrirs = RiceFilterDecoder::decode_to_audio_buffer(encoded_bytes)?;
+    let num_channels = sh_hrirs.num_channels();
+    if !is_valid_ambisonic_order(num_channels) {
+        return None;
+    }
 
-    let sh_hrir_length = wav.interleaved_samples().len() / num_channels;
-    let mut sh_hrirs = AudioBuffer::new(num_channels, sh_hrir_length);
-    fill_audio_buffer_from_i16(
-        wav.interleaved_samples(),
-        sh_hrir_length,
-        num_channels,
-        &mut sh_hrirs,
-    );
-
-    let wav_rate = wav.sample_rate();
+    let sh_hrir_length = sh_hrirs.num_frames();
     let target_sample_rate_hz = target_sample_rate.value() as i32;
-    assert!(wav_rate > 0 && target_sample_rate_hz > 0);
-    if wav_rate != target_sample_rate_hz {
+    assert!(target_sample_rate_hz > 0);
+    if HRIR_NATIVE_SAMPLE_RATE_HZ != target_sample_rate_hz {
         assert!(
-            Resampler::are_sample_rates_supported(wav_rate, target_sample_rate_hz),
+            Resampler::are_sample_rates_supported(
+                HRIR_NATIVE_SAMPLE_RATE_HZ,
+                target_sample_rate_hz
+            ),
             "Unsupported sampling rates for loading HRIRs: {}, {}",
-            wav_rate,
+            HRIR_NATIVE_SAMPLE_RATE_HZ,
             target_sample_rate_hz
         );
         resampler.reset_state();
-        resampler.set_rate_and_num_channels(wav_rate, target_sample_rate_hz, num_channels);
+        resampler.set_rate_and_num_channels(
+            HRIR_NATIVE_SAMPLE_RATE_HZ,
+            target_sample_rate_hz,
+            num_channels,
+        );
         let mut resampled =
             AudioBuffer::new(num_channels, resampler.get_next_output_length(sh_hrir_length));
         resampler.process(&sh_hrirs, &mut resampled);
@@ -64,18 +71,19 @@ pub fn create_sh_hrirs_from_wav(
         // sampled: convolving at the target rate accumulates target/wav times as many taps of the
         // same continuous curve.  Rescale so the realized frequency response, and thus the rendered
         // loudness, is invariant to the target rate.
-        let filter_gain_compensation = (wav_rate as f32) / (target_sample_rate_hz as f32);
+        let filter_gain_compensation =
+            (HRIR_NATIVE_SAMPLE_RATE_HZ as f32) / (target_sample_rate_hz as f32);
         for channel in 0..num_channels {
             for sample in resampled.channel_mut(channel).as_mut_slice() {
                 *sample *= filter_gain_compensation;
             }
         }
-        return resampled;
+        return Some(resampled);
     }
-    sh_hrirs
+    Some(sh_hrirs)
 }
 
-/// Synthesizes an `AudioBuffer` of planar SH-HRIR filters from embedded binary WAV assets.
+/// Synthesizes an `AudioBuffer` of planar SH-HRIR filters from embedded Rice-encoded assets.
 pub fn create_sh_hrirs_from_assets(
     filename: &str,
     target_sample_rate: SampleRate,
@@ -83,8 +91,7 @@ pub fn create_sh_hrirs_from_assets(
 ) -> Option<AudioBuffer> {
     let wrapper = BinauralFiltersWrapper::new();
     let data = wrapper.get_file(filename)?;
-    let wav = Wav::from_bytes(data)?;
-    Some(create_sh_hrirs_from_wav(&wav, target_sample_rate, resampler))
+    create_sh_hrirs_from_encoded_bytes(data, target_sample_rate, resampler)
 }
 
 #[cfg(test)]
@@ -216,5 +223,66 @@ mod test {
         let resampled = load_hrirs("3OAAmbientL", target_rate);
 
         expect_that!(resampled.num_frames() as f64, near(expected_frames, 1.0));
+    }
+
+    #[googletest::test]
+    fn create_sh_hrirs_from_encoded_bytes_returns_none_on_invalid_bytes() {
+        let mut resampler = Resampler::new();
+        let target_rate = SampleRate::new(48000).unwrap();
+
+        expect_true!(create_sh_hrirs_from_encoded_bytes(&[], target_rate, &mut resampler).is_none());
+        expect_true!(
+            create_sh_hrirs_from_encoded_bytes(&[1, 2, 3], target_rate, &mut resampler).is_none()
+        );
+    }
+
+    #[googletest::test]
+    fn create_sh_hrirs_from_encoded_bytes_returns_none_on_non_ambisonic_channel_count() {
+        let mut resampler = Resampler::new();
+        let target_rate = SampleRate::new(48000).unwrap();
+
+        // 2 channels, 1 block each: 2 header bytes + two 33-byte blocks of zeros = 68 bytes.
+        let mut two_channel_bytes = vec![2_u8, 1_u8];
+        two_channel_bytes.push(0_u8);
+        two_channel_bytes.extend_from_slice(&[0xFF; 32]);
+        two_channel_bytes.push(0_u8);
+        two_channel_bytes.extend_from_slice(&[0xFF; 32]);
+
+        expect_true!(create_sh_hrirs_from_encoded_bytes(
+            &two_channel_bytes,
+            target_rate,
+            &mut resampler
+        )
+        .is_none());
+    }
+
+    #[googletest::test]
+    #[should_panic(expected = "Unsupported sampling rates for loading HRIRs")]
+    fn create_sh_hrirs_from_encoded_bytes_panics_on_unsupported_sample_rate() {
+        let mut resampler = Resampler::new();
+        let unsupported_rate = SampleRate::new(44101).unwrap();
+
+        // 1 channel (0OA, order 0 -> (0+1)^2 = 1 channel), 1 block of zeros.
+        let mut one_channel_bytes = vec![1_u8, 1_u8, 0_u8];
+        one_channel_bytes.extend_from_slice(&[0xFF; 32]);
+
+        let _ = create_sh_hrirs_from_encoded_bytes(
+            &one_channel_bytes,
+            unsupported_rate,
+            &mut resampler,
+        );
+    }
+
+    #[googletest::test]
+    fn create_sh_hrirs_from_assets_returns_none_for_missing_asset() {
+        let mut resampler = Resampler::new();
+        let target_rate = SampleRate::new(48000).unwrap();
+
+        expect_true!(create_sh_hrirs_from_assets(
+            "NonexistentFilterAsset",
+            target_rate,
+            &mut resampler
+        )
+        .is_none());
     }
 }

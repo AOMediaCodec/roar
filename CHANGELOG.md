@@ -27,6 +27,12 @@ Changes in the repo not yet in a release will appear here.
 
 -   Separated `Layout` type into `InputLayout` and `OutputLayout` for the Rust
     API. The C API remains unchanged.
+-   Changed the way the different types of filter coefficients and matrices are
+    stored in the binary in order to shrink the binary size. Effected data
+    include SH HRIR filters for binaural rendering, matrices for channel-to-
+    channel rendering, and matrices for ambisonic-to-channel rendering. Runtime
+    performance is unaffected or improved and rendering remains equivalent to
+    OAR (< 1e-6).
 
 ### [Fixed]
 

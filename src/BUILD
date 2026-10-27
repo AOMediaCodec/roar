@@ -3,6 +3,22 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_static_library", "rust_test")
 
 rust_static_library(
+    name = "rice_block_decoder",
+    srcs = ["renderer/obr/ambisonic_binaural_decoder/rice_block_decoder.rs"],
+    edition = "2024",
+    visibility = ["@aom-roar//bin:__subpackages__"],
+)
+
+rust_test(
+    name = "rice_block_decoder_test",
+    srcs = ["renderer/obr/ambisonic_binaural_decoder/rice_block_decoder.rs"],
+    edition = "2024",
+    deps = [
+        "@crates//:googletest",
+    ],
+)
+
+rust_static_library(
     name = "aom_roar",
     srcs = [
         "c_types.rs",
@@ -68,10 +84,9 @@ rust_static_library(
         "renderer/obr/ambisonic_binaural_decoder/dsp_utils.rs",
         "renderer/obr/ambisonic_binaural_decoder/fft_manager.rs",
         "renderer/obr/ambisonic_binaural_decoder/partitioned_fft_filter.rs",
-        "renderer/obr/ambisonic_binaural_decoder/planar_interleaved_conversion.rs",
         "renderer/obr/ambisonic_binaural_decoder/resampler.rs",
+        "renderer/obr/ambisonic_binaural_decoder/rice_coding.rs",
         "renderer/obr/ambisonic_binaural_decoder/sh_hrir_creator.rs",
-        "renderer/obr/ambisonic_binaural_decoder/wav.rs",
         "renderer/obr/ambisonic_encoder.rs",
         "renderer/obr/ambisonic_encoder/associated_legendre_polynomials_generator.rs",
         "renderer/obr/ambisonic_rotator.rs",
@@ -103,6 +118,7 @@ rust_static_library(
     edition = "2024",
     visibility = ["//visibility:public"],
     deps = [
+        ":rice_block_decoder",
         "@crates//:realfft",
         "@crates//:rustfft",
     ],
@@ -174,10 +190,9 @@ rust_library(
         "renderer/obr/ambisonic_binaural_decoder/dsp_utils.rs",
         "renderer/obr/ambisonic_binaural_decoder/fft_manager.rs",
         "renderer/obr/ambisonic_binaural_decoder/partitioned_fft_filter.rs",
-        "renderer/obr/ambisonic_binaural_decoder/planar_interleaved_conversion.rs",
         "renderer/obr/ambisonic_binaural_decoder/resampler.rs",
+        "renderer/obr/ambisonic_binaural_decoder/rice_coding.rs",
         "renderer/obr/ambisonic_binaural_decoder/sh_hrir_creator.rs",
-        "renderer/obr/ambisonic_binaural_decoder/wav.rs",
         "renderer/obr/ambisonic_encoder.rs",
         "renderer/obr/ambisonic_encoder/associated_legendre_polynomials_generator.rs",
         "renderer/obr/ambisonic_rotator.rs",
@@ -210,6 +225,7 @@ rust_library(
     edition = "2024",
     visibility = ["//visibility:public"],
     deps = [
+        ":rice_block_decoder",
         "@crates//:realfft",
         "@crates//:rustfft",
     ],
@@ -281,10 +297,9 @@ rust_test(
         "renderer/obr/ambisonic_binaural_decoder/dsp_utils.rs",
         "renderer/obr/ambisonic_binaural_decoder/fft_manager.rs",
         "renderer/obr/ambisonic_binaural_decoder/partitioned_fft_filter.rs",
-        "renderer/obr/ambisonic_binaural_decoder/planar_interleaved_conversion.rs",
         "renderer/obr/ambisonic_binaural_decoder/resampler.rs",
+        "renderer/obr/ambisonic_binaural_decoder/rice_coding.rs",
         "renderer/obr/ambisonic_binaural_decoder/sh_hrir_creator.rs",
-        "renderer/obr/ambisonic_binaural_decoder/wav.rs",
         "renderer/obr/ambisonic_encoder.rs",
         "renderer/obr/ambisonic_encoder/associated_legendre_polynomials_generator.rs",
         "renderer/obr/ambisonic_rotator.rs",
@@ -315,6 +330,7 @@ rust_test(
     ],
     edition = "2024",
     deps = [
+        ":rice_block_decoder",
         "@crates//:googletest",
         "@crates//:realfft",
         "@crates//:rstest",

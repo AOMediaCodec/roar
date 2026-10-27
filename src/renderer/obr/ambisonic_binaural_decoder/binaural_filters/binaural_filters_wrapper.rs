@@ -12,10 +12,10 @@
 
 //! Static assets wrapper for embedded binaural filters.
 //!
-//! Provides the `BinauralFiltersWrapper` struct which resolves static embedded WAV asset
+//! Provides the `BinauralFiltersWrapper` struct which resolves static embedded Rice-encoded
 //! filter data by name.
 
-/// Wrapper struct providing access to embedded binaural filter WAV asset files.
+/// Wrapper struct providing access to embedded binaural filter asset files.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct BinauralFiltersWrapper;
 
@@ -25,7 +25,7 @@ impl BinauralFiltersWrapper {
         Self
     }
 
-    /// Retrieves the binary content of an embedded filter WAV file by name.
+    /// Retrieves the binary content of an embedded Rice-encoded filter asset by name.
     ///
     /// Returns `Some(&[u8])` if the asset exists, or `None` otherwise.
     pub fn get_file(&self, filename: &str) -> Option<&'static [u8]> {

@@ -9,6 +9,7 @@
  * source code in the PATENTS file, you can obtain it at
  * www.aomedia.org/license/patent.
  */
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -37,6 +38,7 @@ using ::testing::Pointwise;
 
 // Tolerable error level.
 constexpr float kEpsilon = 1e-6;
+constexpr uint32_t kTargetSamplesToRender = 24000;
 
 // Simple struct to pair element and metadata.
 struct ElementWithMetadata {
@@ -91,26 +93,19 @@ void RunTest(oar_config_t config,
     }
   }
 
-  // Feed input audio for each element.
-  // Input audio lifetime must survive through to the render call.
-  std::vector<std::vector<float>> all_input_data;
+  // Prepare input audio for each element.
+  // Input audio lifetime must survive through to the render calls.
+  std::vector<std::vector<float>> all_input_data(elements.size());
+  std::vector<oar_audio_block_t> input_blocks(elements.size());
   for (size_t i = 0; i < elements.size(); ++i) {
     uint32_t element_id = i;
     const uint32_t input_channels =
         oar_get_number_of_audio_element_channels(oar.get(), element_id);
-    all_input_data.push_back(GetInputData(c_samples_per_channel, input_channels,
-                                          config.sampling_rate));
-    oar_audio_block_t input_block = {};
-    input_block.channels = input_channels;
-    input_block.samples_per_channel = c_samples_per_channel;
-    input_block.data = all_input_data.back().data();
-
-    ASSERT_EQ(
-        oar_update_audio_element_data(oar.get(), element_id, &input_block), 0)
-        << error_message;
-    ASSERT_EQ(
-        roar_update_audio_element_data(roar.get(), element_id, &input_block), 0)
-        << error_message;
+    all_input_data[i] = GetInputData(c_samples_per_channel, input_channels,
+                                     config.sampling_rate);
+    input_blocks[i].channels = input_channels;
+    input_blocks[i].samples_per_channel = c_samples_per_channel;
+    input_blocks[i].data = all_input_data[i].data();
   }
 
   // Get output buffers ready
@@ -132,12 +127,33 @@ void RunTest(oar_config_t config,
   r_output_block.samples_per_channel = r_samples_per_channel;
   r_output_block.data = r_output.data();
 
-  // Render
-  ASSERT_EQ(oar_render(oar.get(), &c_output_block), 0) << error_message;
-  ASSERT_EQ(roar_render(roar.get(), &r_output_block), 0) << error_message;
+  // Render multiple steps to reach at least kTargetSamplesToRender samples.
+  for (uint32_t samples_rendered = 0, step = 0;
+       samples_rendered < kTargetSamplesToRender;
+       samples_rendered += c_samples_per_channel, ++step) {
+    for (size_t i = 0; i < elements.size(); ++i) {
+      uint32_t element_id = i;
+      ASSERT_EQ(oar_update_audio_element_data(oar.get(), element_id,
+                                              &input_blocks[i]),
+                0)
+          << error_message << " at step " << step;
+      ASSERT_EQ(roar_update_audio_element_data(roar.get(), element_id,
+                                               &input_blocks[i]),
+                0)
+          << error_message << " at step " << step;
+    }
 
-  EXPECT_THAT(c_output, Pointwise(FloatNear(kEpsilon), r_output))
-      << error_message;
+    ASSERT_EQ(oar_render(oar.get(), &c_output_block), 0)
+        << error_message << " at step " << step;
+    ASSERT_EQ(roar_render(roar.get(), &r_output_block), 0)
+        << error_message << " at step " << step;
+
+    EXPECT_THAT(c_output, Pointwise(FloatNear(kEpsilon), r_output))
+        << error_message << " at step " << step;
+
+    std::fill(c_output.begin(), c_output.end(), 0.0f);
+    std::fill(r_output.begin(), r_output.end(), 0.0f);
+  }
 }
 
 // ===== Tests =====
@@ -186,7 +202,7 @@ TEST(RoarEquivalence, ObjectBasedInput) {
                                       {-105.0f, -1.3f, 3.0f}};
 
     oar_metadata_t metadata =
-        CreateObjectMetadata(positions, output_config.samples_per_channel);
+        CreateObjectMetadata(positions, kTargetSamplesToRender);
 
     std::string error_message =
         absl::StrFormat("ObjectBasedInput (2 objects -> layout %d)",
@@ -223,7 +239,7 @@ TEST(RoarEquivalence, CombinationInput) {
     std::vector<polar_t> positions = {{45.0f, 1.2f, 2.0f},
                                       {-180.0f, -0.1f, 1.0f}};
     oar_metadata_t metadata =
-        CreateObjectMetadata(positions, config.samples_per_channel);
+        CreateObjectMetadata(positions, kTargetSamplesToRender);
 
     // First order ambisonics element.
     oar_audio_element_config_t scene_element_config = {};

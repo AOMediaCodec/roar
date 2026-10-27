@@ -19,10 +19,9 @@ pub mod binaural_filters;
 pub mod dsp_utils;
 pub mod fft_manager;
 pub mod partitioned_fft_filter;
-pub mod planar_interleaved_conversion;
 pub mod resampler;
+pub mod rice_coding;
 pub mod sh_hrir_creator;
-pub mod wav;
 
 use crate::common::audio_buffer::{AudioBuffer, ChannelViewMut};
 use crate::renderer::obr::common::constants::{
