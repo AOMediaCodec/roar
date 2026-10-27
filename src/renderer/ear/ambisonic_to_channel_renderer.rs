@@ -20,7 +20,7 @@ use crate::common::definitions::{
     HighOrderAmbisonics, OarError, OutputLayout, PlanarBufferMut, PlanarBufferRef,
     MAX_OUTPUT_CHANNEL_COUNT,
 };
-use crate::renderer::ear::matrix_renderer::{matrix_render, MatrixView};
+use crate::renderer::ear::matrix_renderer::{matrix_render, MatrixData, MatrixView};
 
 /// Matrix entry table structure associating input HOA order with target loudspeaker layout
 /// (`h2m_rdr_t`).
@@ -1406,7 +1406,7 @@ pub fn element_renderer_render_h2m(
     let lfe2_index = h2m_matrix.lfe2;
 
     let mv = MatrixView {
-        data: h2m_matrix.mat,
+        data: MatrixData::Dense(h2m_matrix.mat),
         in_dim: h2m_matrix.m,
         in_stride: 1,
         out_dim: h2m_matrix.n,
