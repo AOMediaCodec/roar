@@ -20,14 +20,13 @@
 //! Crucially, `ObrImpl` is designed to be allocation-free on its real-time audio thread
 //! processing loop once initialized.
 
-use super::audio_element_config::{AudioElementConfig, BinauralFilterProfile};
-use super::audio_element_type::AudioElementType;
+use super::audio_element_config::{AudioElementConfig, AudioElementVariant};
 use super::processing_group::{ProcessingGroup, ProcessingGroupKey};
 use crate::common::audio_buffer::simd_utils::add_pointwise_in_place;
 use crate::common::audio_buffer::AudioBuffer;
 use crate::common::definitions::ChannelCount;
 use crate::common::definitions::{
-    AudioElementConfig as OarAudioElementConfig, Gain, HighOrderAmbisonics, InputLayout, OarError,
+    AudioElementConfig as OarAudioElementConfig, BinauralFilterProfile, Gain, OarError,
     ObjectPosition,
 };
 use crate::common::definitions::{
@@ -148,7 +147,7 @@ impl ObrImpl {
         self.processing_groups.clear();
         let mut groups_map: BTreeMap<ProcessingGroupKey, Vec<usize>> = BTreeMap::new();
         for (i, elem) in self.audio_elements.iter().enumerate() {
-            if elem.element_type().is_passthrough() {
+            if elem.is_passthrough() {
                 continue;
             }
             let key = ProcessingGroupKey {
@@ -170,10 +169,10 @@ impl ObrImpl {
     /// Adds an audio element to the renderer and updates the DSP lifecycle.
     pub fn add_audio_element(
         &mut self,
-        element_type: AudioElementType,
+        variant: AudioElementVariant,
         filter_profile: BinauralFilterProfile,
     ) -> Result<(), OarError> {
-        let mut cfg = AudioElementConfig::new(element_type, filter_profile);
+        let mut cfg = AudioElementConfig::new(variant, filter_profile);
         if !self.audio_elements.is_empty() {
             let last = self.audio_elements.last().unwrap();
             let first_idx = last.get_first_channel_index() + last.get_number_of_input_channels();
@@ -275,7 +274,7 @@ impl ObrImpl {
         if audio_element_index >= self.audio_elements.len() {
             return Err(OarError::InvalidParameter);
         }
-        if self.audio_elements[audio_element_index].element_type().is_passthrough() {
+        if self.audio_elements[audio_element_index].is_passthrough() {
             return Ok(());
         }
         self.audio_elements[audio_element_index].set_head_locked(head_locked);
@@ -296,17 +295,18 @@ impl ObrImpl {
         }
 
         for audio_element in &self.audio_elements {
-            if audio_element.element_type().is_passthrough() {
-                let first_ch = audio_element.get_first_channel_index();
-                // TODO(b/525080422): Optimize by retrieving output buffer slices once at the start
-                // of process using as_slices_mut to avoid repeated channel_mut calls in the loop.
-                if audio_element.element_type() == AudioElementType::PassthroughMono {
+            let first_ch = audio_element.get_first_channel_index();
+            // TODO(b/525080422): Optimize by retrieving output buffer slices once at the start
+            // of process using as_slices_mut to avoid repeated channel_mut calls in the loop.
+            match audio_element.variant() {
+                AudioElementVariant::PassthroughMono => {
                     let in_ch = input_buffer.channel(first_ch);
                     let out_l = output_buffer.channel_mut(0);
                     add_pointwise_in_place(out_l.data, in_ch.data);
                     let out_r = output_buffer.channel_mut(1);
                     add_pointwise_in_place(out_r.data, in_ch.data);
-                } else if audio_element.element_type() == AudioElementType::PassthroughStereo {
+                }
+                AudioElementVariant::PassthroughStereo => {
                     let in_l = input_buffer.channel(first_ch);
                     let in_r = input_buffer.channel(first_ch + 1);
                     let out_l = output_buffer.channel_mut(0);
@@ -314,6 +314,7 @@ impl ObrImpl {
                     let out_r = output_buffer.channel_mut(1);
                     add_pointwise_in_place(out_r.data, in_r.data);
                 }
+                _ => {}
             }
         }
 
@@ -433,53 +434,20 @@ impl AudioRenderer for ObrAudioRendererAdapter {
         if self.id_to_element_index.contains_key(&id) {
             return Err(OarError::InvalidParameter);
         }
-        let elem_type = match config {
-            OarAudioElementConfig::ChannelBased(cbc) => match cbc.layout {
-                InputLayout::Mono => AudioElementType::LayoutMono,
-                InputLayout::Stereo => AudioElementType::LayoutStereo,
-                InputLayout::Layout51 => AudioElementType::Layout5_1_0,
-                InputLayout::Layout512 => AudioElementType::Layout5_1_2,
-                InputLayout::Layout514 => AudioElementType::Layout5_1_4,
-                InputLayout::Layout71 => AudioElementType::Layout7_1_0,
-                InputLayout::Layout712 => AudioElementType::Layout7_1_2,
-                InputLayout::Layout714 => AudioElementType::Layout7_1_4,
-                InputLayout::Layout312 => AudioElementType::Layout3_1_2,
-                InputLayout::Layout916 => AudioElementType::Layout9_1_6,
-                InputLayout::Layout7154 => AudioElementType::Layout7_1_5_4,
-                InputLayout::LayoutA293 => AudioElementType::Layout10_2_9_3,
-                InputLayout::Binaural => AudioElementType::PassthroughStereo,
-                _ => return Err(OarError::InvalidParameter),
-            },
-            OarAudioElementConfig::SceneBased(sbc) => match sbc.order {
-                HighOrderAmbisonics::Zoa => AudioElementType::PassthroughMono,
-                HighOrderAmbisonics::Order1 => AudioElementType::Oa1,
-                HighOrderAmbisonics::Order2 => AudioElementType::Oa2,
-                HighOrderAmbisonics::Order3 => AudioElementType::Oa3,
-                HighOrderAmbisonics::Order4 => AudioElementType::Oa4,
-            },
-            OarAudioElementConfig::ObjectBased(obc) => match obc.num_objects.get() {
-                1 => AudioElementType::ObjectMono,
-                2 => AudioElementType::ObjectDual,
-                _ => return Err(OarError::InvalidParameter),
-            },
-        };
-        let profile = if let Some(rc) = config.rendering_config() {
-            match rc.binaural_filter_profile {
-                crate::common::definitions::BinauralFilterProfile::Ambient => {
-                    BinauralFilterProfile::Ambient
-                }
-                crate::common::definitions::BinauralFilterProfile::Direct => {
-                    BinauralFilterProfile::Direct
-                }
-                crate::common::definitions::BinauralFilterProfile::Reverberant => {
-                    BinauralFilterProfile::Reverberant
-                }
+        let variant = match config {
+            OarAudioElementConfig::ChannelBased(cbc) => {
+                AudioElementVariant::loudspeaker_layout(cbc.layout)
             }
-        } else {
-            BinauralFilterProfile::Ambient
+            OarAudioElementConfig::SceneBased(sbc) => AudioElementVariant::ambisonics(sbc.order),
+            OarAudioElementConfig::ObjectBased(obc) => {
+                AudioElementVariant::objects(obc.num_objects.get())?
+            }
         };
+        let profile = config
+            .rendering_config()
+            .map_or(BinauralFilterProfile::Ambient, |rc| rc.binaural_filter_profile);
 
-        self.obr.add_audio_element(elem_type, profile)?;
+        self.obr.add_audio_element(variant, profile)?;
         let idx = self.obr.get_number_of_audio_elements() - 1;
         self.id_to_element_index.insert(id, idx);
         self.element_channels.insert(id, config.channels());
@@ -629,6 +597,7 @@ impl AudioRenderer for ObrAudioRendererAdapter {
 mod test {
 
     use super::*;
+    use crate::common::definitions::{HighOrderAmbisonics, InputLayout};
     use googletest::prelude::*;
     use std::f32::consts::PI;
 
@@ -675,8 +644,10 @@ mod test {
     #[gtest]
     fn test_add_and_remove_audio_element() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add_result =
-            renderer.add_audio_element(AudioElementType::Oa3, BinauralFilterProfile::Direct);
+        let add_result = renderer.add_audio_element(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order3),
+            BinauralFilterProfile::Direct,
+        );
 
         expect_true!(add_result.is_ok());
         expect_that!(renderer.get_number_of_input_channels(), eq(16));
@@ -690,13 +661,18 @@ mod test {
     #[gtest]
     fn test_add_and_remove_multiple_audio_elements() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add1 = renderer.add_audio_element(AudioElementType::Oa3, BinauralFilterProfile::Direct);
+        let add1 = renderer.add_audio_element(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order3),
+            BinauralFilterProfile::Direct,
+        );
 
         expect_true!(add1.is_ok());
         expect_that!(renderer.get_number_of_input_channels(), eq(16));
 
-        let add2 = renderer
-            .add_audio_element(AudioElementType::Layout7_1_4, BinauralFilterProfile::Direct);
+        let add2 = renderer.add_audio_element(
+            AudioElementVariant::loudspeaker_layout(InputLayout::Layout714),
+            BinauralFilterProfile::Direct,
+        );
 
         expect_true!(add2.is_ok());
         expect_that!(renderer.get_number_of_input_channels(), eq(28));
@@ -722,7 +698,10 @@ mod test {
     #[gtest]
     fn test_process_audio_buffer_with_wrong_number_of_channels() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add = renderer.add_audio_element(AudioElementType::Oa3, BinauralFilterProfile::Direct);
+        let add = renderer.add_audio_element(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order3),
+            BinauralFilterProfile::Direct,
+        );
 
         expect_true!(add.is_ok());
 
@@ -743,11 +722,17 @@ mod test {
     #[gtest]
     fn test_add_multiple_audio_elements_with_different_types_same_filter_type_succeeds() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add1 = renderer.add_audio_element(AudioElementType::Oa3, BinauralFilterProfile::Direct);
+        let add1 = renderer.add_audio_element(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order3),
+            BinauralFilterProfile::Direct,
+        );
 
         expect_true!(add1.is_ok());
 
-        let add2 = renderer.add_audio_element(AudioElementType::Oa1, BinauralFilterProfile::Direct);
+        let add2 = renderer.add_audio_element(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+            BinauralFilterProfile::Direct,
+        );
 
         expect_true!(add2.is_ok());
 
@@ -759,12 +744,17 @@ mod test {
     #[gtest]
     fn test_add_multiple_audio_elements_same_type_different_filter_types_succeeds() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add1 = renderer.add_audio_element(AudioElementType::Oa3, BinauralFilterProfile::Direct);
+        let add1 = renderer.add_audio_element(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order3),
+            BinauralFilterProfile::Direct,
+        );
 
         expect_true!(add1.is_ok());
 
-        let add2 =
-            renderer.add_audio_element(AudioElementType::Oa3, BinauralFilterProfile::Reverberant);
+        let add2 = renderer.add_audio_element(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order3),
+            BinauralFilterProfile::Reverberant,
+        );
 
         expect_true!(add2.is_ok());
 
@@ -776,12 +766,17 @@ mod test {
     #[gtest]
     fn test_ambisonics_and_loudspeaker_layouts_same_filter_profile() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add1 = renderer.add_audio_element(AudioElementType::Oa2, BinauralFilterProfile::Direct);
+        let add1 = renderer.add_audio_element(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order2),
+            BinauralFilterProfile::Direct,
+        );
 
         expect_true!(add1.is_ok());
 
-        let add2 = renderer
-            .add_audio_element(AudioElementType::Layout7_1_4, BinauralFilterProfile::Direct);
+        let add2 = renderer.add_audio_element(
+            AudioElementVariant::loudspeaker_layout(InputLayout::Layout714),
+            BinauralFilterProfile::Direct,
+        );
 
         expect_true!(add2.is_ok());
 
@@ -794,7 +789,7 @@ mod test {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
         renderer.enable_limiter(false);
         let add = renderer
-            .add_audio_element(AudioElementType::PassthroughMono, BinauralFilterProfile::Direct);
+            .add_audio_element(AudioElementVariant::PassthroughMono, BinauralFilterProfile::Direct);
 
         expect_true!(add.is_ok());
 
@@ -820,8 +815,10 @@ mod test {
     fn test_passthrough_stereo() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
         renderer.enable_limiter(false);
-        let add = renderer
-            .add_audio_element(AudioElementType::PassthroughStereo, BinauralFilterProfile::Direct);
+        let add = renderer.add_audio_element(
+            AudioElementVariant::PassthroughStereo,
+            BinauralFilterProfile::Direct,
+        );
 
         expect_true!(add.is_ok());
 
@@ -849,12 +846,15 @@ mod test {
     #[gtest]
     fn test_process_mixed_ambisonics_and_object() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add1 = renderer.add_audio_element(AudioElementType::Oa1, BinauralFilterProfile::Direct);
+        let add1 = renderer.add_audio_element(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+            BinauralFilterProfile::Direct,
+        );
 
         expect_true!(add1.is_ok());
 
-        let add2 =
-            renderer.add_audio_element(AudioElementType::ObjectMono, BinauralFilterProfile::Direct);
+        let add2 = renderer
+            .add_audio_element(AudioElementVariant::object_mono(), BinauralFilterProfile::Direct);
 
         expect_true!(add2.is_ok());
 
@@ -924,8 +924,8 @@ mod test {
         expect_ok!(result);
         expect_eq!(adapter.obr.get_number_of_input_channels(), 2);
         expect_eq!(
-            adapter.obr.audio_elements[0].element_type(),
-            AudioElementType::PassthroughStereo
+            *adapter.obr.audio_elements[0].variant(),
+            AudioElementVariant::PassthroughStereo
         );
     }
 }

@@ -16,7 +16,7 @@ use crate::common::definitions::{ChannelCount, Degrees, OarError};
 
 /// The angular position and LFE classification of a loudspeaker in a layout.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct SpeakerPosition {
+pub struct SpeakerPosition {
     /// The azimuth angle of the loudspeaker.
     pub azimuth: Degrees,
     /// The elevation angle of the loudspeaker.
@@ -380,6 +380,33 @@ impl InputLayout {
         };
         Some(speakers)
     }
+
+    /// Returns the virtual loudspeaker positions used by OBR for binaural rendering.
+    ///
+    /// Uses the standard ITU-R BS.2051 speaker positions from [`Self::speakers`], with two
+    /// intentional OBR overrides matching `liboar`:
+    /// - `Layout514` places its four upper speakers at `±45°` and `±135°` azimuth instead of `±30°`
+    ///   and `±110°`.
+    /// - All upper-layer speakers (`30°` elevation) are elevated to `45°`.
+    pub(crate) fn obr_speakers(&self) -> Option<Vec<SpeakerPosition>> {
+        let base_speakers = match self {
+            Self::Layout514 => &[
+                SP_MP030, SP_MM030, SP_MP000, SP_LFE, SP_MP110, SP_MM110, SP_UP045, SP_UM045,
+                SP_UP135, SP_UM135,
+            ],
+            other => other.speakers()?,
+        };
+        Some(
+            base_speakers
+                .iter()
+                .map(|&sp| {
+                    let elevation =
+                        if sp.elevation == Degrees(30.0) { Degrees(45.0) } else { sp.elevation };
+                    SpeakerPosition { elevation, ..sp }
+                })
+                .collect(),
+        )
+    }
 }
 
 impl TryFrom<OutputLayout> for InputLayout {
@@ -534,5 +561,24 @@ mod test {
         expect_that!(layout51.iter().filter(|s| s.is_lfe).count(), eq(1));
         expect_that!(f370[9], eq(SP_UHP180));
         expect_that!(binaural, none());
+    }
+
+    #[gtest]
+    fn obr_speakers_applies_514_azimuth_and_upper_layer_elevation_overrides() {
+        let obr_514 = InputLayout::Layout514.obr_speakers().unwrap();
+        let obr_top4 = InputLayout::Top4ch.obr_speakers().unwrap();
+        let obr_bottom3 = InputLayout::Bottom3ch.obr_speakers().unwrap();
+        let obr_binaural = InputLayout::Binaural.obr_speakers();
+
+        expect_that!(obr_514.len(), eq(10));
+        expect_that!(obr_514[6].azimuth, eq(Degrees(45.0)));
+        expect_that!(obr_514[6].elevation, eq(Degrees(45.0)));
+        expect_that!(obr_514[8].azimuth, eq(Degrees(135.0)));
+        expect_that!(obr_514[8].elevation, eq(Degrees(45.0)));
+        expect_that!(obr_top4.len(), eq(4));
+        expect_that!(obr_top4[0].elevation, eq(Degrees(45.0)));
+        expect_that!(obr_bottom3.len(), eq(3));
+        expect_that!(obr_bottom3[0].elevation, eq(Degrees(-30.0)));
+        expect_that!(obr_binaural, none());
     }
 }

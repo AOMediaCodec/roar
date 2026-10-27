@@ -21,9 +21,7 @@
 //! the DSP components.
 
 pub mod audio_element_config;
-pub mod audio_element_type;
 pub mod input_channel_config;
-pub mod loudspeaker_layouts;
 pub mod obr_impl;
 pub mod processing_group;
 

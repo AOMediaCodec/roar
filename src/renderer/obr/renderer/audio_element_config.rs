@@ -12,125 +12,140 @@
 
 //! Configuration representations for OBR audio elements.
 //!
-//! Defines the structure for configuring properties, layout type, and filter profile
-//! for each individual audio element (input block) processed by the OBR.
+//! Defines the variant enum and configuration structure for each individual audio
+//! element (input block) processed by the OBR subsystem.
 
-use super::audio_element_type::AudioElementType;
-use super::input_channel_config::{
-    AmbisonicSceneInputChannel, AudioObjectInputChannel, LoudspeakerLayoutInputChannel,
-    PassthroughInputChannel,
+use super::input_channel_config::AudioObjectInputChannel;
+use crate::common::definitions::{
+    BinauralFilterProfile, Degrees, Distance, HighOrderAmbisonics, InputLayout, OarError,
+    SpeakerPosition,
 };
-use super::loudspeaker_layouts::LoudspeakerLayouts;
-use crate::common::definitions::{Degrees, Distance};
-use crate::renderer::obr::common::ambisonic_utils::get_num_periphonic_components;
 
-/// Rendering profile selector for binaural filters.
+/// Necessary configuration information dependent on the type of AudioElement.
 ///
-/// Determines which set of spherical harmonic Head-Related Impulse Response (HRIR)
-/// filters is loaded for decoding.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
-pub enum BinauralFilterProfile {
-    Direct = 0,
-    #[default]
-    Ambient = 1,
-    Reverberant = 2,
+/// Distinguishes between periphonic Ambisonic scenes (orders 1..=4), channel-based
+/// loudspeaker layouts, spatialized mono/dual objects, and mono/stereo passthrough signals.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AudioElementVariant {
+    /// Periphonic Ambisonic scene (orders 1..=4).
+    Ambisonics(HighOrderAmbisonics),
+    /// Channel-based loudspeaker or subset layout with virtual speaker positions.
+    LoudspeakerLayout(Vec<SpeakerPosition>),
+    /// Spatialized audio object channels (mono or dual).
+    Objects(Vec<AudioObjectInputChannel>),
+    /// Single-channel mono passthrough signal (e.g. zeroth-order Ambisonics).
+    PassthroughMono,
+    /// Two-channel stereo passthrough signal (binaural input).
+    PassthroughStereo,
+}
+
+impl AudioElementVariant {
+    /// Creates an Ambisonic or mono passthrough variant from a `HighOrderAmbisonics` order.
+    ///
+    /// Zeroth-order Ambisonics (`Zoa`) maps to `PassthroughMono`; orders 1 through 4 map
+    /// to `Ambisonics(order)`.
+    pub fn ambisonics(order: HighOrderAmbisonics) -> Self {
+        match order {
+            HighOrderAmbisonics::Zoa => Self::PassthroughMono,
+            HighOrderAmbisonics::Order1
+            | HighOrderAmbisonics::Order2
+            | HighOrderAmbisonics::Order3
+            | HighOrderAmbisonics::Order4 => Self::Ambisonics(order),
+        }
+    }
+
+    /// Creates a loudspeaker layout or stereo passthrough variant for `layout`.
+    ///
+    /// `InputLayout::Binaural` (which has no virtual speaker positions) maps to
+    /// `PassthroughStereo`; all loudspeaker and subset layouts map to `LoudspeakerLayout`.
+    pub fn loudspeaker_layout(layout: InputLayout) -> Self {
+        layout.obr_speakers().map_or(Self::PassthroughStereo, Self::LoudspeakerLayout)
+    }
+
+    /// Creates an object variant with `num_objects` channels.
+    ///
+    /// # Parameters
+    /// * `num_objects` - Number of object channels; must be 1 (mono) or 2 (dual).
+    pub fn objects(num_objects: usize) -> Result<Self, OarError> {
+        if !(1..=2).contains(&num_objects) {
+            return Err(OarError::InvalidParameter);
+        }
+        let default_channel =
+            AudioObjectInputChannel::new(Degrees(0.0), Degrees(0.0), Distance::new(1.0).unwrap());
+        Ok(Self::Objects(vec![default_channel; num_objects]))
+    }
+
+    /// Creates a single-channel spatialized audio object variant.
+    pub fn object_mono() -> Self {
+        Self::objects(1).unwrap()
+    }
+
+    /// Creates a dual-channel spatialized audio object variant.
+    pub fn object_dual() -> Self {
+        Self::objects(2).unwrap()
+    }
 }
 
 /// Configuration settings for an individual audio element.
 ///
-/// Manages the mapping of input channels to different spatial representations
-/// (e.g. Ambisonic scene channels, virtual speaker channels, or dynamic objects)
-/// and specifies target filter profiles.
+/// Manages the mapping of input channels to spatial representations (Ambisonic scene
+/// channels, virtual speaker channels, dynamic objects, or mono passthrough) and
+/// specifies target binaural filter profiles.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AudioElementConfig {
-    element_type: AudioElementType,
+    variant: AudioElementVariant,
     first_channel_index: usize,
-    number_of_input_channels: usize,
-    ambisonic_channels: Vec<AmbisonicSceneInputChannel>,
-    loudspeaker_channels: Vec<LoudspeakerLayoutInputChannel>,
-    object_channels: Vec<AudioObjectInputChannel>,
-    passthrough_channels: Vec<PassthroughInputChannel>,
-    binaural_filters_ambisonic_order: i32,
     binaural_filter_profile: BinauralFilterProfile,
     head_locked: bool,
 }
 
 impl AudioElementConfig {
     /// Creates a new `AudioElementConfig` instance.
-    pub fn new(element_type: AudioElementType, filter_profile: BinauralFilterProfile) -> Self {
-        let mut cfg = Self {
-            element_type,
+    pub fn new(variant: AudioElementVariant, filter_profile: BinauralFilterProfile) -> Self {
+        let variant = match variant {
+            AudioElementVariant::Ambisonics(HighOrderAmbisonics::Zoa) => {
+                AudioElementVariant::PassthroughMono
+            }
+            other => other,
+        };
+        Self {
+            variant,
             first_channel_index: 0,
-            number_of_input_channels: 0,
-            ambisonic_channels: Vec::new(),
-            loudspeaker_channels: Vec::new(),
-            object_channels: Vec::new(),
-            passthrough_channels: Vec::new(),
-            binaural_filters_ambisonic_order: 3,
             binaural_filter_profile: filter_profile,
             head_locked: false,
-        };
-        cfg.init_channels();
-        cfg
-    }
-
-    fn init_channels(&mut self) {
-        if self.element_type.is_ambisonics() {
-            let order = self.element_type.get_ambisonic_order().unwrap();
-            let count = get_num_periphonic_components(order);
-            for i in 0..count {
-                self.ambisonic_channels.push(AmbisonicSceneInputChannel::new(format!("acn_{}", i)));
-            }
-            self.number_of_input_channels = count;
-            self.binaural_filters_ambisonic_order = order;
-        } else if self.element_type.is_loudspeaker_layout() {
-            let layouts = LoudspeakerLayouts::new();
-            self.loudspeaker_channels = layouts.get_loudspeaker_layout(self.element_type);
-            self.number_of_input_channels = self.loudspeaker_channels.len();
-            self.binaural_filters_ambisonic_order = 3;
-        } else if self.element_type.is_object() {
-            let count = if self.element_type == AudioElementType::ObjectMono { 1 } else { 2 };
-            for i in 0..count {
-                self.object_channels.push(AudioObjectInputChannel::new(
-                    format!("obj_{}", i),
-                    Degrees(0.0),
-                    Degrees(0.0),
-                    Distance::new(1.0).unwrap(),
-                ));
-            }
-            self.number_of_input_channels = count;
-            self.binaural_filters_ambisonic_order = 3;
-        } else if self.element_type.is_passthrough() {
-            let count = if self.element_type == AudioElementType::PassthroughMono { 1 } else { 2 };
-            for i in 0..count {
-                self.passthrough_channels.push(PassthroughInputChannel::new(format!("pt_{}", i)));
-            }
-            self.number_of_input_channels = count;
-            self.binaural_filters_ambisonic_order = 0;
         }
-        self.set_first_channel_index(0);
     }
 
-    /// Returns the element type associated with this configuration.
-    pub fn element_type(&self) -> AudioElementType {
-        self.element_type
+    /// Returns a reference to the element variant.
+    pub fn variant(&self) -> &AudioElementVariant {
+        &self.variant
     }
 
-    /// Sets the base `first_channel_index` for the element and updates children.
+    /// Returns `true` if this element is a periphonic Ambisonic scene (orders 1..=4).
+    pub fn is_ambisonics(&self) -> bool {
+        matches!(self.variant, AudioElementVariant::Ambisonics(_))
+    }
+
+    /// Returns `true` if this element is a mono or stereo passthrough signal.
+    pub fn is_passthrough(&self) -> bool {
+        matches!(
+            self.variant,
+            AudioElementVariant::PassthroughMono | AudioElementVariant::PassthroughStereo
+        )
+    }
+
+    /// Returns `true` if this element is encoded via the Ambisonic encoder (loudspeaker layout or
+    /// objects).
+    pub fn uses_ambisonic_encoder(&self) -> bool {
+        matches!(
+            self.variant,
+            AudioElementVariant::LoudspeakerLayout(_) | AudioElementVariant::Objects(_)
+        )
+    }
+
+    /// Sets the base `first_channel_index` for the element.
     pub fn set_first_channel_index(&mut self, first_channel: usize) {
         self.first_channel_index = first_channel;
-        for (i, ch) in self.ambisonic_channels.iter_mut().enumerate() {
-            ch.base.input_channel_index = first_channel + i;
-        }
-        for (i, ch) in self.loudspeaker_channels.iter_mut().enumerate() {
-            ch.base.input_channel_index = first_channel + i;
-        }
-        for (i, ch) in self.object_channels.iter_mut().enumerate() {
-            ch.base.input_channel_index = first_channel + i;
-        }
-        for (i, ch) in self.passthrough_channels.iter_mut().enumerate() {
-            ch.base.input_channel_index = first_channel + i;
-        }
     }
 
     /// Returns the offset index of the first input channel for this element.
@@ -140,22 +155,38 @@ impl AudioElementConfig {
 
     /// Returns the total number of input channels for this element.
     pub fn get_number_of_input_channels(&self) -> usize {
-        self.number_of_input_channels
+        match &self.variant {
+            AudioElementVariant::Ambisonics(order) => order.channels().get(),
+            AudioElementVariant::LoudspeakerLayout(channels) => channels.len(),
+            AudioElementVariant::Objects(channels) => channels.len(),
+            AudioElementVariant::PassthroughMono => 1,
+            AudioElementVariant::PassthroughStereo => 2,
+        }
     }
 
-    /// Returns a mutable slice of loudspeaker layout input channels.
-    pub fn get_loudspeaker_channels(&mut self) -> &mut [LoudspeakerLayoutInputChannel] {
-        &mut self.loudspeaker_channels
+    /// Returns the loudspeaker layout speaker positions if this is a loudspeaker layout element.
+    pub fn get_loudspeaker_channels(&self) -> &[SpeakerPosition] {
+        match &self.variant {
+            AudioElementVariant::LoudspeakerLayout(channels) => channels,
+            _ => &[],
+        }
     }
 
-    /// Returns a mutable slice of audio object input channels.
+    /// Returns a mutable slice of audio object input channels if this is an object element.
     pub fn get_object_channels(&mut self) -> &mut [AudioObjectInputChannel] {
-        &mut self.object_channels
+        match &mut self.variant {
+            AudioElementVariant::Objects(channels) => channels,
+            _ => &mut [],
+        }
     }
 
     /// Returns the Ambisonic order used for rendering this element's filters.
     pub fn get_binaural_filters_ambisonic_order(&self) -> i32 {
-        self.binaural_filters_ambisonic_order
+        match &self.variant {
+            AudioElementVariant::Ambisonics(order) => *order as i32,
+            AudioElementVariant::LoudspeakerLayout(_) | AudioElementVariant::Objects(_) => 3,
+            AudioElementVariant::PassthroughMono | AudioElementVariant::PassthroughStereo => 0,
+        }
     }
 
     /// Returns the filter profile assigned to this element.
@@ -183,52 +214,105 @@ mod test {
     use googletest::prelude::*;
 
     #[gtest]
-    fn test_audio_element_config_ambisonic_init() {
-        let config = AudioElementConfig::new(AudioElementType::Oa1, BinauralFilterProfile::Direct);
+    fn audio_element_config_ambisonics_initializes_order_and_channel_count() {
+        let config = AudioElementConfig::new(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+            BinauralFilterProfile::Direct,
+        );
 
-        expect_eq!(config.element_type(), AudioElementType::Oa1);
-        expect_eq!(config.get_number_of_input_channels(), 4); // (1+1)^2 = 4
+        expect_true!(config.is_ambisonics());
+        expect_false!(config.is_passthrough());
+        expect_false!(config.uses_ambisonic_encoder());
+        expect_eq!(config.get_number_of_input_channels(), 4);
         expect_eq!(config.get_binaural_filters_ambisonic_order(), 1);
         expect_eq!(config.get_binaural_filter_profile(), BinauralFilterProfile::Direct);
         expect_false!(config.is_head_locked());
     }
 
     #[gtest]
-    fn test_audio_element_config_object_init() {
-        let config =
-            AudioElementConfig::new(AudioElementType::ObjectMono, BinauralFilterProfile::Ambient);
+    fn audio_element_config_object_initializes_order_and_channels() {
+        let config = AudioElementConfig::new(
+            AudioElementVariant::object_mono(),
+            BinauralFilterProfile::Ambient,
+        );
 
-        expect_eq!(config.element_type(), AudioElementType::ObjectMono);
+        expect_false!(config.is_ambisonics());
+        expect_true!(config.uses_ambisonic_encoder());
         expect_eq!(config.get_number_of_input_channels(), 1);
         expect_eq!(config.get_binaural_filters_ambisonic_order(), 3);
         expect_eq!(config.get_binaural_filter_profile(), BinauralFilterProfile::Ambient);
     }
 
     #[gtest]
-    fn test_audio_element_config_passthrough_init() {
+    fn audio_element_variant_objects_rejects_unsupported_counts() {
+        let zero_objects = AudioElementVariant::objects(0);
+        let three_objects = AudioElementVariant::objects(3);
+        let dual_objects = AudioElementVariant::objects(2);
+
+        expect_eq!(zero_objects, Err(OarError::InvalidParameter));
+        expect_eq!(three_objects, Err(OarError::InvalidParameter));
+        expect_true!(dual_objects.is_ok());
+    }
+
+    #[gtest]
+    fn audio_element_config_passthrough_initializes_single_channel_order_zero() {
         let config = AudioElementConfig::new(
-            AudioElementType::PassthroughStereo,
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Zoa),
             BinauralFilterProfile::Reverberant,
         );
 
-        expect_eq!(config.element_type(), AudioElementType::PassthroughStereo);
+        expect_true!(config.is_passthrough());
+        expect_false!(config.is_ambisonics());
+        expect_eq!(config.get_number_of_input_channels(), 1);
+        expect_eq!(config.get_binaural_filters_ambisonic_order(), 0);
+    }
+
+    #[gtest]
+    fn audio_element_config_initializes_subset_loudspeaker_layout_channels() {
+        let config = AudioElementConfig::new(
+            AudioElementVariant::loudspeaker_layout(InputLayout::Top4ch),
+            BinauralFilterProfile::Direct,
+        );
+
+        expect_true!(config.uses_ambisonic_encoder());
+        expect_eq!(config.get_number_of_input_channels(), 4);
+        expect_eq!(config.get_loudspeaker_channels().len(), 4);
+        expect_eq!(config.get_binaural_filters_ambisonic_order(), 3);
+    }
+
+    #[gtest]
+    fn audio_element_config_binaural_layout_initializes_stereo_passthrough() {
+        let config = AudioElementConfig::new(
+            AudioElementVariant::loudspeaker_layout(InputLayout::Binaural),
+            BinauralFilterProfile::Direct,
+        );
+
+        expect_eq!(*config.variant(), AudioElementVariant::PassthroughStereo);
+        expect_true!(config.is_passthrough());
+        expect_false!(config.uses_ambisonic_encoder());
         expect_eq!(config.get_number_of_input_channels(), 2);
         expect_eq!(config.get_binaural_filters_ambisonic_order(), 0);
     }
 
     #[gtest]
-    fn test_audio_element_config_set_first_channel_index() {
-        let mut config =
-            AudioElementConfig::new(AudioElementType::Oa1, BinauralFilterProfile::Direct);
+    fn set_first_channel_index_updates_index() {
+        let mut config = AudioElementConfig::new(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+            BinauralFilterProfile::Direct,
+        );
+
         config.set_first_channel_index(10);
 
         expect_eq!(config.get_first_channel_index(), 10);
     }
 
     #[gtest]
-    fn test_audio_element_config_head_locked() {
-        let mut config =
-            AudioElementConfig::new(AudioElementType::Oa2, BinauralFilterProfile::Direct);
+    fn set_head_locked_updates_flag() {
+        let mut config = AudioElementConfig::new(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order2),
+            BinauralFilterProfile::Direct,
+        );
+
         config.set_head_locked(true);
 
         expect_true!(config.is_head_locked());

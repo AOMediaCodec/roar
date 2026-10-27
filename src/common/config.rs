@@ -74,7 +74,7 @@ pub enum HeadphonesRenderingMode {
 }
 
 /// Selected binaural filter profile.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum BinauralFilterProfile {
     /// Ambient binaural filter profile.
     #[default]

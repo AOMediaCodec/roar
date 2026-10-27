@@ -16,9 +16,11 @@
 //! into a single `ProcessingGroup`. This optimizes DSP processing by reducing the number of
 //! rotations, convolutions, and FFT operations.
 
-use super::audio_element_config::{AudioElementConfig, BinauralFilterProfile};
+use super::audio_element_config::AudioElementConfig;
 use crate::common::audio_buffer::AudioBuffer;
-use crate::common::definitions::{LinearGain, OarError, Quaternion, SampleRate, Samples};
+use crate::common::definitions::{
+    BinauralFilterProfile, Distance, LinearGain, OarError, Quaternion, SampleRate, Samples,
+};
 use crate::renderer::obr::ambisonic_binaural_decoder::{
     create_sh_hrirs_from_assets, AmbisonicBinauralDecoder, FftManager, Resampler,
 };
@@ -171,7 +173,7 @@ impl ProcessingGroup {
 
         for &ae_index in &self.audio_element_indices {
             let audio_element = &audio_elements[ae_index];
-            if audio_element.element_type().is_ambisonics() && !audio_element.is_head_locked() {
+            if audio_element.is_ambisonics() && !audio_element.is_head_locked() {
                 for channel in 0..audio_element.get_number_of_input_channels() {
                     let mut bed_ch = self.ambisonic_mix_bed.channel_mut(channel);
                     let src_ch =
@@ -204,7 +206,7 @@ impl ProcessingGroup {
 
         for &ae_index in &self.audio_element_indices {
             let audio_element = &audio_elements[ae_index];
-            if audio_element.element_type().is_ambisonics() && audio_element.is_head_locked() {
+            if audio_element.is_ambisonics() && audio_element.is_head_locked() {
                 for channel in 0..audio_element.get_number_of_input_channels() {
                     let mut bed_ch = self.ambisonic_mix_bed_head_locked.channel_mut(channel);
                     let src_ch =
@@ -256,7 +258,7 @@ impl ProcessingGroup {
                         LinearGain(1.0),
                         source.azimuth,
                         source.elevation,
-                        source.distance,
+                        Distance::new(1.0).unwrap(),
                     );
                     enc_idx += 1;
                 }
@@ -281,7 +283,7 @@ impl ProcessingGroup {
         let mut count = 0;
         for &ae_index in &self.audio_element_indices {
             let ae = &audio_elements[ae_index];
-            if ae.element_type().is_loudspeaker_layout() || ae.element_type().is_object() {
+            if ae.uses_ambisonic_encoder() {
                 count += ae.get_number_of_input_channels();
             }
         }
@@ -301,7 +303,7 @@ impl ProcessingGroup {
             {
                 continue;
             }
-            if ae.element_type().is_loudspeaker_layout() || ae.element_type().is_object() {
+            if ae.uses_ambisonic_encoder() {
                 for i in 0..ae.get_number_of_input_channels() {
                     out_indices.push(ae.get_first_channel_index() + i);
                 }
@@ -335,8 +337,8 @@ impl ProcessingGroup {
 mod test {
 
     use super::*;
-    use crate::common::definitions::{Degrees, Distance, Quaternion, SampleRate};
-    use crate::renderer::obr::renderer::audio_element_type::AudioElementType;
+    use crate::common::definitions::{Degrees, HighOrderAmbisonics, InputLayout};
+    use crate::renderer::obr::renderer::audio_element_config::AudioElementVariant;
     use googletest::prelude::*;
     use std::f32::consts::PI;
 
@@ -399,15 +401,15 @@ mod test {
     fn test_less_than() {
         let key1 = ProcessingGroupKey {
             ambisonic_order: 1,
-            filter_profile: BinauralFilterProfile::Direct,
+            filter_profile: BinauralFilterProfile::Ambient,
         };
         let key2 = ProcessingGroupKey {
             ambisonic_order: 2,
-            filter_profile: BinauralFilterProfile::Direct,
+            filter_profile: BinauralFilterProfile::Ambient,
         };
         let key3 = ProcessingGroupKey {
             ambisonic_order: 1,
-            filter_profile: BinauralFilterProfile::Ambient,
+            filter_profile: BinauralFilterProfile::Direct,
         };
 
         expect_that!(key1 < key2, eq(true));
@@ -506,8 +508,10 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let audio_elements =
-            vec![AudioElementConfig::new(AudioElementType::Oa1, BinauralFilterProfile::Direct)];
+        let audio_elements = vec![AudioElementConfig::new(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+            BinauralFilterProfile::Direct,
+        )];
 
         let mut input_buffer = AudioBuffer::new(4, BUFFER_SIZE);
         let mut output_buffer = AudioBuffer::new(2, BUFFER_SIZE);
@@ -542,7 +546,7 @@ mod test {
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
         let mut audio_elements = vec![AudioElementConfig::new(
-            AudioElementType::LayoutStereo,
+            AudioElementVariant::loudspeaker_layout(InputLayout::Stereo),
             BinauralFilterProfile::Direct,
         )];
 
@@ -581,7 +585,7 @@ mod test {
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
         let mut audio_elements = vec![AudioElementConfig::new(
-            AudioElementType::ObjectMono,
+            AudioElementVariant::object_mono(),
             BinauralFilterProfile::Direct,
         )];
 
@@ -624,8 +628,10 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let audio_elements =
-            vec![AudioElementConfig::new(AudioElementType::Oa1, BinauralFilterProfile::Direct)];
+        let audio_elements = vec![AudioElementConfig::new(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+            BinauralFilterProfile::Direct,
+        )];
 
         let mut input_buffer = AudioBuffer::new(4, BUFFER_SIZE);
         let mut output_buffer = AudioBuffer::new(2, BUFFER_SIZE);
@@ -661,8 +667,14 @@ mod test {
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
         let mut audio_elements = vec![
-            AudioElementConfig::new(AudioElementType::Oa2, BinauralFilterProfile::Direct),
-            AudioElementConfig::new(AudioElementType::ObjectMono, BinauralFilterProfile::Direct),
+            AudioElementConfig::new(
+                AudioElementVariant::ambisonics(HighOrderAmbisonics::Order2),
+                BinauralFilterProfile::Direct,
+            ),
+            AudioElementConfig::new(
+                AudioElementVariant::object_mono(),
+                BinauralFilterProfile::Direct,
+            ),
         ];
 
         audio_elements[1].set_first_channel_index(9);
@@ -708,8 +720,10 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let mut audio_elements =
-            vec![AudioElementConfig::new(AudioElementType::Oa1, BinauralFilterProfile::Direct)];
+        let mut audio_elements = vec![AudioElementConfig::new(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+            BinauralFilterProfile::Direct,
+        )];
 
         expect_true!(group.update_ambisonic_encoder(&mut audio_elements).is_ok());
     }
@@ -727,7 +741,7 @@ mod test {
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
         let mut audio_elements = vec![AudioElementConfig::new(
-            AudioElementType::ObjectMono,
+            AudioElementVariant::object_mono(),
             BinauralFilterProfile::Direct,
         )];
 
@@ -767,7 +781,10 @@ mod test {
                 ProcessingGroup::new(key, indices, get_buffer_size(), get_sample_rate());
             assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-            let audio_elements = vec![AudioElementConfig::new(AudioElementType::Oa1, profile)];
+            let audio_elements = vec![AudioElementConfig::new(
+                AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+                profile,
+            )];
 
             let mut input_buffer = AudioBuffer::new(4, BUFFER_SIZE);
             let mut output_buffer = AudioBuffer::new(2, BUFFER_SIZE);
@@ -802,8 +819,10 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let audio_elements =
-            vec![AudioElementConfig::new(AudioElementType::Oa1, BinauralFilterProfile::Direct)];
+        let audio_elements = vec![AudioElementConfig::new(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+            BinauralFilterProfile::Direct,
+        )];
         expect_that!(audio_elements[0].is_head_locked(), eq(false));
 
         let mut input_buffer = AudioBuffer::new(4, BUFFER_SIZE);
@@ -868,8 +887,10 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let mut audio_elements =
-            vec![AudioElementConfig::new(AudioElementType::Oa1, BinauralFilterProfile::Direct)];
+        let mut audio_elements = vec![AudioElementConfig::new(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+            BinauralFilterProfile::Direct,
+        )];
         audio_elements[0].set_head_locked(true);
         expect_that!(audio_elements[0].is_head_locked(), eq(true));
 
@@ -906,8 +927,14 @@ mod test {
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
         let mut audio_elements = vec![
-            AudioElementConfig::new(AudioElementType::Oa2, BinauralFilterProfile::Direct),
-            AudioElementConfig::new(AudioElementType::ObjectMono, BinauralFilterProfile::Direct),
+            AudioElementConfig::new(
+                AudioElementVariant::ambisonics(HighOrderAmbisonics::Order2),
+                BinauralFilterProfile::Direct,
+            ),
+            AudioElementConfig::new(
+                AudioElementVariant::object_mono(),
+                BinauralFilterProfile::Direct,
+            ),
         ];
         audio_elements[0].set_head_locked(false);
         audio_elements[1].set_head_locked(true);
@@ -954,8 +981,10 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let mut audio_elements =
-            vec![AudioElementConfig::new(AudioElementType::Oa1, BinauralFilterProfile::Direct)];
+        let mut audio_elements = vec![AudioElementConfig::new(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+            BinauralFilterProfile::Direct,
+        )];
         audio_elements[0].set_head_locked(false);
 
         let mut input_buffer = AudioBuffer::new(4, BUFFER_SIZE);
@@ -990,8 +1019,10 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let mut audio_elements =
-            vec![AudioElementConfig::new(AudioElementType::Oa1, BinauralFilterProfile::Direct)];
+        let mut audio_elements = vec![AudioElementConfig::new(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+            BinauralFilterProfile::Direct,
+        )];
         audio_elements[0].set_head_locked(true);
 
         let mut input_buffer = AudioBuffer::new(4, BUFFER_SIZE);
@@ -1026,8 +1057,10 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let mut audio_elements =
-            vec![AudioElementConfig::new(AudioElementType::Oa1, BinauralFilterProfile::Direct)];
+        let mut audio_elements = vec![AudioElementConfig::new(
+            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+            BinauralFilterProfile::Direct,
+        )];
         audio_elements[0].set_head_locked(false);
 
         let mut input_buffer = AudioBuffer::new(4, BUFFER_SIZE);
