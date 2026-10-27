@@ -552,14 +552,6 @@ impl AudioRenderer for AudioElementsRenderer {
         }
     }
 
-    fn enable_limiter(&mut self, enable: bool) -> Result<(), OarError> {
-        if let Some(ref mut sub) = self.sub_renderer {
-            sub.enable_limiter(enable)
-        } else {
-            Err(OarError::NotSupported)
-        }
-    }
-
     fn set_metadata_unit_to_process(&mut self, samples: Samples) -> Result<(), OarError> {
         if let Some(ref mut sub) = self.sub_renderer {
             sub.set_metadata_unit_to_process(samples)?;

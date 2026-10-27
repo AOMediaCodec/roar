@@ -112,13 +112,6 @@ pub trait AudioRenderer: Send + Sync {
         Err(OarError::NotSupported)
     }
 
-    /// Enables or disables output limiter in the renderer.
-    ///
-    /// Default implementation returns `Err(OarError::NotSupported)`.
-    fn enable_limiter(&mut self, _enable: bool) -> Result<(), OarError> {
-        Err(OarError::NotSupported)
-    }
-
     /// Sets the metadata processing unit size in samples.
     fn set_metadata_unit_to_process(&mut self, _samples: Samples) -> Result<(), OarError> {
         Ok(())

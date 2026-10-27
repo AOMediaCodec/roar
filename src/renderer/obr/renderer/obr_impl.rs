@@ -14,8 +14,8 @@
 //!
 //! This module implements the main entry point and coordinator for the OBR subsystem.
 //! It manages audio elements, groups them into processing groups, performs Ambisonic
-//! encoding, handles head tracking rotation, performs frequency-domain binaural
-//! decoding, and applies a peak limiter to the final output.
+//! encoding, handles head tracking rotation, and performs frequency-domain binaural
+//! decoding.
 //!
 //! Crucially, `ObrImpl` is designed to be allocation-free on its real-time audio thread
 //! processing loop once initialized.
@@ -38,7 +38,6 @@ use crate::renderer::obr::ambisonic_binaural_decoder::{FftManager, Resampler};
 use crate::renderer::obr::common::constants::{
     MAX_SUPPORTED_NUM_INPUT_CHANNELS, NUM_BINAURAL_CHANNELS,
 };
-use crate::renderer::obr::peak_limiter::PeakLimiter;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 
@@ -53,15 +52,12 @@ pub struct ObrImpl {
     buffer_size_per_channel: Samples,
     sampling_rate: SampleRate,
     head_tracking_enabled: bool,
-    limiter_enabled: bool,
     world_rotation: Quaternion,
     audio_elements: Vec<AudioElementConfig>,
     processing_groups: Vec<ProcessingGroup>,
     resampler: Resampler,
     fft_manager: FftManager,
-    peak_limiter: Option<PeakLimiter>,
     scratch_group_output: AudioBuffer,
-    scratch_limiter_buffer: AudioBuffer,
 }
 
 impl ObrImpl {
@@ -76,18 +72,12 @@ impl ObrImpl {
             buffer_size_per_channel,
             sampling_rate,
             head_tracking_enabled: false,
-            limiter_enabled: true,
             world_rotation: Quaternion::identity(),
             audio_elements: Vec::new(),
             processing_groups: Vec::new(),
             resampler: Resampler::new(),
             fft_manager: FftManager::new(size_usize),
-            peak_limiter: Some(PeakLimiter::new_with_defaults(
-                sampling_rate,
-                buffer_size_per_channel,
-            )),
             scratch_group_output: AudioBuffer::new(2, size_usize),
-            scratch_limiter_buffer: AudioBuffer::new(2, size_usize),
         }
     }
 
@@ -107,12 +97,8 @@ impl ObrImpl {
         let size_usize = buffer_size_per_channel.value() as usize;
         self.fft_manager = FftManager::new(size_usize);
         self.scratch_group_output = AudioBuffer::new(2, size_usize);
-        self.scratch_limiter_buffer = AudioBuffer::new(2, size_usize);
         if !self.audio_elements.is_empty() {
             self.initialize_dsp()?;
-        } else {
-            self.peak_limiter =
-                Some(PeakLimiter::new_with_defaults(self.sampling_rate, buffer_size_per_channel));
         }
         Ok(())
     }
@@ -120,7 +106,6 @@ impl ObrImpl {
     /// Resets all DSP state and clears processing groups.
     pub fn reset_dsp(&mut self) {
         self.processing_groups.clear();
-        self.peak_limiter = None;
     }
 
     /// Re-initialises DSP resources after configuration changes.
@@ -138,8 +123,6 @@ impl ObrImpl {
             group.initialize(&mut self.fft_manager, &mut self.resampler)?;
             group.update_ambisonic_encoder(&mut self.audio_elements)?;
         }
-        self.peak_limiter =
-            Some(PeakLimiter::new_with_defaults(self.sampling_rate, self.buffer_size_per_channel));
         Ok(())
     }
 
@@ -250,11 +233,6 @@ impl ObrImpl {
         self.head_tracking_enabled = enable;
     }
 
-    /// Enables or disables the output peak limiter.
-    pub fn enable_limiter(&mut self, enable: bool) {
-        self.limiter_enabled = enable;
-    }
-
     /// Sets the head rotation quaternion for counter-rotating sound fields.
     ///
     /// # Parameters
@@ -318,13 +296,6 @@ impl ObrImpl {
         }
 
         if self.processing_groups.is_empty() {
-            if self.limiter_enabled
-                && let Some(lim) = &mut self.peak_limiter
-            {
-                self.scratch_limiter_buffer.clear();
-                lim.process(output_buffer, &mut self.scratch_limiter_buffer);
-                output_buffer.copy_from_2d(&self.scratch_limiter_buffer.to_2d());
-            }
             return;
         }
 
@@ -355,14 +326,6 @@ impl ObrImpl {
                 let dst = output_buffer.channel_mut(1);
                 add_pointwise_in_place(dst.data, src.data);
             }
-        }
-
-        if self.limiter_enabled
-            && let Some(lim) = &mut self.peak_limiter
-        {
-            self.scratch_limiter_buffer.clear();
-            lim.process(output_buffer, &mut self.scratch_limiter_buffer);
-            output_buffer.copy_from_2d(&self.scratch_limiter_buffer.to_2d());
         }
     }
 
@@ -404,7 +367,7 @@ impl ObrAudioRendererAdapter {
     /// Constructs a new `ObrAudioRendererAdapter` instance.
     pub fn new(samples_per_channel: Samples, sampling_rate: SampleRate) -> Self {
         let size_usize = samples_per_channel.value() as usize;
-        let mut adapter = Self {
+        Self {
             obr: ObrImpl::new(samples_per_channel, sampling_rate),
             id_to_element_index: HashMap::new(),
             element_channels: HashMap::new(),
@@ -412,9 +375,7 @@ impl ObrAudioRendererAdapter {
             scratch_output: AudioBuffer::new(NUM_BINAURAL_CHANNELS, size_usize),
             element_gains: HashMap::new(),
             gain_scratch_buf: vec![1.0f32; size_usize],
-        };
-        adapter.obr.enable_limiter(false);
-        adapter
+        }
     }
     fn get_element_channel_offset(&self, id: u32) -> usize {
         let target_idx = self.id_to_element_index.get(&id).copied().unwrap_or(0);
@@ -569,11 +530,6 @@ impl AudioRenderer for ObrAudioRendererAdapter {
 
     fn set_head_rotation(&mut self, rotation: Quaternion) -> Result<(), OarError> {
         self.obr.set_head_rotation(rotation)
-    }
-
-    fn enable_limiter(&mut self, enable: bool) -> Result<(), OarError> {
-        self.obr.enable_limiter(enable);
-        Ok(())
     }
 
     fn set_metadata_unit_to_process(&mut self, samples: Samples) -> Result<(), OarError> {
@@ -786,7 +742,6 @@ mod test {
     #[gtest]
     fn test_passthrough_mono() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        renderer.enable_limiter(false);
         let add = renderer
             .add_audio_element(AudioElementVariant::PassthroughMono, BinauralFilterProfile::Direct);
 
@@ -813,7 +768,6 @@ mod test {
     #[gtest]
     fn test_passthrough_stereo() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        renderer.enable_limiter(false);
         let add = renderer.add_audio_element(
             AudioElementVariant::PassthroughStereo,
             BinauralFilterProfile::Direct,
@@ -872,16 +826,11 @@ mod test {
     fn set_buffer_size_per_channel_with_same_value_preserves_buffers() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
         let initial_group_ptr = renderer.scratch_group_output.channel(0).as_slice().as_ptr();
-        let initial_limiter_ptr = renderer.scratch_limiter_buffer.channel(0).as_slice().as_ptr();
 
         let result = renderer.set_buffer_size_per_channel(get_buffer_size());
 
         expect_ok!(result);
         expect_eq!(renderer.scratch_group_output.channel(0).as_slice().as_ptr(), initial_group_ptr);
-        expect_eq!(
-            renderer.scratch_limiter_buffer.channel(0).as_slice().as_ptr(),
-            initial_limiter_ptr
-        );
     }
 
     #[gtest]
@@ -893,18 +842,6 @@ mod test {
 
         expect_eq!(renderer.get_buffer_size_per_channel(), new_size);
         expect_eq!(renderer.scratch_group_output.num_frames(), 64);
-        expect_eq!(renderer.scratch_limiter_buffer.num_frames(), 64);
-        Ok(())
-    }
-
-    #[gtest]
-    fn set_metadata_unit_to_process_preserves_limiter_enabled_state() -> Result<()> {
-        let mut adapter = ObrAudioRendererAdapter::new(get_buffer_size(), get_sample_rate());
-        adapter.enable_limiter(true)?;
-
-        adapter.set_metadata_unit_to_process(Samples::new(64)?)?;
-
-        expect_true!(adapter.obr.limiter_enabled);
         Ok(())
     }
 
