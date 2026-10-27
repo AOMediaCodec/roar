@@ -24,10 +24,10 @@ use std::ops::Mul;
 /// Expected to be a unit quaternion (i.e. `w^2 + x^2 + y^2 + z^2` is close to 1.0).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Quaternion {
-    pub w: f32,
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
+    w: f32,
+    x: f32,
+    y: f32,
+    z: f32,
 }
 
 /// Represents a 3x3 rotation matrix.
@@ -70,20 +70,25 @@ impl Quaternion {
     }
 
     /// Returns the w component.
-    pub fn w(&self) -> f32 {
+    pub const fn w(&self) -> f32 {
         self.w
     }
     /// Returns the x component.
-    pub fn x(&self) -> f32 {
+    pub const fn x(&self) -> f32 {
         self.x
     }
     /// Returns the y component.
-    pub fn y(&self) -> f32 {
+    pub const fn y(&self) -> f32 {
         self.y
     }
     /// Returns the z component.
-    pub fn z(&self) -> f32 {
+    pub const fn z(&self) -> f32 {
         self.z
+    }
+
+    /// Returns the conjugate of the quaternion (`w, -x, -y, -z`).
+    pub const fn conjugate(&self) -> Self {
+        Self { w: self.w, x: -self.x, y: -self.y, z: -self.z }
     }
 
     /// Returns the conjugate/inverse of the quaternion assuming unit norm.

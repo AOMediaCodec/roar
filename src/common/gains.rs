@@ -33,51 +33,32 @@ pub(crate) enum GainVariant {
 impl Gain {
     /// Creates a new constant gain metadata from Decibels.
     pub fn new_constant(val: Decibels) -> Result<Self, OarError> {
-        if val.0.is_finite() {
-            Ok(Gain { variant: GainVariant::Constant(LinearGain::from(val)) })
-        } else {
-            Err(OarError::InvalidParameter)
-        }
+        Ok(Gain { variant: GainVariant::Constant(LinearGain::from(val)) })
     }
 
     /// Creates a new per-channel static gain metadata from Decibels.
     pub fn new_multiple(vals: Vec<Decibels>) -> Result<Self, OarError> {
-        if vals.iter().all(|v| v.0.is_finite()) {
-            let lin_vals = vals.into_iter().map(LinearGain::from).collect();
-            Ok(Gain { variant: GainVariant::Multiple(lin_vals) })
-        } else {
-            Err(OarError::InvalidParameter)
-        }
+        let lin_vals = vals.into_iter().map(LinearGain::from).collect();
+        Ok(Gain { variant: GainVariant::Multiple(lin_vals) })
     }
 
     /// Creates a new animated gain metadata where the animation start/end/control are in Decibels.
     pub fn new_animated(anim: AnimatedFloat32) -> Result<Self, OarError> {
         let variant = match anim {
-            Animated::Step { value } => {
-                if !value.is_finite() {
-                    return Err(OarError::InvalidParameter);
-                }
-                Animated::Step { value: Decibels(value) }
-            }
+            Animated::Step { value } => Animated::Step { value: Decibels::new(value)? },
             Animated::Linear { start, end } => {
-                if !start.is_finite() || !end.is_finite() {
-                    return Err(OarError::InvalidParameter);
-                }
-                Animated::Linear { start: Decibels(start), end: Decibels(end) }
+                Animated::Linear { start: Decibels::new(start)?, end: Decibels::new(end)? }
             }
             Animated::Bezier { start, end, control, control_relative_time } => {
-                if !start.is_finite()
-                    || !end.is_finite()
-                    || !control.is_finite()
-                    || !control_relative_time.is_finite()
+                if !control_relative_time.is_finite()
                     || !(0.0..=1.0).contains(&control_relative_time)
                 {
                     return Err(OarError::InvalidParameter);
                 }
                 Animated::Bezier {
-                    start: Decibels(start),
-                    end: Decibels(end),
-                    control: Decibels(control),
+                    start: Decibels::new(start)?,
+                    end: Decibels::new(end)?,
+                    control: Decibels::new(control)?,
                     control_relative_time,
                 }
             }
@@ -96,44 +77,29 @@ mod test {
 
     #[gtest]
     fn test_gain_new_constant_stores_linear_gain() {
-        let gain = Gain::new_constant(Decibels(0.0));
+        let gain = Gain::new_constant(Decibels::ZERO);
 
         expect_ok!(&gain);
-        expect_eq!(
-            gain.unwrap(),
-            Gain { variant: GainVariant::Constant(LinearGain::from(Decibels(0.0))) }
-        );
-    }
-
-    #[gtest]
-    fn test_gain_new_constant_rejects_nan() {
-        let gain = Gain::new_constant(Decibels(f32::NAN));
-
-        expect_true!(gain.is_err());
+        expect_eq!(gain.unwrap(), Gain { variant: GainVariant::Constant(LinearGain::ONE) });
     }
 
     #[gtest]
     fn test_gain_new_multiple_stores_linear_gains() {
-        let gain = Gain::new_multiple(vec![Decibels(-3.0), Decibels(0.0), Decibels(3.0)]);
+        let db_neg3 = Decibels::new(-3.0).unwrap();
+        let db_pos3 = Decibels::new(3.0).unwrap();
+        let gain = Gain::new_multiple(vec![db_neg3, Decibels::ZERO, db_pos3]);
 
         expect_ok!(&gain);
         expect_eq!(
             gain.unwrap(),
             Gain {
                 variant: GainVariant::Multiple(vec![
-                    LinearGain::from(Decibels(-3.0)),
-                    LinearGain::from(Decibels(0.0)),
-                    LinearGain::from(Decibels(3.0)),
+                    LinearGain::from(db_neg3),
+                    LinearGain::ONE,
+                    LinearGain::from(db_pos3),
                 ]),
             }
         );
-    }
-
-    #[gtest]
-    fn test_gain_new_multiple_rejects_non_finite() {
-        let gain = Gain::new_multiple(vec![Decibels(0.1), Decibels(f32::INFINITY), Decibels(0.3)]);
-
-        expect_true!(gain.is_err());
     }
 
     #[gtest]
@@ -145,8 +111,8 @@ mod test {
             gain.unwrap(),
             Gain {
                 variant: GainVariant::Animated(Animated::Linear {
-                    start: Decibels(0.0),
-                    end: Decibels(-12.0),
+                    start: Decibels::ZERO,
+                    end: Decibels::new(-12.0).unwrap(),
                 }),
             }
         );

@@ -186,7 +186,8 @@ mod test {
         let mut chan = BlockProcessingChannel::new(Arc::new(VogPanner));
         let coord = PolarCoordinate::new_from_floats(0.0, 0.0, 1.0).unwrap();
 
-        let result = chan.add_metadata(SampleRate::new(48000).unwrap(), coord, Samples(10));
+        let result =
+            chan.add_metadata(SampleRate::new(48000).unwrap(), coord, Samples::new(10).unwrap());
 
         assert_ok!(result);
         expect_eq!(chan.accumulated_duration, 10);
@@ -200,7 +201,8 @@ mod test {
         let mut output = [0.0; 10];
         chan.process(SampleRate::new(48000).unwrap(), 0, &input, &mut output).unwrap();
 
-        let result = chan.add_metadata(SampleRate::new(48000).unwrap(), coord, Samples(5));
+        let result =
+            chan.add_metadata(SampleRate::new(48000).unwrap(), coord, Samples::new(5).unwrap());
 
         expect_that!(result, eq(Err(OarError::InvalidParameter)));
     }
@@ -209,7 +211,8 @@ mod test {
     fn test_block_processing_channel_process_applies_gain() {
         let mut chan = BlockProcessingChannel::new(Arc::new(VogPanner));
         let coord = PolarCoordinate::new_from_floats(0.0, 0.0, 1.0).unwrap();
-        chan.add_metadata(SampleRate::new(48000).unwrap(), coord, Samples(10)).unwrap();
+        chan.add_metadata(SampleRate::new(48000).unwrap(), coord, Samples::new(10).unwrap())
+            .unwrap();
         let input = [2.0; 10];
         let mut output = [0.0; 10];
 

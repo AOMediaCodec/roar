@@ -242,7 +242,7 @@ mod test {
         rdr.add_element(10, &config).unwrap();
         let positions =
             ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(0.0, 0.0, 1.0).unwrap()]);
-        rdr.update_element_positions(10, &positions, Samples(8)).unwrap();
+        rdr.update_element_positions(10, &positions, Samples::new(8).unwrap()).unwrap();
 
         let input_data = [10.0f32; 8];
         let inputs = [&input_data[..]];
@@ -277,7 +277,7 @@ mod test {
         rdr.add_element(10, &config).unwrap();
         let positions =
             ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(0.0, 0.0, 1.0).unwrap()]);
-        rdr.update_element_positions(10, &positions, Samples(8)).unwrap();
+        rdr.update_element_positions(10, &positions, Samples::new(8).unwrap()).unwrap();
 
         let input_data = [10.0f32; 8];
         let inputs = [&input_data[..]];

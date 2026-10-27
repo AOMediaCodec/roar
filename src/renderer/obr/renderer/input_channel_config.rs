@@ -33,7 +33,7 @@ pub struct AudioObjectInputChannel {
 impl AudioObjectInputChannel {
     /// Constructs a new `AudioObjectInputChannel` with default unit gain.
     pub fn new(azimuth: Degrees, elevation: Degrees, distance: Distance) -> Self {
-        Self { gain: LinearGain(1.0), azimuth, elevation, distance }
+        Self { gain: LinearGain::ONE, azimuth, elevation, distance }
     }
 }
 
@@ -47,15 +47,15 @@ mod test {
 
     #[gtest]
     fn audio_object_input_channel_initializes_with_unit_gain_and_coordinates() {
-        let az = Degrees(-45.0);
-        let el = Degrees(10.0);
+        let az = Degrees::new(-45.0).unwrap();
+        let el = Degrees::new(10.0).unwrap();
         let dist = Distance::new(2.5).unwrap();
 
         let obj = AudioObjectInputChannel::new(az, el, dist);
 
-        expect_eq!(obj.gain.0, 1.0);
-        expect_eq!(obj.azimuth.0, -45.0);
-        expect_eq!(obj.elevation.0, 10.0);
+        expect_eq!(obj.gain.value(), 1.0);
+        expect_eq!(obj.azimuth.value(), -45.0);
+        expect_eq!(obj.elevation.value(), 10.0);
         expect_eq!(obj.distance.value(), 2.5);
     }
 }

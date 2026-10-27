@@ -1618,44 +1618,6 @@ mod tests {
     }
 
     #[gtest]
-    fn render_h2m_zero_samples_succeeds_without_modifying_outputs() {
-        let h2m_matrix = H2mRdr {
-            in_order: HighOrderAmbisonics::Zoa,
-            out_system: OutputLayout::Layout51,
-            channels: 6,
-            lfe1: 3,
-            lfe2: -1,
-            mat: &ZOA_BS050,
-            m: 1,
-            n: 5,
-        };
-        let in_channel = [];
-        let mut out_l = [];
-        let mut out_r = [];
-        let mut out_c = [];
-        let mut out_lfe = [];
-        let mut out_ls = [];
-        let mut out_rs = [];
-
-        let result = {
-            let inputs = [&in_channel[..]];
-            let mut out_slices = [
-                &mut out_l[..],
-                &mut out_r[..],
-                &mut out_c[..],
-                &mut out_lfe[..],
-                &mut out_ls[..],
-                &mut out_rs[..],
-            ];
-            let inputs_buf = PlanarBufferRef::new(&inputs, 1, Samples(0)).unwrap();
-            let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 6, Samples(0)).unwrap();
-            element_renderer_render_h2m(&h2m_matrix, inputs_buf, &mut outputs_buf)
-        };
-
-        assert_ok!(result);
-    }
-
-    #[gtest]
     fn render_h2m_lfe2_at_high_index_remaps_and_zeroes() {
         let h2m_matrix = H2mRdr {
             in_order: HighOrderAmbisonics::Zoa,

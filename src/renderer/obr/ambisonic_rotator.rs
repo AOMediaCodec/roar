@@ -198,7 +198,7 @@ impl AmbisonicRotator {
         // Convert from ADM object coordinates (X=right, Y=forward, Z=up) to AmbiX (X=front, Y=left,
         // Z=up).
         let ambix_rotation =
-            Quaternion { w: rotation.w, x: -rotation.x, y: rotation.z, z: rotation.y };
+            Quaternion::new(rotation.w(), -rotation.x(), rotation.z(), rotation.y()).unwrap();
         let r_3x3 = ambix_rotation.to_rotation_matrix();
 
         // Band 1 rotation matrix.
@@ -364,7 +364,7 @@ mod test {
             let x = axis[0] / norm * s;
             let y = axis[1] / norm * s;
             let z = axis[2] / norm * s;
-            Quaternion { w: c, x, y, z }
+            Quaternion::new(c, x, y, z).unwrap()
         } else {
             Quaternion::identity()
         }
@@ -388,18 +388,18 @@ mod test {
         let mut rotated_source_mono_codec = AmbisonicEncoder::new(1, AMBISONIC_ORDER as usize);
         rotated_source_mono_codec.set_source(
             0,
-            LinearGain(1.0),
-            Degrees(INITIAL_SOURCE_ANGLE.0),
-            Degrees(INITIAL_SOURCE_ANGLE.1),
+            LinearGain::ONE,
+            Degrees::new(INITIAL_SOURCE_ANGLE.0).unwrap(),
+            Degrees::new(INITIAL_SOURCE_ANGLE.1).unwrap(),
             Distance::new(1.0).unwrap(),
         );
 
         let mut reference_source_mono_codec = AmbisonicEncoder::new(1, AMBISONIC_ORDER as usize);
         reference_source_mono_codec.set_source(
             0,
-            LinearGain(1.0),
-            Degrees(expected_source_angle.0),
-            Degrees(expected_source_angle.1),
+            LinearGain::ONE,
+            Degrees::new(expected_source_angle.0).unwrap(),
+            Degrees::new(expected_source_angle.1).unwrap(),
             Distance::new(1.0).unwrap(),
         );
 
@@ -443,8 +443,8 @@ mod test {
             buffer.channel_mut(ch).as_mut_slice().fill(1.0);
         }
 
-        let small_rotation = Quaternion { w: 1.0, x: 0.001, y: 0.001, z: 0.001 };
-        let large_rotation = Quaternion { w: 1.0, x: 0.1, y: 0.1, z: 0.1 };
+        let small_rotation = Quaternion::new(1.0, 0.001, 0.001, 0.001).unwrap();
+        let large_rotation = Quaternion::new(1.0, 0.1, 0.1, 0.1).unwrap();
 
         let mut rotator = AmbisonicRotator::new(AMBISONIC_ORDER, frames_per_buffer);
 

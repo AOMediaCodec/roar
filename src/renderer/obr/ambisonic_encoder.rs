@@ -163,16 +163,16 @@ impl AmbisonicEncoder {
         let num_out = self.number_of_output_channels;
 
         let params_equal = |a: &SingleSourceParams, b: &SingleSourceParams| -> bool {
-            if (a.gain.0 - b.gain.0).abs() > 1e-6 {
+            if (a.gain.value() - b.gain.value()).abs() > 1e-6 {
                 return false;
             }
             if (a.distance.value() - b.distance.value()).abs() > 1e-6 {
                 return false;
             }
-            if (a.elevation.0 - b.elevation.0).abs() > 1e-3 {
+            if (a.elevation.value() - b.elevation.value()).abs() > 1e-3 {
                 return false;
             }
-            let delta = ((b.azimuth.0 - a.azimuth.0 + 540.0) % 360.0) - 180.0;
+            let delta = ((b.azimuth.value() - a.azimuth.value() + 540.0) % 360.0) - 180.0;
             delta.abs() <= 1e-3
         };
 
@@ -254,7 +254,7 @@ impl AmbisonicEncoder {
     }
 
     fn fill_column_to_temp(&mut self, p: &SingleSourceParams) {
-        if p.gain.0 < NEGATIVE_120DB_IN_AMPLITUDE {
+        if p.gain.value() < NEGATIVE_120DB_IN_AMPLITUDE {
             self.scratch_col_temp.fill(0.0);
             return;
         }
@@ -262,13 +262,13 @@ impl AmbisonicEncoder {
         self.get_sh_coeffs_internal(p.azimuth, p.elevation);
         self.apply_within_head_sh_coefficients_damping(p.distance.value(), 0.1);
         for i in 0..self.number_of_output_channels {
-            self.scratch_col_temp[i] = self.scratch_sh_coeffs[i] * p.gain.0;
+            self.scratch_col_temp[i] = self.scratch_sh_coeffs[i] * p.gain.value();
         }
     }
 
     fn get_sh_coeffs_internal(&mut self, azimuth: Degrees, elevation: Degrees) {
-        let azimuth_rad = Radians::from(azimuth).0;
-        let elevation_rad = Radians::from(elevation).0;
+        let azimuth_rad = Radians::from(azimuth).value();
+        let elevation_rad = Radians::from(elevation).value();
 
         self.alp_generator.generate_into(elevation_rad.sin(), &mut self.scratch_alp_values);
         self.scratch_sh_coeffs.fill(0.0);
@@ -333,9 +333,9 @@ mod test {
         let mut encoder = AmbisonicEncoder::new(NUMBER_OF_INPUT_CHANNELS, AMBISONIC_ORDER);
         encoder.set_source(
             0,
-            LinearGain(1.0),
-            Degrees(azimuth),
-            Degrees(elevation),
+            LinearGain::ONE,
+            Degrees::new(azimuth).unwrap(),
+            Degrees::new(elevation).unwrap(),
             Distance::new(1.0).unwrap(),
         );
         let mut input_buffer = AudioBuffer::new(NUMBER_OF_INPUT_CHANNELS, BUFFER_SIZE);
@@ -444,16 +444,16 @@ mod test {
         let mut encoder = AmbisonicEncoder::new(NUMBER_OF_INPUT_CHANNELS, ambisonic_order);
         encoder.set_source(
             0,
-            LinearGain(1.0),
-            Degrees(0.0),
-            Degrees(0.0),
+            LinearGain::ONE,
+            Degrees::ZERO,
+            Degrees::ZERO,
             Distance::new(1.0).unwrap(),
         );
         encoder.set_source(
             0,
-            LinearGain(1.0),
-            Degrees(90.0),
-            Degrees(0.0),
+            LinearGain::ONE,
+            Degrees::new(90.0).unwrap(),
+            Degrees::ZERO,
             Distance::new(1.0).unwrap(),
         );
         let mut input_buffer = AudioBuffer::new(NUMBER_OF_INPUT_CHANNELS, buffer_size);
@@ -479,9 +479,9 @@ mod test {
         let mut encoder = AmbisonicEncoder::new(NUMBER_OF_INPUT_CHANNELS, ambisonic_order);
         encoder.set_source(
             0,
-            LinearGain(1.0),
-            Degrees(0.0),
-            Degrees(0.0),
+            LinearGain::ONE,
+            Degrees::ZERO,
+            Degrees::ZERO,
             Distance::new(1.0).unwrap(),
         );
         let mut input_buffer = AudioBuffer::new(NUMBER_OF_INPUT_CHANNELS, buffer_size);
@@ -491,9 +491,9 @@ mod test {
 
         encoder.set_source(
             0,
-            LinearGain(1.0),
-            Degrees(90.0),
-            Degrees(0.0),
+            LinearGain::ONE,
+            Degrees::new(90.0).unwrap(),
+            Degrees::ZERO,
             Distance::new(1.0).unwrap(),
         );
         encoder.process_planar_audio_data(&input_buffer, &mut output_buffer);

@@ -12,7 +12,6 @@
 
 use super::definitions::OarError;
 use super::units::{Degrees, Radians};
-use crate::utility::oar_utils::validate_float;
 use std::ops::{Add, Mul, Sub};
 
 /// Represents a unitless distance from the listener, restricted to non-negative values.
@@ -44,9 +43,9 @@ pub struct PolarCoordinate {
 /// - **Z-axis**: Down (negative) / Up (positive).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CartesianCoordinate {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
+    x: f32,
+    y: f32,
+    z: f32,
 }
 
 // ===== Distance =====
@@ -54,14 +53,15 @@ pub struct CartesianCoordinate {
 impl Distance {
     /// Creates a new Distance. Returns error if value is not finite or negative.
     pub fn new(val: f32) -> Result<Self, OarError> {
-        if val < 0.0 {
-            return Err(OarError::InvalidParameter);
+        if val.is_finite() && val >= 0.0 {
+            Ok(Self(val))
+        } else {
+            Err(OarError::InvalidParameter)
         }
-        Ok(Self(validate_float(val)?))
     }
 
     /// Returns the raw f32 value.
-    pub fn value(&self) -> f32 {
+    pub const fn value(&self) -> f32 {
         self.0
     }
 }
@@ -76,8 +76,8 @@ impl PolarCoordinate {
     /// - Distance must be non-negative (`>= 0.0`).
     /// - Azimuth is normalized to `[-180.0, 180.0]`.
     pub fn new(azimuth: Degrees, elevation: Degrees, distance: Distance) -> Result<Self, OarError> {
-        let mut az_val = azimuth.0;
-        let mut el_val = elevation.0;
+        let mut az_val = azimuth.value();
+        let mut el_val = elevation.value();
 
         el_val %= 360.0;
         while el_val > 90.0 {
@@ -138,7 +138,7 @@ impl TryFrom<CartesianCoordinate> for PolarCoordinate {
         let dist_val = c.x.hypot(c.y).hypot(c.z);
         // Avoid division by zero.
         if dist_val < 1e-10_f32 {
-            return Self::new(Degrees::new(0.0)?, Degrees::new(0.0)?, Distance::new(0.0)?);
+            return Self::new(Degrees::ZERO, Degrees::ZERO, Distance::new(0.0)?);
         }
         let distance = Distance::new(dist_val)?;
         let azimuth = Degrees::new((-c.x).atan2(c.y).to_degrees())?;
@@ -159,19 +159,30 @@ impl Default for CartesianCoordinate {
 impl CartesianCoordinate {
     /// Creates a new CartesianCoordinate. Returns error if any value is not finite.
     pub fn new(x: f32, y: f32, z: f32) -> Result<Self, OarError> {
-        Ok(Self { x: validate_float(x)?, y: validate_float(y)?, z: validate_float(z)? })
+        if x.is_finite() && y.is_finite() && z.is_finite() {
+            Ok(Self { x, y, z })
+        } else {
+            Err(OarError::InvalidParameter)
+        }
+    }
+
+    /// Creates a new `CartesianCoordinate` in a `const` context, panicking if any component is not
+    /// finite.
+    pub(crate) const fn from_const(x: f32, y: f32, z: f32) -> Self {
+        assert!(x.is_finite() && y.is_finite() && z.is_finite());
+        Self { x, y, z }
     }
 
     /// Returns the x coordinate.
-    pub fn x(&self) -> f32 {
+    pub const fn x(&self) -> f32 {
         self.x
     }
     /// Returns the y coordinate.
-    pub fn y(&self) -> f32 {
+    pub const fn y(&self) -> f32 {
         self.y
     }
     /// Returns the z coordinate.
-    pub fn z(&self) -> f32 {
+    pub const fn z(&self) -> f32 {
         self.z
     }
 }
@@ -200,13 +211,13 @@ impl Mul<f32> for CartesianCoordinate {
 impl TryFrom<PolarCoordinate> for CartesianCoordinate {
     type Error = OarError;
     fn try_from(polar: PolarCoordinate) -> Result<Self, OarError> {
-        let azimuth_rad: Radians = polar.azimuth.into();
-        let elevation_rad: Radians = polar.elevation.into();
+        let azimuth_rad = Radians::from(polar.azimuth).value();
+        let elevation_rad = Radians::from(polar.elevation).value();
         let dist = polar.distance.value();
         CartesianCoordinate::new(
-            dist * (-azimuth_rad.0).sin() * elevation_rad.0.cos(),
-            dist * (-azimuth_rad.0).cos() * elevation_rad.0.cos(),
-            dist * elevation_rad.0.sin(),
+            dist * (-azimuth_rad).sin() * elevation_rad.cos(),
+            dist * (-azimuth_rad).cos() * elevation_rad.cos(),
+            dist * elevation_rad.sin(),
         )
     }
 }
@@ -226,8 +237,8 @@ mod test {
         expect_ok!(&p1);
 
         let p1 = p1.unwrap();
-        expect_that!(p1.azimuth().0, eq(30.0));
-        expect_that!(p1.elevation().0, eq(45.0));
+        expect_that!(p1.azimuth().value(), eq(30.0));
+        expect_that!(p1.elevation().value(), eq(45.0));
         expect_that!(p1.distance().value(), eq(0.5));
     }
 
@@ -238,8 +249,8 @@ mod test {
         expect_ok!(&p2);
 
         let p2 = p2.unwrap();
-        expect_that!(p2.elevation().0, eq(85.0));
-        expect_that!(p2.azimuth().0, eq(-150.0));
+        expect_that!(p2.elevation().value(), eq(85.0));
+        expect_that!(p2.azimuth().value(), eq(-150.0));
     }
 
     #[gtest]
@@ -249,8 +260,8 @@ mod test {
         expect_ok!(&p2);
 
         let p2 = p2.unwrap();
-        expect_that!(p2.elevation().0, eq(40.0));
-        expect_that!(p2.azimuth().0, eq(150.0));
+        expect_that!(p2.elevation().value(), eq(40.0));
+        expect_that!(p2.azimuth().value(), eq(150.0));
     }
 
     #[gtest]
@@ -264,10 +275,10 @@ mod test {
     fn test_polar_coordinate_azimuth_normalization() {
         // Azimuth normalization
         let p4 = PolarCoordinate::new_from_floats(190.0, 45.0, 0.5).unwrap();
-        expect_that!(p4.azimuth().0, eq(-170.0));
+        expect_that!(p4.azimuth().value(), eq(-170.0));
 
         let p5 = PolarCoordinate::new_from_floats(-190.0, 45.0, 0.5).unwrap();
-        expect_that!(p5.azimuth().0, eq(170.0));
+        expect_that!(p5.azimuth().value(), eq(170.0));
     }
 
     #[gtest]
@@ -329,8 +340,8 @@ mod test {
 
         let polar: PolarCoordinate = cart.try_into().unwrap();
 
-        expect_that!(polar.azimuth().0, eq(0.0));
-        expect_that!(polar.elevation().0, eq(0.0));
+        expect_that!(polar.azimuth().value(), eq(0.0));
+        expect_that!(polar.elevation().value(), eq(0.0));
         expect_that!(polar.distance().value(), eq(0.0));
     }
 
@@ -340,8 +351,8 @@ mod test {
 
         let polar: PolarCoordinate = cart.try_into().unwrap();
 
-        expect_that!(polar.azimuth().0, near(0.0f32, 1e-5));
-        expect_that!(polar.elevation().0, near(0.0f32, 1e-5));
+        expect_that!(polar.azimuth().value(), near(0.0f32, 1e-5));
+        expect_that!(polar.elevation().value(), near(0.0f32, 1e-5));
         expect_that!(polar.distance().value(), near(1.0f32, 1e-5));
     }
 
@@ -352,8 +363,8 @@ mod test {
         let polar: PolarCoordinate = cart.try_into().unwrap();
 
         expect_that!(polar.distance().value(), near(5.0f32, 1e-5));
-        expect_that!(polar.elevation().0, near(90.0f32, 1e-5));
-        expect_that!(polar.azimuth().0, near(0.0f32, 1e-5));
+        expect_that!(polar.elevation().value(), near(90.0f32, 1e-5));
+        expect_that!(polar.azimuth().value(), near(0.0f32, 1e-5));
     }
 
     #[gtest]

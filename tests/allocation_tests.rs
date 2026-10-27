@@ -241,7 +241,9 @@ mod test {
         // Object needs position
         let pos =
             ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(0.0, 0.0, 1.0).unwrap()]);
-        renderer.update_element_positions(element_id, &pos, Samples(frame_size as u32)).unwrap();
+        renderer
+            .update_element_positions(element_id, &pos, Samples::new(frame_size as u32).unwrap())
+            .unwrap();
 
         let inputs = vec![vec![0.5f32; frame_size]; input_channels];
         let mut output = vec![0.0f32; output_channels * frame_size];
@@ -287,7 +289,9 @@ mod test {
         // Queue initial position
         let pos1 =
             ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(0.0, 0.0, 1.0).unwrap()]);
-        renderer.update_element_positions(element_id, &pos1, Samples(frame_size as u32)).unwrap();
+        renderer
+            .update_element_positions(element_id, &pos1, Samples::new(frame_size as u32).unwrap())
+            .unwrap();
 
         let inputs = vec![vec![0.5f32; frame_size]; input_channels];
         let mut output = vec![0.0f32; output_channels * frame_size];
@@ -304,7 +308,9 @@ mod test {
         // Queue new position (triggers interpolation in next render)
         let pos2 =
             ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(90.0, 0.0, 1.0).unwrap()]);
-        renderer.update_element_positions(element_id, &pos2, Samples(frame_size as u32)).unwrap();
+        renderer
+            .update_element_positions(element_id, &pos2, Samples::new(frame_size as u32).unwrap())
+            .unwrap();
 
         assert_zero_allocations(|| {
             let input_buffer_ref = create_planar_buffer_ref(&input_refs, frame_size);
@@ -347,8 +353,10 @@ mod test {
             create_planar_buffer_mut(&mut output, output_channels, frame_size, &mut output_slices);
 
         // Queue group gain update (triggers interpolation in next render)
-        let gain = Gain::new_constant(Decibels(-3.0)).unwrap();
-        renderer.update_group_gain(group_id, &gain, Samples(frame_size as u32)).unwrap();
+        let gain = Gain::new_constant(Decibels::new(-3.0).unwrap()).unwrap();
+        renderer
+            .update_group_gain(group_id, &gain, Samples::new(frame_size as u32).unwrap())
+            .unwrap();
 
         assert_zero_allocations(|| {
             let input_buffer_ref = create_planar_buffer_ref(&input_refs, frame_size);

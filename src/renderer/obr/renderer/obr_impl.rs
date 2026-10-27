@@ -258,10 +258,9 @@ impl ObrImpl {
     /// Sets the head rotation quaternion for counter-rotating sound fields.
     ///
     /// # Parameters
-    /// * `w`, `x`, `y`, `z` - Quaternion components representing head orientation.
+    /// * `rotation` - Quaternion representing head orientation.
     pub fn set_head_rotation(&mut self, rotation: Quaternion) -> Result<(), OarError> {
-        self.world_rotation =
-            Quaternion { w: rotation.w, x: -rotation.x, y: -rotation.y, z: -rotation.z };
+        self.world_rotation = rotation.conjugate();
         Ok(())
     }
 
@@ -497,8 +496,8 @@ impl AudioRenderer for ObrAudioRendererAdapter {
                     self.obr.update_object_channel_position(
                         idx,
                         i,
-                        polar_coord.azimuth().0,
-                        polar_coord.elevation().0,
+                        polar_coord.azimuth().value(),
+                        polar_coord.elevation().value(),
                         polar_coord.distance().value(),
                     )?;
                 }

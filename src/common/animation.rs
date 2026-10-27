@@ -82,17 +82,18 @@ impl Interpolate for f32 {
 
 impl Interpolate for Decibels {
     fn lerp(self, other: Self, t: f32) -> Self {
-        Decibels(self.0 + t * (other.0 - self.0))
+        Decibels::new(self.value() + t * (other.value() - self.value())).unwrap_or(self)
     }
 }
 
 impl Interpolate for CartesianCoordinate {
     fn lerp(self, other: Self, t: f32) -> Self {
-        CartesianCoordinate {
-            x: self.x + t * (other.x - self.x),
-            y: self.y + t * (other.y - self.y),
-            z: self.z + t * (other.z - self.z),
-        }
+        CartesianCoordinate::new(
+            self.x() + t * (other.x() - self.x()),
+            self.y() + t * (other.y() - self.y()),
+            self.z() + t * (other.z() - self.z()),
+        )
+        .unwrap_or(self)
     }
 }
 
@@ -163,11 +164,12 @@ impl Animatable for CartesianCoordinate {
             q0 + factor * (q1 - q0)
         };
 
-        CartesianCoordinate {
-            x: lerp_component(start.x, end.x, control.x, factor_x),
-            y: lerp_component(start.y, end.y, control.y, factor_y),
-            z: lerp_component(start.z, end.z, control.z, factor_z),
-        }
+        CartesianCoordinate::new(
+            lerp_component(start.x(), end.x(), control.x(), factor_x),
+            lerp_component(start.y(), end.y(), control.y(), factor_y),
+            lerp_component(start.z(), end.z(), control.z(), factor_z),
+        )
+        .unwrap_or(start)
     }
 }
 
@@ -232,12 +234,12 @@ fn angle_between_cartesian(
     p1: CartesianCoordinate,
     p2: CartesianCoordinate,
 ) -> Result<Radians, OarError> {
-    let dot_product = p1.x * p2.x + p1.y * p2.y + p1.z * p2.z;
-    let mag1 = (p1.x * p1.x + p1.y * p1.y + p1.z * p1.z).sqrt();
-    let mag2 = (p2.x * p2.x + p2.y * p2.y + p2.z * p2.z).sqrt();
+    let dot_product = p1.x() * p2.x() + p1.y() * p2.y() + p1.z() * p2.z();
+    let mag1 = (p1.x() * p1.x() + p1.y() * p1.y() + p1.z() * p1.z()).sqrt();
+    let mag2 = (p2.x() * p2.x() + p2.y() * p2.y() + p2.z() * p2.z()).sqrt();
     // Avoid division by zero if either vector is near-zero.
     if mag1 < 1e-10_f32 || mag2 < 1e-10_f32 {
-        return Ok(Radians(0.0));
+        return Ok(Radians::ZERO);
     }
     // Clamp to avoid NaN from acos due to floating point precision errors.
     let cos_angle = (dot_product / (mag1 * mag2)).clamp(-1.0, 1.0);
@@ -250,24 +252,17 @@ fn angle_between_cartesian(
 /// * `rad`: The angle in radians between the two vectors being interpolated.
 /// * `c`: The interpolation factor in [0.0, 1.0].
 fn slerp_component(start: f32, end: f32, rad: Radians, c: f32) -> f32 {
-    if c.is_nan()
-        || c.is_infinite()
-        || start.is_nan()
-        || start.is_infinite()
-        || end.is_nan()
-        || end.is_infinite()
-        || rad.0.is_nan()
-        || rad.0.is_infinite()
-    {
+    if !c.is_finite() || !start.is_finite() || !end.is_finite() {
         return 0.0;
     }
+    let rad_val = rad.value();
     // Fall back to linear interpolation if the angle is too small, to avoid
     // division by zero (sin(0) = 0).
-    let sin_rad = rad.0.sin();
+    let sin_rad = rad_val.sin();
     if sin_rad.abs() < 1e-6 {
         return start + c * (end - start);
     }
-    (((1.0 - c) * rad.0).sin() * start + (c * rad.0).sin() * end) / sin_rad
+    (((1.0 - c) * rad_val).sin() * start + (c * rad_val).sin() * end) / sin_rad
 }
 
 /// Performs spherical linear interpolation (Slerp) on polar coordinates.
@@ -294,10 +289,10 @@ fn slerp_polar(
         end.elevation(),
     );
     let omega = angle_between_cartesian(v0, v2)?;
-    let v_x = slerp_component(v0.x, v2.x, omega, c);
-    let v_y = slerp_component(v0.y, v2.y, omega, c);
-    let v_z = slerp_component(v0.z, v2.z, omega, c);
-    let v = CartesianCoordinate { x: v_x, y: v_y, z: v_z };
+    let v_x = slerp_component(v0.x(), v2.x(), omega, c);
+    let v_y = slerp_component(v0.y(), v2.y(), omega, c);
+    let v_z = slerp_component(v0.z(), v2.z(), omega, c);
+    let v = CartesianCoordinate::new(v_x, v_y, v_z)?;
     let v_polar: PolarCoordinate = v.try_into()?;
     let start_d = start.distance().value();
     let end_d = end.distance().value();
@@ -360,24 +355,24 @@ mod test {
 
     #[gtest]
     fn test_angle_between_cartesian() {
-        let p1 = CartesianCoordinate { x: 1.0, y: 2.0, z: 3.0 };
+        let p1 = CartesianCoordinate::new(1.0, 2.0, 3.0).unwrap();
         let identical_angle = angle_between_cartesian(p1, p1).unwrap();
-        expect_that!(identical_angle.0, lt(1e-3));
+        expect_that!(identical_angle.value(), lt(1e-3));
 
-        let p_x = CartesianCoordinate { x: 1.0, y: 0.0, z: 0.0 };
-        let p_y = CartesianCoordinate { x: 0.0, y: 1.0, z: 0.0 };
+        let p_x = CartesianCoordinate::new(1.0, 0.0, 0.0).unwrap();
+        let p_y = CartesianCoordinate::new(0.0, 1.0, 0.0).unwrap();
         let angle = angle_between_cartesian(p_x, p_y).unwrap();
-        expect_that!(angle.0, near(std::f32::consts::PI / 2.0, 1e-6));
+        expect_that!(angle.value(), near(std::f32::consts::PI / 2.0, 1e-6));
 
-        let p_zero = CartesianCoordinate { x: 1e-11, y: 1e-11, z: 1e-11 };
-        expect_that!(angle_between_cartesian(p1, p_zero).unwrap().0, eq(0.0));
+        let p_zero = CartesianCoordinate::new(1e-11, 1e-11, 1e-11).unwrap();
+        expect_that!(angle_between_cartesian(p1, p_zero).unwrap().value(), eq(0.0));
     }
 
     #[gtest]
     fn test_slerp_component() {
         let start = 1.0;
         let end = 2.0;
-        let rad = Radians(1.0);
+        let rad = Radians::new(1.0).unwrap();
 
         expect_that!(slerp_component(start, end, rad, 0.0), near(start, 1e-6));
         expect_that!(slerp_component(start, end, rad, 1.0), near(end, 1e-6));
@@ -385,12 +380,11 @@ mod test {
         let mid = slerp_component(start, end, rad, 0.5);
         expect_that!(mid, near(1.709235f32, 1e-5));
 
-        let mid_small = slerp_component(start, end, Radians(1e-7), 0.5);
+        let mid_small = slerp_component(start, end, Radians::new(1e-7).unwrap(), 0.5);
         expect_that!(mid_small, near(1.5f32, 1e-6));
 
         expect_that!(slerp_component(start, end, rad, f32::NAN), eq(0.0));
         expect_that!(slerp_component(start, end, rad, f32::INFINITY), eq(0.0));
-        expect_that!(slerp_component(start, end, Radians(f32::NAN), 0.5), eq(0.0));
     }
 
     #[gtest]
@@ -399,60 +393,62 @@ mod test {
         let end_polar = PolarCoordinate::new_from_floats(90.0, 0.0, 1.0).unwrap();
 
         let result_0 = slerp_polar(start_polar, end_polar, 0.0).unwrap();
-        expect_that!(result_0.azimuth().0, near(0.0f32, 1e-5));
-        expect_that!(result_0.elevation().0, near(0.0f32, 1e-5));
+        expect_that!(result_0.azimuth().value(), near(0.0f32, 1e-5));
+        expect_that!(result_0.elevation().value(), near(0.0f32, 1e-5));
         expect_that!(result_0.distance().value(), near(1.0f32, 1e-5));
 
         let result_1 = slerp_polar(start_polar, end_polar, 1.0).unwrap();
-        expect_that!(result_1.azimuth().0, near(90.0f32, 1e-5));
-        expect_that!(result_1.elevation().0, near(0.0f32, 1e-5));
+        expect_that!(result_1.azimuth().value(), near(90.0f32, 1e-5));
+        expect_that!(result_1.elevation().value(), near(0.0f32, 1e-5));
         expect_that!(result_1.distance().value(), near(1.0f32, 1e-5));
 
         let result_mid = slerp_polar(start_polar, end_polar, 0.5).unwrap();
-        expect_that!(result_mid.azimuth().0, near(45.0f32, 1e-5));
-        expect_that!(result_mid.elevation().0, near(0.0f32, 1e-5));
+        expect_that!(result_mid.azimuth().value(), near(45.0f32, 1e-5));
+        expect_that!(result_mid.elevation().value(), near(0.0f32, 1e-5));
         expect_that!(result_mid.distance().value(), near(1.0f32, 1e-5));
     }
 
     #[gtest]
     fn test_animated_cartesian_bezier_mixed_pacing() {
         let anim = AnimatedCartesian::Bezier {
-            start: CartesianCoordinate { x: 0.0, y: 0.0, z: 0.0 },
-            end: CartesianCoordinate { x: 10.0, y: 10.0, z: 10.0 },
-            control: CartesianCoordinate { x: 5.0, y: 5.0, z: 5.0 },
+            start: CartesianCoordinate::new(0.0, 0.0, 0.0).unwrap(),
+            end: CartesianCoordinate::new(10.0, 10.0, 10.0).unwrap(),
+            control: CartesianCoordinate::new(5.0, 5.0, 5.0).unwrap(),
             control_relative_time: CartesianControlRelativeTime { x: 0.5, y: 0.0, z: 1.0 },
         };
 
         let sample = anim.sample(0.5);
-        expect_that!(sample.x, near(5.0f32, 1e-5));
-        expect_that!(sample.y, near(7.071068f32, 1e-5));
-        expect_that!(sample.z, near(2.928932f32, 1e-5));
+        expect_that!(sample.x(), near(5.0f32, 1e-5));
+        expect_that!(sample.y(), near(7.071068f32, 1e-5));
+        expect_that!(sample.z(), near(2.928932f32, 1e-5));
     }
 
     #[gtest]
     fn test_animated_decibels_linear_interpolates_db_values() {
-        let anim = AnimatedDecibels::Linear { start: Decibels(0.0), end: Decibels(-12.0) };
+        let anim =
+            AnimatedDecibels::Linear { start: Decibels::ZERO, end: Decibels::new(-12.0).unwrap() };
 
         let sample_start = anim.sample(0.0);
         let sample_mid = anim.sample(0.5);
         let sample_end = anim.sample(1.0);
 
-        expect_that!(sample_start.0, near(0.0f32, 1e-6));
-        expect_that!(sample_mid.0, near(-6.0f32, 1e-6));
-        expect_that!(sample_end.0, near(-12.0f32, 1e-6));
+        expect_that!(sample_start.value(), near(0.0f32, 1e-6));
+        expect_that!(sample_mid.value(), near(-6.0f32, 1e-6));
+        expect_that!(sample_end.value(), near(-12.0f32, 1e-6));
     }
 
     #[gtest]
     fn test_animated_decibels_bezier_interpolates_db_values() {
+        let db_neg20 = Decibels::new(-20.0).unwrap();
         let anim = AnimatedDecibels::Bezier {
-            start: Decibels(0.0),
-            end: Decibels(-20.0),
-            control: Decibels(-20.0),
+            start: Decibels::ZERO,
+            end: db_neg20,
+            control: db_neg20,
             control_relative_time: 0.5,
         };
 
         let sample_mid = anim.sample(0.5);
 
-        expect_that!(sample_mid.0, near(-15.0f32, 1e-6));
+        expect_that!(sample_mid.value(), near(-15.0f32, 1e-6));
     }
 }

@@ -32,123 +32,207 @@ pub struct SpeakerPosition {
 
 /// ITU-R BS.2051 `M+000`: Middle layer, 0° azimuth (Front Center / `C` / `FC`).
 pub(crate) const SP_MP000: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(0.0), elevation: Degrees(0.0), is_lfe: false };
+    SpeakerPosition { azimuth: Degrees::ZERO, elevation: Degrees::ZERO, is_lfe: false };
 /// ITU-R BS.2051 `M+025`: Middle layer, +25° azimuth (Left Screen Edge, Sound System G).
 pub(crate) const SP_MP025: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(25.0), elevation: Degrees(0.0), is_lfe: false };
+    SpeakerPosition { azimuth: Degrees::from_const(25.0), elevation: Degrees::ZERO, is_lfe: false };
 /// ITU-R BS.2051 `M-025`: Middle layer, -25° azimuth (Right Screen Edge, Sound System G).
-pub(crate) const SP_MM025: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(-25.0), elevation: Degrees(0.0), is_lfe: false };
+pub(crate) const SP_MM025: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(-25.0),
+    elevation: Degrees::ZERO,
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `M-030`: Middle layer, -30° azimuth (Front Right / `R` / `FRc`).
-pub(crate) const SP_MM030: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(-30.0), elevation: Degrees(0.0), is_lfe: false };
+pub(crate) const SP_MM030: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(-30.0),
+    elevation: Degrees::ZERO,
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `M+030`: Middle layer, +30° azimuth (Front Left / `L` / `FLc`).
 pub(crate) const SP_MP030: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(30.0), elevation: Degrees(0.0), is_lfe: false };
+    SpeakerPosition { azimuth: Degrees::from_const(30.0), elevation: Degrees::ZERO, is_lfe: false };
 /// ITU-R BS.2051 `M-060`: Middle layer, -60° azimuth (Front Right Wide / `FR`).
-pub(crate) const SP_MM060: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(-60.0), elevation: Degrees(0.0), is_lfe: false };
+pub(crate) const SP_MM060: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(-60.0),
+    elevation: Degrees::ZERO,
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `M+060`: Middle layer, +60° azimuth (Front Left Wide / `FL`).
 pub(crate) const SP_MP060: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(60.0), elevation: Degrees(0.0), is_lfe: false };
+    SpeakerPosition { azimuth: Degrees::from_const(60.0), elevation: Degrees::ZERO, is_lfe: false };
 /// ITU-R BS.2051 `M-090`: Middle layer, -90° azimuth (Side Right / `Rss` / `SiR`).
-pub(crate) const SP_MM090: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(-90.0), elevation: Degrees(0.0), is_lfe: false };
+pub(crate) const SP_MM090: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(-90.0),
+    elevation: Degrees::ZERO,
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `M+090`: Middle layer, +90° azimuth (Side Left / `Lss` / `SiL`).
 pub(crate) const SP_MP090: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(90.0), elevation: Degrees(0.0), is_lfe: false };
+    SpeakerPosition { azimuth: Degrees::from_const(90.0), elevation: Degrees::ZERO, is_lfe: false };
 /// ITU-R BS.2051 `M-110`: Middle layer, -110° azimuth (Right Surround / `Rs`).
-pub(crate) const SP_MM110: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(-110.0), elevation: Degrees(0.0), is_lfe: false };
+pub(crate) const SP_MM110: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(-110.0),
+    elevation: Degrees::ZERO,
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `M+110`: Middle layer, +110° azimuth (Left Surround / `Ls`).
-pub(crate) const SP_MP110: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(110.0), elevation: Degrees(0.0), is_lfe: false };
+pub(crate) const SP_MP110: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(110.0),
+    elevation: Degrees::ZERO,
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `M-135`: Middle layer, -135° azimuth (Rear Right / `Rrs` / `BR`).
-pub(crate) const SP_MM135: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(-135.0), elevation: Degrees(0.0), is_lfe: false };
+pub(crate) const SP_MM135: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(-135.0),
+    elevation: Degrees::ZERO,
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `M+135`: Middle layer, +135° azimuth (Rear Left / `Lrs` / `BL`).
-pub(crate) const SP_MP135: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(135.0), elevation: Degrees(0.0), is_lfe: false };
+pub(crate) const SP_MP135: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(135.0),
+    elevation: Degrees::ZERO,
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `M+180`: Middle layer, 180° azimuth (Back Center / `BC`).
-pub(crate) const SP_MP180: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(180.0), elevation: Degrees(0.0), is_lfe: false };
+pub(crate) const SP_MP180: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(180.0),
+    elevation: Degrees::ZERO,
+    is_lfe: false,
+};
 
 /// ITU-R BS.2051 `U+000`: Upper layer (+30° elevation), 0° azimuth (Top Front Center / `TpFC`).
 pub(crate) const SP_UP000: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(0.0), elevation: Degrees(30.0), is_lfe: false };
+    SpeakerPosition { azimuth: Degrees::ZERO, elevation: Degrees::from_const(30.0), is_lfe: false };
 /// ITU-R BS.2051 `U-030`: Upper layer (+30° elevation), -30° azimuth (Right Top Front / `Rtf`).
-pub(crate) const SP_UM030: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(-30.0), elevation: Degrees(30.0), is_lfe: false };
+pub(crate) const SP_UM030: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(-30.0),
+    elevation: Degrees::from_const(30.0),
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `U+030`: Upper layer (+30° elevation), +30° azimuth (Left Top Front / `Ltf`).
-pub(crate) const SP_UP030: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(30.0), elevation: Degrees(30.0), is_lfe: false };
+pub(crate) const SP_UP030: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(30.0),
+    elevation: Degrees::from_const(30.0),
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `U-045`: Upper layer (+30° elevation), -45° azimuth (Right Top Front / `Rtf` /
 /// `TpFR`).
-pub(crate) const SP_UM045: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(-45.0), elevation: Degrees(30.0), is_lfe: false };
+pub(crate) const SP_UM045: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(-45.0),
+    elevation: Degrees::from_const(30.0),
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `U+045`: Upper layer (+30° elevation), +45° azimuth (Left Top Front / `Ltf` /
 /// `TpFL`).
-pub(crate) const SP_UP045: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(45.0), elevation: Degrees(30.0), is_lfe: false };
+pub(crate) const SP_UP045: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(45.0),
+    elevation: Degrees::from_const(30.0),
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `U-090`: Upper layer (+30° elevation), -90° azimuth (Top Side Right / `TpSiR`).
-pub(crate) const SP_UM090: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(-90.0), elevation: Degrees(30.0), is_lfe: false };
+pub(crate) const SP_UM090: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(-90.0),
+    elevation: Degrees::from_const(30.0),
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `U+090`: Upper layer (+30° elevation), +90° azimuth (Top Side Left / `TpSiL`).
-pub(crate) const SP_UP090: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(90.0), elevation: Degrees(30.0), is_lfe: false };
+pub(crate) const SP_UP090: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(90.0),
+    elevation: Degrees::from_const(30.0),
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `U-110`: Upper layer (+30° elevation), -110° azimuth (Right Top Rear / `Rtr`).
-pub(crate) const SP_UM110: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(-110.0), elevation: Degrees(30.0), is_lfe: false };
+pub(crate) const SP_UM110: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(-110.0),
+    elevation: Degrees::from_const(30.0),
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `U+110`: Upper layer (+30° elevation), +110° azimuth (Left Top Rear / `Ltr`).
-pub(crate) const SP_UP110: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(110.0), elevation: Degrees(30.0), is_lfe: false };
+pub(crate) const SP_UP110: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(110.0),
+    elevation: Degrees::from_const(30.0),
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `U-135`: Upper layer (+30° elevation), -135° azimuth (Right Top Back / `Rtb` /
 /// `TpBR`).
-pub(crate) const SP_UM135: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(-135.0), elevation: Degrees(30.0), is_lfe: false };
+pub(crate) const SP_UM135: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(-135.0),
+    elevation: Degrees::from_const(30.0),
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `U+135`: Upper layer (+30° elevation), +135° azimuth (Left Top Back / `Ltb` /
 /// `TpBL`).
-pub(crate) const SP_UP135: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(135.0), elevation: Degrees(30.0), is_lfe: false };
+pub(crate) const SP_UP135: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(135.0),
+    elevation: Degrees::from_const(30.0),
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `U+180`: Upper layer (+30° elevation), 180° azimuth (Top Back Center / `TpBC`).
-pub(crate) const SP_UP180: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(180.0), elevation: Degrees(30.0), is_lfe: false };
+pub(crate) const SP_UP180: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(180.0),
+    elevation: Degrees::from_const(30.0),
+    is_lfe: false,
+};
 
 /// ITU-R BS.2051 `U+180` (45° elevation): Back Center Height for Sound System F.
-pub(crate) const SP_UHP180: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(180.0), elevation: Degrees(45.0), is_lfe: false };
+pub(crate) const SP_UHP180: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(180.0),
+    elevation: Degrees::from_const(45.0),
+    is_lfe: false,
+};
 
 /// ITU-R BS.2051 `B+000`: Bottom layer (-30° elevation), 0° azimuth (Bottom Front Center / `BtFC`).
-pub(crate) const SP_BP000: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(0.0), elevation: Degrees(-30.0), is_lfe: false };
+pub(crate) const SP_BP000: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::ZERO,
+    elevation: Degrees::from_const(-30.0),
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `B-045`: Bottom layer (-30° elevation), -45° azimuth (Bottom Front Right /
 /// `BtFR`).
-pub(crate) const SP_BM045: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(-45.0), elevation: Degrees(-30.0), is_lfe: false };
+pub(crate) const SP_BM045: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(-45.0),
+    elevation: Degrees::from_const(-30.0),
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `B+045`: Bottom layer (-30° elevation), +45° azimuth (Bottom Front Left / `BtFL`).
-pub(crate) const SP_BP045: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(45.0), elevation: Degrees(-30.0), is_lfe: false };
+pub(crate) const SP_BP045: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(45.0),
+    elevation: Degrees::from_const(-30.0),
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `B-135`: Bottom layer (-30° elevation), -135° azimuth (Bottom Back Right /
 /// `BtBR`).
-pub(crate) const SP_BM135: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(-135.0), elevation: Degrees(-30.0), is_lfe: false };
+pub(crate) const SP_BM135: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(-135.0),
+    elevation: Degrees::from_const(-30.0),
+    is_lfe: false,
+};
 /// ITU-R BS.2051 `B+135`: Bottom layer (-30° elevation), +135° azimuth (Bottom Back Left / `BtBL`).
-pub(crate) const SP_BP135: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(135.0), elevation: Degrees(-30.0), is_lfe: false };
+pub(crate) const SP_BP135: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(135.0),
+    elevation: Degrees::from_const(-30.0),
+    is_lfe: false,
+};
 
 /// ITU-R BS.2051 `T+000`: Top layer (+90° elevation), 0° azimuth (Top Center / Voice of God /
 /// `TpC`).
 pub(crate) const SP_TP000: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(0.0), elevation: Degrees(90.0), is_lfe: false };
+    SpeakerPosition { azimuth: Degrees::ZERO, elevation: Degrees::from_const(90.0), is_lfe: false };
 /// Single Low-Frequency Effects (LFE) channel at 0° azimuth, -30° elevation.
 pub(crate) const SP_LFE: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(0.0), elevation: Degrees(-30.0), is_lfe: true };
+    SpeakerPosition { azimuth: Degrees::ZERO, elevation: Degrees::from_const(-30.0), is_lfe: true };
 /// Primary Low-Frequency Effects (`LFE1`) channel at +45° azimuth, -30° elevation.
-pub(crate) const SP_LFE1: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(45.0), elevation: Degrees(-30.0), is_lfe: true };
+pub(crate) const SP_LFE1: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(45.0),
+    elevation: Degrees::from_const(-30.0),
+    is_lfe: true,
+};
 /// Secondary Low-Frequency Effects (`LFE2`) channel at -45° azimuth, -30° elevation.
-pub(crate) const SP_LFE2: SpeakerPosition =
-    SpeakerPosition { azimuth: Degrees(-45.0), elevation: Degrees(-30.0), is_lfe: true };
+pub(crate) const SP_LFE2: SpeakerPosition = SpeakerPosition {
+    azimuth: Degrees::from_const(-45.0),
+    elevation: Degrees::from_const(-30.0),
+    is_lfe: true,
+};
 
 /// Target output loudspeaker and headphone layouts supported by the renderer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -400,8 +484,11 @@ impl InputLayout {
             base_speakers
                 .iter()
                 .map(|&sp| {
-                    let elevation =
-                        if sp.elevation == Degrees(30.0) { Degrees(45.0) } else { sp.elevation };
+                    let elevation = if sp.elevation == Degrees::from_const(30.0) {
+                        Degrees::from_const(45.0)
+                    } else {
+                        sp.elevation
+                    };
                     SpeakerPosition { elevation, ..sp }
                 })
                 .collect(),
@@ -571,14 +658,14 @@ mod test {
         let obr_binaural = InputLayout::Binaural.obr_speakers();
 
         expect_that!(obr_514.len(), eq(10));
-        expect_that!(obr_514[6].azimuth, eq(Degrees(45.0)));
-        expect_that!(obr_514[6].elevation, eq(Degrees(45.0)));
-        expect_that!(obr_514[8].azimuth, eq(Degrees(135.0)));
-        expect_that!(obr_514[8].elevation, eq(Degrees(45.0)));
+        expect_that!(obr_514[6].azimuth, eq(Degrees::from_const(45.0)));
+        expect_that!(obr_514[6].elevation, eq(Degrees::from_const(45.0)));
+        expect_that!(obr_514[8].azimuth, eq(Degrees::from_const(135.0)));
+        expect_that!(obr_514[8].elevation, eq(Degrees::from_const(45.0)));
         expect_that!(obr_top4.len(), eq(4));
-        expect_that!(obr_top4[0].elevation, eq(Degrees(45.0)));
+        expect_that!(obr_top4[0].elevation, eq(Degrees::from_const(45.0)));
         expect_that!(obr_bottom3.len(), eq(3));
-        expect_that!(obr_bottom3[0].elevation, eq(Degrees(-30.0)));
+        expect_that!(obr_bottom3[0].elevation, eq(Degrees::from_const(-30.0)));
         expect_that!(obr_binaural, none());
     }
 }

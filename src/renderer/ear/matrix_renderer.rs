@@ -131,8 +131,9 @@ mod tests {
         let mut out_right = [888.0f32, 888.0f32];
         let inputs = [&in_left[..], &in_right[..]];
         let mut out_slices = [&mut out_left[..], &mut out_right[..]];
-        let inputs_buf = PlanarBufferRef::new(&inputs, 2, Samples(2)).unwrap();
-        let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 2, Samples(2)).unwrap();
+        let samples_2 = Samples::new(2).unwrap();
+        let inputs_buf = PlanarBufferRef::new(&inputs, 2, samples_2).unwrap();
+        let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 2, samples_2).unwrap();
 
         let mv = MatrixView {
             data: &mat,
@@ -160,8 +161,9 @@ mod tests {
         let mut out_channel = [100.0f32];
         let inputs = [&in_channel[..]];
         let mut out_slices = [&mut out_channel[..]];
-        let inputs_buf = PlanarBufferRef::new(&inputs, 1, Samples(1)).unwrap();
-        let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 1, Samples(1)).unwrap();
+        let samples_1 = Samples::new(1).unwrap();
+        let inputs_buf = PlanarBufferRef::new(&inputs, 1, samples_1).unwrap();
+        let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 1, samples_1).unwrap();
 
         let mv = MatrixView {
             data: &mat,
@@ -185,8 +187,9 @@ mod tests {
         let mut out_channel = [42.0f32];
         let inputs = [&in_channel[..]];
         let mut out_slices = [&mut out_channel[..]];
-        let inputs_buf = PlanarBufferRef::new(&inputs, 1, Samples(1)).unwrap();
-        let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 1, Samples(1)).unwrap();
+        let samples_1 = Samples::new(1).unwrap();
+        let inputs_buf = PlanarBufferRef::new(&inputs, 1, samples_1).unwrap();
+        let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 1, samples_1).unwrap();
 
         let mv = MatrixView {
             data: &mat,
@@ -210,8 +213,9 @@ mod tests {
         let mut out_channel = [0.0f32; 2];
         let inputs = [&in_channel[..]];
         let mut out_slices = [&mut out_channel[..]];
-        let inputs_buf = PlanarBufferRef::new(&inputs, 1, Samples(2)).unwrap();
-        let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 1, Samples(2)).unwrap();
+        let samples_2 = Samples::new(2).unwrap();
+        let inputs_buf = PlanarBufferRef::new(&inputs, 1, samples_2).unwrap();
+        let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 1, samples_2).unwrap();
 
         let mv = MatrixView {
             data: &mat,
@@ -237,8 +241,9 @@ mod tests {
         let mut out_channel = [0.0f32];
         let inputs = [&in_first[..], &in_second[..]];
         let mut out_slices = [&mut out_channel[..]];
-        let inputs_buf = PlanarBufferRef::new(&inputs, 2, Samples(1)).unwrap();
-        let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 1, Samples(1)).unwrap();
+        let samples_1 = Samples::new(1).unwrap();
+        let inputs_buf = PlanarBufferRef::new(&inputs, 2, samples_1).unwrap();
+        let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 1, samples_1).unwrap();
 
         let mv = MatrixView {
             data: &mat,

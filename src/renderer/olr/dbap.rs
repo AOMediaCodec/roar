@@ -47,7 +47,12 @@ impl DbapPanner {
     pub fn new(speakers: Vec<SpeakerNode>) -> Self {
         let speaker_cartesian = speakers
             .iter()
-            .map(|sp| normalized_polar_to_cartesian_float32(Degrees(sp.x), Degrees(sp.y)))
+            .map(|sp| {
+                normalized_polar_to_cartesian_float32(
+                    Degrees::new(sp.x).unwrap(),
+                    Degrees::new(sp.y).unwrap(),
+                )
+            })
             .collect::<Vec<_>>();
         let speaker_indices = (0..speakers.len()).collect::<Vec<_>>();
 
@@ -78,9 +83,9 @@ impl GainCalculator for DbapPanner {
         // Calculate Euclidean distance and weight for each speaker.
         let mut sum_of_weights = 0.0;
         self.speaker_cartesian.iter().zip(gains.iter_mut()).for_each(|(&sp_cart, gain)| {
-            let dx = sp_cart.x - source_cart.x;
-            let dy = sp_cart.y - source_cart.y;
-            let dz = sp_cart.z - source_cart.z;
+            let dx = sp_cart.x() - source_cart.x();
+            let dy = sp_cart.y() - source_cart.y();
+            let dz = sp_cart.z() - source_cart.z();
             let dist = (dx * dx + dy * dy + dz * dz).sqrt();
             let dist_clamped = dist.max(0.1);
             let weight = 1.0 / (dist_clamped * dist_clamped);
@@ -154,7 +159,12 @@ mod test {
         for (az, el, dist) in test_positions {
             let mut gains = vec![0.0f32; 4];
             panner
-                .calculate_gains(Degrees(az), Degrees(el), Distance::new(dist).unwrap(), &mut gains)
+                .calculate_gains(
+                    Degrees::new(az).unwrap(),
+                    Degrees::new(el).unwrap(),
+                    Distance::new(dist).unwrap(),
+                    &mut gains,
+                )
                 .unwrap();
 
             let power_sum: f32 = gains.iter().map(|&val| val * val).sum();
@@ -174,7 +184,7 @@ mod test {
         let mut gains = vec![0.0f32; 4];
 
         panner
-            .calculate_gains(Degrees(0.0), Degrees(0.0), Distance::new(0.1).unwrap(), &mut gains)
+            .calculate_gains(Degrees::ZERO, Degrees::ZERO, Distance::new(0.1).unwrap(), &mut gains)
             .unwrap();
 
         expect_gt!(gains[0], gains[1]);

@@ -48,7 +48,7 @@ pub const NEGATIVE_120DB_IN_AMPLITUDE: f32 = 0.000001;
 pub const EPSILON_FLOAT: f32 = 1e-6;
 
 /// OBR peak limiter default release time
-pub const PEAK_LIMITER_DEFAULT_RELEASE_TIME: Milliseconds = Milliseconds(50.0);
+pub const PEAK_LIMITER_DEFAULT_RELEASE_TIME: Milliseconds = Milliseconds::from_const(50.0);
 
 /// OBR peak limiter default ceiling
-pub const PEAK_LIMITER_DEFAULT_CEILING: Decibels = Decibels(-0.5);
+pub const PEAK_LIMITER_DEFAULT_CEILING: Decibels = Decibels::from_const(-0.5);

@@ -255,7 +255,7 @@ impl ProcessingGroup {
                 for source in audio_element.get_loudspeaker_channels() {
                     enc.set_source(
                         enc_idx,
-                        LinearGain(1.0),
+                        LinearGain::ONE,
                         source.azimuth,
                         source.elevation,
                         Distance::new(1.0).unwrap(),
@@ -265,7 +265,7 @@ impl ProcessingGroup {
                 for source in audio_element.get_object_channels() {
                     enc.set_source(
                         enc_idx,
-                        LinearGain(1.0),
+                        LinearGain::ONE,
                         source.azimuth,
                         source.elevation,
                         source.distance,
@@ -591,8 +591,8 @@ mod test {
 
         let object_channels = audio_elements[0].get_object_channels();
         for obj in object_channels {
-            obj.azimuth = Degrees(45.0);
-            obj.elevation = Degrees(0.0);
+            obj.azimuth = Degrees::new(45.0).unwrap();
+            obj.elevation = Degrees::ZERO;
             obj.distance = Distance::new(1.0).unwrap();
         }
 
@@ -640,7 +640,7 @@ mod test {
             generate_sine(SAMPLING_RATE, input_buffer.channel_mut(ch).as_mut_slice());
         }
 
-        let rotation = Quaternion { w: 0.707, x: 0.0, y: 0.707, z: 0.0 };
+        let rotation = Quaternion::new(0.707, 0.0, 0.707, 0.0).unwrap();
 
         group.process(
             &input_buffer,
@@ -681,8 +681,8 @@ mod test {
 
         let object_channels = audio_elements[1].get_object_channels();
         for obj in object_channels {
-            obj.azimuth = Degrees(90.0);
-            obj.elevation = Degrees(30.0);
+            obj.azimuth = Degrees::new(90.0).unwrap();
+            obj.elevation = Degrees::new(30.0).unwrap();
             obj.distance = Distance::new(0.5).unwrap();
         }
 
@@ -747,8 +747,8 @@ mod test {
 
         let object_channels = audio_elements[0].get_object_channels();
         for obj in object_channels {
-            obj.azimuth = Degrees(0.0);
-            obj.elevation = Degrees(0.0);
+            obj.azimuth = Degrees::ZERO;
+            obj.elevation = Degrees::ZERO;
             obj.distance = Distance::new(1.0).unwrap();
         }
 
@@ -756,8 +756,8 @@ mod test {
 
         let object_channels = audio_elements[0].get_object_channels();
         for obj in object_channels {
-            obj.azimuth = Degrees(180.0);
-            obj.elevation = Degrees(45.0);
+            obj.azimuth = Degrees::new(180.0).unwrap();
+            obj.elevation = Degrees::new(45.0).unwrap();
             obj.distance = Distance::new(0.8).unwrap();
         }
 
@@ -843,7 +843,7 @@ mod test {
             &mut fft_manager,
         );
 
-        let rotated = Quaternion { w: 0.707, x: 0.0, y: 0.707, z: 0.0 };
+        let rotated = Quaternion::new(0.707, 0.0, 0.707, 0.0).unwrap();
         group.process(
             &input_buffer,
             &audio_elements,
@@ -901,7 +901,7 @@ mod test {
             generate_sine(SAMPLING_RATE, input_buffer.channel_mut(ch).as_mut_slice());
         }
 
-        let rotated = Quaternion { w: 0.707, x: 0.0, y: 0.707, z: 0.0 };
+        let rotated = Quaternion::new(0.707, 0.0, 0.707, 0.0).unwrap();
         group.process(
             &input_buffer,
             &audio_elements,
@@ -942,8 +942,8 @@ mod test {
 
         let object_channels = audio_elements[1].get_object_channels();
         for obj in object_channels {
-            obj.azimuth = Degrees(90.0);
-            obj.elevation = Degrees(0.0);
+            obj.azimuth = Degrees::new(90.0).unwrap();
+            obj.elevation = Degrees::ZERO;
             obj.distance = Distance::new(1.0).unwrap();
         }
 
@@ -956,7 +956,7 @@ mod test {
             generate_sine(SAMPLING_RATE, input_buffer.channel_mut(ch).as_mut_slice());
         }
 
-        let rotated = Quaternion { w: 0.707, x: 0.0, y: 0.707, z: 0.0 };
+        let rotated = Quaternion::new(0.707, 0.0, 0.707, 0.0).unwrap();
         group.process(
             &input_buffer,
             &audio_elements,
@@ -994,7 +994,7 @@ mod test {
             generate_sine(SAMPLING_RATE, input_buffer.channel_mut(ch).as_mut_slice());
         }
 
-        let rotated = Quaternion { w: 0.707, x: 0.0, y: 0.707, z: 0.0 };
+        let rotated = Quaternion::new(0.707, 0.0, 0.707, 0.0).unwrap();
         group.process(
             &input_buffer,
             &audio_elements,
@@ -1032,7 +1032,7 @@ mod test {
             generate_sine(SAMPLING_RATE, input_buffer.channel_mut(ch).as_mut_slice());
         }
 
-        let rotated = Quaternion { w: 0.707, x: 0.0, y: 0.707, z: 0.0 };
+        let rotated = Quaternion::new(0.707, 0.0, 0.707, 0.0).unwrap();
         group.process(
             &input_buffer,
             &audio_elements,
@@ -1071,7 +1071,7 @@ mod test {
             generate_sine(SAMPLING_RATE, input_buffer.channel_mut(ch).as_mut_slice());
         }
 
-        let rotated = Quaternion { w: 0.707, x: 0.0, y: 0.707, z: 0.0 };
+        let rotated = Quaternion::new(0.707, 0.0, 0.707, 0.0).unwrap();
 
         group.process(
             &input_buffer,

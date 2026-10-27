@@ -406,7 +406,7 @@ impl AudioElementsRenderer {
                         let _ = sub.update_element_positions(
                             id,
                             pos,
-                            Samples(current_unit_samples as u32),
+                            Samples::new(current_unit_samples as u32)?,
                         );
                     }
                 }
@@ -633,7 +633,7 @@ mod test {
         let mut router = AudioElementsRenderer::with_backend(
             mock,
             ChannelCount::new(1).unwrap(),
-            Some(Samples(4)),
+            Some(Samples::new(4).unwrap()),
         );
         let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
             num_objects: ChannelCount::new(1).unwrap(),
@@ -663,10 +663,12 @@ mod test {
     fn interpolates_metadata_across_sub_frames() -> Result<()> {
         let state = Arc::new(Mutex::new(MockState::default()));
         let mock = Box::new(SharedMockRenderer::new(state.clone()));
+        let samples_4 = Samples::new(4).unwrap();
+        let samples_8 = Samples::new(8).unwrap();
         let mut router = AudioElementsRenderer::with_backend(
             mock,
             ChannelCount::new(1).unwrap(),
-            Some(Samples(4)),
+            Some(samples_4),
         );
         let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
             num_objects: ChannelCount::new(1).unwrap(),
@@ -676,11 +678,11 @@ mod test {
         // Queue positions 1: azimuth 0.0, duration 8
         let pos1 =
             ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(0.0, 0.0, 1.0).unwrap()]);
-        router.update_element_positions(10, &pos1, Samples(8)).unwrap();
+        router.update_element_positions(10, &pos1, samples_8).unwrap();
         // Positions 2: azimuth 90.0, duration 8
         let pos2 =
             ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(90.0, 0.0, 1.0).unwrap()]);
-        router.update_element_positions(10, &pos2, Samples(8)).unwrap();
+        router.update_element_positions(10, &pos2, samples_8).unwrap();
         // Render 12 samples (3 sub-frames)
         let input_data = [0.0; 12];
         let inputs = [&input_data[..]];
@@ -699,31 +701,31 @@ mod test {
                 (
                     eq(&10),
                     pat!(ObjectPosition::Polar(elements_are![pat!(PolarCoordinate {
-                        azimuth(): pat!(Degrees(near(0.0, 1e-5))),
-                        elevation(): pat!(Degrees(near(0.0, 1e-5))),
+                        azimuth(): pat!(Degrees { value(): near(0.0, 1e-5) }),
+                        elevation(): pat!(Degrees { value(): near(0.0, 1e-5) }),
                         distance(): pat!(Distance { value(): near(1.0, 1e-5) }),
                     })])),
-                    eq(&Samples(4)),
+                    eq(&samples_4),
                 ),
                 // Sub-frame 1: c = 0.5 -> azimuth 45.0
                 (
                     eq(&10),
                     pat!(ObjectPosition::Polar(elements_are![pat!(PolarCoordinate {
-                        azimuth(): pat!(Degrees(near(45.0, 1e-5))),
-                        elevation(): pat!(Degrees(near(0.0, 1e-5))),
+                        azimuth(): pat!(Degrees { value(): near(45.0, 1e-5) }),
+                        elevation(): pat!(Degrees { value(): near(0.0, 1e-5) }),
                         distance(): pat!(Distance { value(): near(1.0, 1e-5) }),
                     })])),
-                    eq(&Samples(4)),
+                    eq(&samples_4),
                 ),
                 // Sub-frame 2: c = 0.0 (in pos2) -> azimuth 90.0
                 (
                     eq(&10),
                     pat!(ObjectPosition::Polar(elements_are![pat!(PolarCoordinate {
-                        azimuth(): pat!(Degrees(near(90.0, 1e-5))),
-                        elevation(): pat!(Degrees(near(0.0, 1e-5))),
+                        azimuth(): pat!(Degrees { value(): near(90.0, 1e-5) }),
+                        elevation(): pat!(Degrees { value(): near(0.0, 1e-5) }),
                         distance(): pat!(Distance { value(): near(1.0, 1e-5) }),
                     })])),
-                    eq(&Samples(4)),
+                    eq(&samples_4),
                 ),
             ]
         )
@@ -748,10 +750,11 @@ mod test {
     fn converts_cartesian_to_polar_at_ingestion() -> Result<()> {
         let state = Arc::new(Mutex::new(MockState::default()));
         let mock = Box::new(SharedMockRenderer::new(state.clone()));
+        let samples_12 = Samples::new(12).unwrap();
         let mut router = AudioElementsRenderer::with_backend(
             mock,
             ChannelCount::new(1).unwrap(),
-            Some(Samples(12)),
+            Some(samples_12),
         );
         let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
             num_objects: ChannelCount::new(1).unwrap(),
@@ -759,16 +762,15 @@ mod test {
         });
         router.add_element(10, &config).unwrap();
 
-        let pos = ObjectPosition::Cartesian(vec![CartesianCoordinate { x: 0.0, y: 1.0, z: 0.0 }]);
-        router.update_element_positions(10, &pos, Samples(12)).unwrap();
+        let pos = ObjectPosition::Cartesian(vec![CartesianCoordinate::new(0.0, 1.0, 0.0).unwrap()]);
+        router.update_element_positions(10, &pos, samples_12).unwrap();
 
         let input_data = [0.0; 12];
         let inputs = [&input_data[..]];
         let mut output = [0.0; 12];
         let mut out_slices = [&mut output[..]];
-        let mut out_buf =
-            PlanarBufferMut::new(&mut out_slices, 1, Samples::new(12).unwrap()).unwrap();
-        let validated_inputs = PlanarBufferRef::new(&inputs, 1, Samples::new(12).unwrap()).unwrap();
+        let mut out_buf = PlanarBufferMut::new(&mut out_slices, 1, samples_12).unwrap();
+        let validated_inputs = PlanarBufferRef::new(&inputs, 1, samples_12).unwrap();
         router.render(validated_inputs, &mut out_buf).unwrap();
 
         let state_lock = state.lock().unwrap();
@@ -777,11 +779,11 @@ mod test {
             elements_are![(
                 eq(&10),
                 pat!(ObjectPosition::Polar(elements_are![pat!(PolarCoordinate {
-                    azimuth(): pat!(Degrees(near(0.0, 1e-3))),
-                    elevation(): pat!(Degrees(near(0.0, 1e-3))),
+                    azimuth(): pat!(Degrees { value(): near(0.0, 1e-3) }),
+                    elevation(): pat!(Degrees { value(): near(0.0, 1e-3) }),
                     distance(): pat!(Distance { value(): near(1.0, 1e-3) }),
                 })])),
-                eq(&Samples(12)),
+                eq(&samples_12),
             )]
         )
     }

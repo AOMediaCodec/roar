@@ -3676,30 +3676,6 @@ mod tests {
     }
 
     #[gtest]
-    fn render_m2m_zero_samples_succeeds_without_modifying_outputs() {
-        let m2m_matrix = M2mRdr {
-            in_system: InputLayout::Mono,
-            out_system: OutputLayout::Stereo,
-            mat: &MONO_BS020,
-            m: 1,
-            n: 2,
-        };
-        let in_channel = [];
-        let mut out_left = [];
-        let mut out_right = [];
-
-        let result = {
-            let inputs = [&in_channel[..]];
-            let mut out_slices = [&mut out_left[..], &mut out_right[..]];
-            let inputs_buf = PlanarBufferRef::new(&inputs, 1, Samples(0)).unwrap();
-            let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 2, Samples(0)).unwrap();
-            element_renderer_render_m2m(&m2m_matrix, inputs_buf, &mut outputs_buf)
-        };
-
-        assert_ok!(result);
-    }
-
-    #[gtest]
     fn render_m2m_stereo_to_stereo_accumulates_inputs_correctly() {
         let m2m_matrix = M2mRdr {
             in_system: InputLayout::Stereo,

@@ -60,7 +60,7 @@ impl PeakLimiter {
         block_size: Samples,
     ) -> Self {
         let linear_gain: LinearGain = ceiling_db.into();
-        let ceiling = linear_gain.0 as f64;
+        let ceiling = linear_gain.value() as f64;
         let release_samples = sample_rate * release_time;
         let release_coeff = (RELEASE_DECAY_NEPERS / release_samples.value() as f64).exp();
         let num_frames = block_size.value() as usize;
@@ -158,8 +158,8 @@ mod test {
     fn test_peak_limiter_no_attenuation_below_ceiling() {
         let sample_rate = SampleRate::new(48000).unwrap();
         // Ceiling at -3 dB (~0.707 linear)
-        let ceiling = Decibels(-3.0);
-        let release = Milliseconds(100.0);
+        let ceiling = Decibels::new(-3.0).unwrap();
+        let release = Milliseconds::new(100.0).unwrap();
         let block_size = Samples::new(4).unwrap();
         let mut limiter = PeakLimiter::new(sample_rate, release, ceiling, block_size);
 
@@ -181,8 +181,8 @@ mod test {
     fn test_peak_limiter_attenuates_above_ceiling() {
         let sample_rate = SampleRate::new(48000).unwrap();
         // Ceiling at -6 dB (~0.501 linear)
-        let ceiling = Decibels(-6.0);
-        let release = Milliseconds(100.0);
+        let ceiling = Decibels::new(-6.0).unwrap();
+        let release = Milliseconds::new(100.0).unwrap();
         let block_size = Samples::new(4).unwrap();
         let mut limiter = PeakLimiter::new(sample_rate, release, ceiling, block_size);
 

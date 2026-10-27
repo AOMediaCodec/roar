@@ -578,7 +578,7 @@ mod test {
         let update_result = renderer.update_element_downmix_mode(
             1,
             DownmixMode::Mode3NegOffset,
-            Some(Samples(100)),
+            Some(Samples::new(100).unwrap()),
         );
         let render_result = renderer.render(validated_inputs, &mut out_buf);
 

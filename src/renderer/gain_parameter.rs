@@ -71,9 +71,9 @@ fn fill_linear_db_ramp(
     out_slice: &mut [f32],
 ) -> f32 {
     const DB_TO_LOG2_SCALE: f64 = 0.05 * std::f64::consts::LOG2_10;
-    let delta_db = (end_db.0 - start_db.0) as f64;
+    let delta_db = (end_db.value() - start_db.value()) as f64;
     let inv_duration = 1.0 / (duration as f64);
-    let init_db = (start_db.0 as f64) + delta_db * (elapsed as f64) * inv_duration;
+    let init_db = (start_db.value() as f64) + delta_db * (elapsed as f64) * inv_duration;
     let step_db = delta_db * inv_duration;
 
     let mut cur = (init_db * DB_TO_LOG2_SCALE).exp2();
@@ -110,7 +110,7 @@ fn fill_bezier_db_curve(
 
     for (i, slot) in out_slice.iter_mut().enumerate() {
         let t = (elapsed + i as u32) as f32 * inv_duration;
-        let g = LinearGain::from(anim.sample(t)).0;
+        let g = LinearGain::from(anim.sample(t)).value();
         *slot = g;
         last_gain = g;
     }
@@ -145,21 +145,21 @@ pub(crate) fn generate_gain_multipliers(
             if !out_slice.is_empty() {
                 match &update.gain {
                     GainVariant::Constant(g) => {
-                        out_slice.fill(g.0);
-                        param.last_value = g.0;
+                        out_slice.fill(g.value());
+                        param.last_value = g.value();
                     }
                     GainVariant::Multiple(g_arr) => {
                         let start = update.elapsed as usize;
                         for (slot, gain) in out_slice.iter_mut().zip(&g_arr[start..start + count]) {
-                            *slot = gain.0;
+                            *slot = gain.value();
                         }
-                        param.last_value = g_arr[start + count - 1].0;
+                        param.last_value = g_arr[start + count - 1].value();
                     }
                     GainVariant::Animated(anim) => match anim {
                         Animated::Step { value } => {
-                            let g = LinearGain::from(*value);
-                            out_slice.fill(g.0);
-                            param.last_value = g.0;
+                            let g = LinearGain::from(*value).value();
+                            out_slice.fill(g);
+                            param.last_value = g;
                         }
                         Animated::Linear { start, end } => {
                             param.last_value =
@@ -221,8 +221,8 @@ mod test {
     fn test_generate_multipliers_constant_gain() {
         let mut param = GainParameter::new(42);
         param.updates.push_back(GainUpdate {
-            gain: GainVariant::Constant(LinearGain(0.8)),
-            duration: Samples(5),
+            gain: GainVariant::Constant(LinearGain::new(0.8).unwrap()),
+            duration: Samples::new(5).unwrap(),
             elapsed: 0,
         });
         let mut multipliers = vec![0.0f32; 10];
@@ -239,13 +239,13 @@ mod test {
     fn test_generate_multipliers_constant_gain_split() {
         let mut param = GainParameter::new(42);
         param.updates.push_back(GainUpdate {
-            gain: GainVariant::Constant(LinearGain(0.8)),
-            duration: Samples(5),
+            gain: GainVariant::Constant(LinearGain::new(0.8).unwrap()),
+            duration: Samples::new(5).unwrap(),
             elapsed: 0,
         });
         param.updates.push_back(GainUpdate {
-            gain: GainVariant::Constant(LinearGain(0.3)),
-            duration: Samples(5),
+            gain: GainVariant::Constant(LinearGain::new(0.3).unwrap()),
+            duration: Samples::new(5).unwrap(),
             elapsed: 0,
         });
         let mut multipliers = vec![0.0f32; 8];
@@ -263,8 +263,12 @@ mod test {
     fn test_generate_multipliers_multiple_gains() {
         let mut param = GainParameter::new(42);
         param.updates.push_back(GainUpdate {
-            gain: GainVariant::Multiple(vec![LinearGain(0.1), LinearGain(0.2), LinearGain(0.3)]),
-            duration: Samples(3),
+            gain: GainVariant::Multiple(vec![
+                LinearGain::new(0.1).unwrap(),
+                LinearGain::new(0.2).unwrap(),
+                LinearGain::new(0.3).unwrap(),
+            ]),
+            duration: Samples::new(3).unwrap(),
             elapsed: 0,
         });
         let mut multipliers = vec![0.0f32; 5];
@@ -280,10 +284,8 @@ mod test {
     fn test_generate_multipliers_animated_step_converts_db_to_linear() {
         let mut param = GainParameter::new(42);
         param.updates.push_back(GainUpdate {
-            gain: GainVariant::Animated(Animated::Step {
-                value: crate::common::units::Decibels(-20.0),
-            }),
-            duration: Samples(3),
+            gain: GainVariant::Animated(Animated::Step { value: Decibels::new(-20.0).unwrap() }),
+            duration: Samples::new(3).unwrap(),
             elapsed: 0,
         });
         let mut multipliers = vec![0.0f32; 5];
@@ -303,10 +305,10 @@ mod test {
         let mut param = GainParameter::new(42);
         param.updates.push_back(GainUpdate {
             gain: GainVariant::Animated(Animated::Linear {
-                start: crate::common::units::Decibels(0.0),
-                end: crate::common::units::Decibels(-20.0),
+                start: Decibels::ZERO,
+                end: Decibels::new(-20.0).unwrap(),
             }),
-            duration: Samples(5),
+            duration: Samples::new(5).unwrap(),
             elapsed: 0,
         });
         let mut multipliers = vec![0.0f32; 7];
@@ -326,14 +328,15 @@ mod test {
     #[gtest]
     fn test_generate_multipliers_animated_bezier_interpolates_in_db() {
         let mut param = GainParameter::new(42);
+        let db_neg20 = Decibels::new(-20.0).unwrap();
         param.updates.push_back(GainUpdate {
             gain: GainVariant::Animated(Animated::Bezier {
-                start: crate::common::units::Decibels(0.0),
-                end: crate::common::units::Decibels(-20.0),
-                control: crate::common::units::Decibels(-20.0),
+                start: Decibels::ZERO,
+                end: db_neg20,
+                control: db_neg20,
                 control_relative_time: 0.5,
             }),
-            duration: Samples(2),
+            duration: Samples::new(2).unwrap(),
             elapsed: 0,
         });
         let mut multipliers = vec![0.0f32; 2];
@@ -350,10 +353,10 @@ mod test {
         let mut param = GainParameter::new(42);
         param.updates.push_back(GainUpdate {
             gain: GainVariant::Animated(Animated::Linear {
-                start: Decibels(0.0),
-                end: Decibels(-20.0),
+                start: Decibels::ZERO,
+                end: Decibels::new(-20.0).unwrap(),
             }),
-            duration: Samples(5),
+            duration: Samples::new(5).unwrap(),
             elapsed: 0,
         });
         let mut block_a = vec![0.0f32; 2];

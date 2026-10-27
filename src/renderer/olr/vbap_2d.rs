@@ -42,10 +42,10 @@ impl VbapRegion2D {
         speaker_positions: [CartesianCoordinate; 2],
     ) -> Result<Self, OarError> {
         let matrix = [
-            speaker_positions[0].x,
-            speaker_positions[0].y,
-            speaker_positions[1].x,
-            speaker_positions[1].y,
+            speaker_positions[0].x(),
+            speaker_positions[0].y(),
+            speaker_positions[1].x(),
+            speaker_positions[1].y(),
         ];
         let mut inv_matrix = [0.0; 4];
         let det = matrix[0] * matrix[3] - matrix[1] * matrix[2];
@@ -73,7 +73,7 @@ impl GainCalculator for VbapRegion2D {
     ) -> Result<(), OarError> {
         let cart: CartesianCoordinate =
             PolarCoordinate::new(azimuth, elevation, distance)?.try_into()?;
-        let xyz = [cart.x, cart.y];
+        let xyz = [cart.x(), cart.y()];
 
         if gains.len() < 2 {
             return Err(OarError::InvalidParameter);
@@ -141,14 +141,19 @@ impl VbapPanner2D {
         if n > 1 {
             let cartesian_positions = speakers
                 .iter()
-                .map(|sp| normalized_polar_to_cartesian_float32(Degrees(sp.x), Degrees(sp.y)))
+                .map(|sp| {
+                    normalized_polar_to_cartesian_float32(
+                        Degrees::new(sp.x).unwrap(),
+                        Degrees::new(sp.y).unwrap(),
+                    )
+                })
                 .collect::<Vec<_>>();
 
             if is_convex_hull {
                 let cart_nodes = cartesian_positions
                     .iter()
                     .enumerate()
-                    .map(|(i, cp)| SpeakerNode { x: cp.x, y: cp.y, index: i as u32 })
+                    .map(|(i, cp)| SpeakerNode { x: cp.x(), y: cp.y(), index: i as u32 })
                     .collect::<Vec<_>>();
 
                 if let Ok(hull) = solve_convex_hull(cart_nodes) {
@@ -163,7 +168,7 @@ impl VbapPanner2D {
                         // polar_position_t, causing pp[i]->azimuth to read the cartesian x
                         // coordinate. We compare x coordinates here to match that behavior.
                         let (ordered_idx1, ordered_idx2) =
-                            if cartesian_positions[idx1].x < cartesian_positions[idx2].x {
+                            if cartesian_positions[idx1].x() < cartesian_positions[idx2].x() {
                                 (idx1, idx2)
                             } else {
                                 (idx2, idx1)
@@ -248,7 +253,7 @@ impl GainCalculator for VbapPanner2D {
             let mut min_diff = SENTINEL_ANGLE_DEGREES;
             let mut closest_spk_idx = 0;
             for (j, sp) in self.speakers.iter().enumerate() {
-                let az_diff = (sp.x - azimuth.0).abs();
+                let az_diff = (sp.x - azimuth.value()).abs();
                 if az_diff < min_diff {
                     min_diff = az_diff;
                     closest_spk_idx = j;
@@ -296,8 +301,8 @@ mod test {
         let mut gains = [0.0; 2];
 
         assert_ok!(panner.calculate_gains(
-            Degrees(30.0),
-            Degrees(0.0),
+            Degrees::new(30.0).unwrap(),
+            Degrees::ZERO,
             Distance::new(1.0).unwrap(),
             &mut gains
         ));
@@ -316,8 +321,8 @@ mod test {
         let mut gains = [0.0; 2];
 
         assert_ok!(panner.calculate_gains(
-            Degrees(-30.0),
-            Degrees(0.0),
+            Degrees::new(-30.0).unwrap(),
+            Degrees::ZERO,
             Distance::new(1.0).unwrap(),
             &mut gains
         ));
@@ -336,8 +341,8 @@ mod test {
         let mut gains = [0.0; 2];
 
         assert_ok!(panner.calculate_gains(
-            Degrees(0.0),
-            Degrees(0.0),
+            Degrees::ZERO,
+            Degrees::ZERO,
             Distance::new(1.0).unwrap(),
             &mut gains
         ));
@@ -356,8 +361,8 @@ mod test {
         let mut gains = [0.0; 2];
 
         assert_ok!(panner.calculate_gains(
-            Degrees(90.0),
-            Degrees(0.0),
+            Degrees::new(90.0).unwrap(),
+            Degrees::ZERO,
             Distance::new(1.0).unwrap(),
             &mut gains
         ));
@@ -376,8 +381,8 @@ mod test {
         let mut gains = [0.0; 2];
 
         assert_ok!(panner.calculate_gains(
-            Degrees(-90.0),
-            Degrees(0.0),
+            Degrees::new(-90.0).unwrap(),
+            Degrees::ZERO,
             Distance::new(1.0).unwrap(),
             &mut gains
         ));

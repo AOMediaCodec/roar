@@ -216,7 +216,11 @@ mod test {
         let pos =
             ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(0.0, 0.0, 1.0).unwrap()]);
         renderer
-            .update_element_positions(obj_based_element_id, &pos, Samples(frame_size as u32))
+            .update_element_positions(
+                obj_based_element_id,
+                &pos,
+                Samples::new(frame_size as u32).unwrap(),
+            )
             .unwrap();
 
         let chan_based_inputs = vec![vec![0.2; frame_size]; 2];

@@ -29,13 +29,13 @@ const THRESHOLD_DB_MAX: f32 = 0.0;
 // `audio_effect_peak_limiter.c`.  Since these values are hard-coded here, we don't bother clamping
 // them.
 /// Default limiter ceiling threshold (-1.0 dBFS).
-pub const LIMITER_THRESHOLD_DBFS: Decibels = Decibels(-1.0);
+pub const LIMITER_THRESHOLD_DBFS: Decibels = Decibels::from_const(-1.0);
 /// Default limiter attack duration (1 ms).
-pub const LIMITER_ATTACK: Milliseconds = Milliseconds(1.0);
+pub const LIMITER_ATTACK: Milliseconds = Milliseconds::from_const(1.0);
 /// Default limiter release duration (200 ms).
-pub const LIMITER_RELEASE: Milliseconds = Milliseconds(200.0);
+pub const LIMITER_RELEASE: Milliseconds = Milliseconds::from_const(200.0);
 /// Default limiter look-ahead duration (5 ms).
-pub const LIMITER_LOOK_AHEAD: Milliseconds = Milliseconds(5.0);
+pub const LIMITER_LOOK_AHEAD: Milliseconds = Milliseconds::from_const(5.0);
 
 /// Evaluates the quadratic acceleration curve `1.0 - (x - 1.0)^2`, clamped to `[0.0, 1.0]`.
 #[inline]
@@ -48,8 +48,8 @@ fn curve_accel(x: f32) -> f32 {
 /// `[THRESHOLD_DB_MIN, THRESHOLD_DB_MAX]`.
 #[inline]
 fn threshold_db_to_linear(threshold_db: Decibels) -> LinearGain {
-    let clamped_db = threshold_db.0.clamp(THRESHOLD_DB_MIN, THRESHOLD_DB_MAX);
-    LinearGain::from(Decibels(clamped_db))
+    let clamped_db = threshold_db.value().clamp(THRESHOLD_DB_MIN, THRESHOLD_DB_MAX);
+    LinearGain::from(Decibels::from_const(clamped_db))
 }
 
 /// Look-ahead dynamics peak limiter with zero dynamic allocation inside real-time block loops.
@@ -118,9 +118,9 @@ impl OarLimiter {
             inv_release_samples: 1.0 / release_samples.value() as f32,
             num_channels,
             delay_size,
-            current_gain: LinearGain(1.0),
-            target_start_gain: LinearGain(0.0),
-            target_end_gain: LinearGain(0.0),
+            current_gain: LinearGain::ONE,
+            target_start_gain: LinearGain::ZERO,
+            target_end_gain: LinearGain::ZERO,
             current_sample: None,
             delay_data: vec![0.0; delay_samples_len * num_channels.get()],
             peak_data: vec![0.0; delay_samples_len],
@@ -180,9 +180,9 @@ impl OarLimiter {
         self.entry_index = 0;
         self.deque_head = 0;
         self.deque_len = 0;
-        self.current_gain = LinearGain(1.0);
-        self.target_start_gain = LinearGain(0.0);
-        self.target_end_gain = LinearGain(0.0);
+        self.current_gain = LinearGain::ONE;
+        self.target_start_gain = LinearGain::ZERO;
+        self.target_end_gain = LinearGain::ZERO;
         self.current_sample = None;
         self.delay_data.fill(0.0);
         self.peak_data.fill(0.0);
@@ -209,7 +209,7 @@ impl OarLimiter {
         frame_size: usize,
         is_flush: bool,
     ) {
-        let ceiling = self.linear_threshold.0;
+        let ceiling = self.linear_threshold.value();
         let num_channels = self.num_channels.get();
         let delay_len = self.delay();
         let mut idx = self.entry_index;
@@ -218,7 +218,7 @@ impl OarLimiter {
             // reaches target gain right as the buffered peak arrives at the output, then check if
             // a new attack ramp must begin for upcoming samples.
             let peak = self.get_lookahead_peak();
-            let gain = self.update_gain_envelope();
+            let gain = self.update_gain_envelope().value();
             self.detect_peak(peak);
             let mut peak_max = 0.0_f32;
             if delay_len > 0 {
@@ -229,7 +229,7 @@ impl OarLimiter {
                     let input_sample = if is_flush { 0.0 } else { channel_slice[k] };
                     // Swap the oldest delayed sample out to the output and store the new sample.
                     let delay_slot = &mut self.delay_data[frame_start + ch];
-                    let out = *delay_slot * gain.0;
+                    let out = *delay_slot * gain;
                     *delay_slot = input_sample;
                     channel_slice[k] = out.clamp(-ceiling, ceiling);
                     peak_max = peak_max.max(input_sample.abs());
@@ -245,7 +245,7 @@ impl OarLimiter {
                 for ch in 0..num_channels {
                     let channel_slice = buffer.channel_mut(ch);
                     let input_sample = if is_flush { 0.0 } else { channel_slice[k] };
-                    let out = input_sample * gain.0;
+                    let out = input_sample * gain;
                     channel_slice[k] = out.clamp(-ceiling, ceiling);
                 }
             }
@@ -280,14 +280,14 @@ impl OarLimiter {
                 let acc_ratio =
                     curve_accel((*sample_count - attack_len) as f32 * self.inv_release_samples);
                 self.current_gain =
-                    self.target_end_gain + LinearGain(1.0 - self.target_end_gain.0) * acc_ratio;
+                    self.target_end_gain + (LinearGain::ONE - self.target_end_gain) * acc_ratio;
             } else {
                 self.current_sample = None;
-                self.current_gain = LinearGain(1.0);
+                self.current_gain = LinearGain::ONE;
             }
         } else {
             // No active attack/release transition; pass audio through at unity gain.
-            self.current_gain = LinearGain(1.0);
+            self.current_gain = LinearGain::ONE;
         }
         self.current_gain
     }
@@ -296,9 +296,10 @@ impl OarLimiter {
     /// exceeds `linear_threshold`.
     #[inline]
     fn detect_peak(&mut self, peak: f32) {
-        if peak * self.current_gain.0 > self.linear_threshold.0 {
+        let ceiling = self.linear_threshold.value();
+        if peak * self.current_gain.value() > ceiling {
             self.target_start_gain = self.current_gain;
-            self.target_end_gain = LinearGain(self.linear_threshold.0 / peak);
+            self.target_end_gain = LinearGain::new(ceiling / peak).unwrap_or(LinearGain::ONE);
             self.current_sample = Some(0);
         }
     }

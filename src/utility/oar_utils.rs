@@ -16,21 +16,6 @@ use crate::common::definitions::{
     CartesianCoordinate, Degrees, OarError, PolarCoordinate, Radians,
 };
 
-/// Validates that a floating point number is neither NaN nor Infinite.
-///
-/// # Arguments
-/// * `val` - The value to validate.
-///
-/// # Returns
-/// `Ok(val)` if valid, or `Err(OarError::InvalidParameter)` if `val` is NaN or Infinite.
-pub fn validate_float(val: f32) -> Result<f32, OarError> {
-    if val.is_nan() || val.is_infinite() {
-        Err(OarError::InvalidParameter)
-    } else {
-        Ok(val)
-    }
-}
-
 /// Converts normalized spherical polar angles (azimuth, elevation with distance = 1.0) to 3D
 /// cartesian coordinates.
 ///
@@ -44,14 +29,15 @@ pub fn normalized_polar_to_cartesian_float32(
     azimuth: Degrees,
     elevation: Degrees,
 ) -> CartesianCoordinate {
-    let azimuth_rad = Radians::from(azimuth).0;
-    let elevation_rad = Radians::from(elevation).0;
+    let azimuth_rad = Radians::from(azimuth).value();
+    let elevation_rad = Radians::from(elevation).value();
 
-    CartesianCoordinate {
-        x: (-azimuth_rad).sin() * elevation_rad.cos(),
-        y: (-azimuth_rad).cos() * elevation_rad.cos(),
-        z: elevation_rad.sin(),
-    }
+    CartesianCoordinate::new(
+        (-azimuth_rad).sin() * elevation_rad.cos(),
+        (-azimuth_rad).cos() * elevation_rad.cos(),
+        elevation_rad.sin(),
+    )
+    .unwrap()
 }
 
 /// Structure representing a sector mapping entry.
@@ -62,15 +48,15 @@ struct SectorMapping {
 
 /// Static sector mapping array of 5 elements matching legacy C mapping.
 const SECTOR_MAPPINGS: [SectorMapping; 5] = [
-    SectorMapping { azimuth: 0.0, position: CartesianCoordinate { x: 0.0, y: 1.0, z: 0.0 } },
-    SectorMapping { azimuth: -30.0, position: CartesianCoordinate { x: 1.0, y: 1.0, z: 0.0 } },
-    SectorMapping { azimuth: -110.0, position: CartesianCoordinate { x: 1.0, y: -1.0, z: 0.0 } },
-    SectorMapping { azimuth: 110.0, position: CartesianCoordinate { x: -1.0, y: -1.0, z: 0.0 } },
-    SectorMapping { azimuth: 30.0, position: CartesianCoordinate { x: -1.0, y: 1.0, z: 0.0 } },
+    SectorMapping { azimuth: 0.0, position: CartesianCoordinate::from_const(0.0, 1.0, 0.0) },
+    SectorMapping { azimuth: -30.0, position: CartesianCoordinate::from_const(1.0, 1.0, 0.0) },
+    SectorMapping { azimuth: -110.0, position: CartesianCoordinate::from_const(1.0, -1.0, 0.0) },
+    SectorMapping { azimuth: 110.0, position: CartesianCoordinate::from_const(-1.0, -1.0, 0.0) },
+    SectorMapping { azimuth: 30.0, position: CartesianCoordinate::from_const(-1.0, 1.0, 0.0) },
 ];
 
 fn _azimuth(positions: CartesianCoordinate) -> f32 {
-    (-positions.x).atan2(positions.y).to_degrees()
+    (-positions.x()).atan2(positions.y()).to_degrees()
 }
 
 /// Helper: checks if angle `x` is inside the range [`start`, `end`] given clockwise layout and
@@ -171,17 +157,17 @@ fn _dot_n_nxn_2(n_vec: &[f32; 2], matrix: &[f32; 4]) -> [f32; 2] {
 pub fn cartesian_to_polar_sector_float32(
     cartesian: CartesianCoordinate,
 ) -> Result<PolarCoordinate, OarError> {
-    let pos = CartesianCoordinate { x: cartesian.x, y: cartesian.y, z: 0.0 };
+    let pos = CartesianCoordinate::new(cartesian.x(), cartesian.y(), 0.0)?;
     const MIN_FLOAT_THRESHOLD: f32 = 1e-10;
 
-    if cartesian.x.abs() < MIN_FLOAT_THRESHOLD && cartesian.y.abs() < MIN_FLOAT_THRESHOLD {
-        if cartesian.z.abs() < MIN_FLOAT_THRESHOLD {
+    if cartesian.x().abs() < MIN_FLOAT_THRESHOLD && cartesian.y().abs() < MIN_FLOAT_THRESHOLD {
+        if cartesian.z().abs() < MIN_FLOAT_THRESHOLD {
             return PolarCoordinate::new_from_floats(0.0, 0.0, 0.0);
         } else {
             return PolarCoordinate::new_from_floats(
                 0.0,
-                cartesian.z.signum() * 90.0,
-                cartesian.z.abs(),
+                cartesian.z().signum() * 90.0,
+                cartesian.z().abs(),
             );
         }
     }
@@ -201,8 +187,8 @@ pub fn cartesian_to_polar_sector_float32(
     let left_pos = &SECTOR_MAPPINGS[left_idx].position;
     let right_pos = &SECTOR_MAPPINGS[right_idx].position;
 
-    let _2x2 = [left_pos.x, left_pos.y, right_pos.x, right_pos.y];
-    let _xy = [pos.x, pos.y];
+    let _2x2 = [left_pos.x(), left_pos.y(), right_pos.x(), right_pos.y()];
+    let _xy = [pos.x(), pos.y()];
 
     let _2x2_inv = match _linalg_inv_2x2(&_2x2) {
         Ok(inv) => inv,
@@ -219,8 +205,10 @@ pub fn cartesian_to_polar_sector_float32(
         return PolarCoordinate::new_from_floats(
             0.0,
             0.0,
-            (cartesian.x * cartesian.x + cartesian.y * cartesian.y + cartesian.z * cartesian.z)
-                .sqrt(),
+            (cartesian.x() * cartesian.x()
+                + cartesian.y() * cartesian.y()
+                + cartesian.z() * cartesian.z())
+            .sqrt(),
         );
     }
 
@@ -228,14 +216,14 @@ pub fn cartesian_to_polar_sector_float32(
     let mut az = _map_linear_to_az(rel_left_az, right_az, g_lr[1] / r_xy);
     az = _relative_angle(-180.0, az);
 
-    let el_tilde = ((cartesian.z / r_xy).atan()).to_degrees();
+    let el_tilde = ((cartesian.z() / r_xy).atan()).to_degrees();
 
     let el: f32;
     let d: f32;
     if el_tilde.abs() > 45.0 {
         let abs_el = 30.0 + (90.0 - 30.0) * (el_tilde.abs() - 45.0) / (90.0 - 45.0);
         el = el_tilde.signum() * abs_el;
-        d = cartesian.z.abs();
+        d = cartesian.z().abs();
     } else {
         el = 30.0 * el_tilde / 45.0;
         d = r_xy;
@@ -250,46 +238,35 @@ pub fn cartesian_to_polar_sector_float32(
 mod test {
 
     use super::*;
-    use crate::common::definitions::{CartesianCoordinate, OarError};
+    use crate::common::definitions::CartesianCoordinate;
     use googletest::prelude::*;
 
     #[gtest]
-    fn validate_float_validates_correctly() {
-        expect_that!(validate_float(1.5), eq(Ok(1.5)));
-        expect_that!(validate_float(0.0), eq(Ok(0.0)));
-        expect_that!(validate_float(-9999.0), eq(Ok(-9999.0)));
-
-        expect_that!(validate_float(f32::NAN), err(eq(OarError::InvalidParameter)));
-        expect_that!(validate_float(f32::INFINITY), err(eq(OarError::InvalidParameter)));
-        expect_that!(validate_float(f32::NEG_INFINITY), err(eq(OarError::InvalidParameter)));
-    }
-
-    #[gtest]
     fn cartesian_to_polar_sector_origin_correct() {
-        let origin = CartesianCoordinate { x: 0.0, y: 0.0, z: 0.0 };
+        let origin = CartesianCoordinate::new(0.0, 0.0, 0.0).unwrap();
 
         let polar_origin = cartesian_to_polar_sector_float32(origin).unwrap();
 
-        expect_that!(polar_origin.azimuth().0, eq(0.0));
-        expect_that!(polar_origin.elevation().0, eq(0.0));
+        expect_that!(polar_origin.azimuth().value(), eq(0.0));
+        expect_that!(polar_origin.elevation().value(), eq(0.0));
         expect_that!(polar_origin.distance().value(), eq(0.0));
     }
 
     #[gtest]
     fn cartesian_to_polar_sector_z_axis_correct() {
-        let z_only = CartesianCoordinate { x: 0.0, y: 0.0, z: 2.5 };
+        let z_only = CartesianCoordinate::new(0.0, 0.0, 2.5).unwrap();
         let polar_z = cartesian_to_polar_sector_float32(z_only).unwrap();
-        expect_that!(polar_z.azimuth().0, eq(0.0));
-        expect_that!(polar_z.elevation().0, eq(90.0));
+        expect_that!(polar_z.azimuth().value(), eq(0.0));
+        expect_that!(polar_z.elevation().value(), eq(90.0));
         expect_that!(polar_z.distance().value(), eq(2.5));
     }
 
     #[gtest]
     fn cartesian_to_polar_sector_y_axis_correct() {
-        let cart_sec1 = CartesianCoordinate { x: 0.0, y: 1.0, z: 0.0 };
+        let cart_sec1 = CartesianCoordinate::new(0.0, 1.0, 0.0).unwrap();
         let polar_sec1 = cartesian_to_polar_sector_float32(cart_sec1).unwrap();
-        expect_that!(polar_sec1.azimuth().0, near(0.0f32, 1e-3));
-        expect_that!(polar_sec1.elevation().0, near(0.0f32, 1e-3));
+        expect_that!(polar_sec1.azimuth().value(), near(0.0f32, 1e-3));
+        expect_that!(polar_sec1.elevation().value(), near(0.0f32, 1e-3));
         expect_that!(polar_sec1.distance().value(), near(1.0f32, 1e-3));
     }
 }

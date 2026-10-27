@@ -135,7 +135,12 @@ mod test {
         let mut interpreter = InterpretObjectMetadata::new(Arc::new(VogPanner));
         let coord = PolarCoordinate::new_from_floats(0.0, 0.0, 1.0).unwrap();
 
-        let result = interpreter.process(SampleRate::new(48000).unwrap(), &coord, 0, Samples(8));
+        let result = interpreter.process(
+            SampleRate::new(48000).unwrap(),
+            &coord,
+            0,
+            Samples::new(8).unwrap(),
+        );
 
         let block_opt = result.unwrap();
         let block = block_opt.unwrap();
@@ -148,9 +153,10 @@ mod test {
     fn test_interpret_object_metadata_aligned_subsequent_block_returns_interp_gains() {
         let mut interpreter = InterpretObjectMetadata::new(Arc::new(VogPanner));
         let coord = PolarCoordinate::new_from_floats(0.0, 0.0, 1.0).unwrap();
-        interpreter.process(SampleRate::new(48000).unwrap(), &coord, 0, Samples(8)).unwrap();
+        let samples_8 = Samples::new(8).unwrap();
+        interpreter.process(SampleRate::new(48000).unwrap(), &coord, 0, samples_8).unwrap();
 
-        let result = interpreter.process(SampleRate::new(48000).unwrap(), &coord, 8, Samples(8));
+        let result = interpreter.process(SampleRate::new(48000).unwrap(), &coord, 8, samples_8);
 
         let block_opt = result.unwrap();
         let block = block_opt.unwrap();

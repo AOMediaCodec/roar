@@ -202,7 +202,7 @@ impl crate::c_types::oar_metadata_t {
                 // `self.type` is 4 (corresponding to `ck_metadata_head_rotation`), meaning this
                 // variant of the union is active.
                 let q = unsafe { self.value.head_rotation };
-                Ok(Quaternion { w: q.w, x: q.x, y: q.y, z: q.z })
+                Quaternion::new(q.w, q.x, q.y, q.z)
             }
             _ => Err(OarError::NotSupported),
         }
@@ -302,7 +302,7 @@ impl crate::c_types::oar_metadata_t {
                     let cartesian_positions = unsafe { pos_meta.positions.cartesian_positions };
                     let mut safe_positions = Vec::with_capacity(num_objects);
                     for c in &cartesian_positions[..num_objects] {
-                        safe_positions.push(CartesianCoordinate { x: c.x, y: c.y, z: c.z });
+                        safe_positions.push(CartesianCoordinate::new(c.x, c.y, c.z)?);
                     }
                     Ok(ObjectPosition::Cartesian(safe_positions))
                 }
@@ -729,25 +729,18 @@ impl TryFrom<crate::c_types::animated_cartesian_t>
             AnimatedCartesian, CartesianControlRelativeTime, CartesianCoordinate, OarError,
         };
 
-        fn to_cartesian(x: f32, y: f32, z: f32) -> Result<CartesianCoordinate, OarError> {
-            if !x.is_finite() || !y.is_finite() || !z.is_finite() {
-                return Err(OarError::InvalidParameter);
-            }
-            Ok(CartesianCoordinate { x, y, z })
-        }
-
-        let start = to_cartesian(c.x.start, c.y.start, c.z.start)?;
+        let start = CartesianCoordinate::new(c.x.start, c.y.start, c.z.start)?;
         match c.animation_type {
             animation_type_t::ck_animation_type_step => {
                 Ok(AnimatedCartesian::Step { value: start })
             }
             animation_type_t::ck_animation_type_linear => {
-                let end = to_cartesian(c.x.end, c.y.end, c.z.end)?;
+                let end = CartesianCoordinate::new(c.x.end, c.y.end, c.z.end)?;
                 Ok(AnimatedCartesian::Linear { start, end })
             }
             animation_type_t::ck_animation_type_bezier => {
-                let end = to_cartesian(c.x.end, c.y.end, c.z.end)?;
-                let control = to_cartesian(c.x.control, c.y.control, c.z.control)?;
+                let end = CartesianCoordinate::new(c.x.end, c.y.end, c.z.end)?;
+                let control = CartesianCoordinate::new(c.x.control, c.y.control, c.z.control)?;
                 let t_ctrl_x = c.x.control_relative_time;
                 let t_ctrl_y = c.y.control_relative_time;
                 let t_ctrl_z = c.z.control_relative_time;

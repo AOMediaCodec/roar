@@ -48,7 +48,12 @@ impl VbapPanner {
     pub fn new(speakers: Vec<SpeakerNode>, active_triangles: Vec<(usize, usize, usize)>) -> Self {
         let speaker_cartesian = speakers
             .iter()
-            .map(|sp| normalized_polar_to_cartesian_float32(Degrees(sp.x), Degrees(sp.y)))
+            .map(|sp| {
+                normalized_polar_to_cartesian_float32(
+                    Degrees::new(sp.x).unwrap(),
+                    Degrees::new(sp.y).unwrap(),
+                )
+            })
             .collect::<Vec<_>>();
 
         VbapPanner { speakers, active_triangles, speaker_cartesian }
@@ -139,8 +144,9 @@ fn det3x3(
     col2: &CartesianCoordinate,
     col3: &CartesianCoordinate,
 ) -> f32 {
-    col1.x * (col2.y * col3.z - col2.z * col3.y) - col1.y * (col2.x * col3.z - col2.z * col3.x)
-        + col1.z * (col2.x * col3.y - col2.y * col3.x)
+    col1.x() * (col2.y() * col3.z() - col2.z() * col3.y())
+        - col1.y() * (col2.x() * col3.z() - col2.z() * col3.x())
+        + col1.z() * (col2.x() * col3.y() - col2.y() * col3.x())
 }
 
 // ===== Tests =====
@@ -170,7 +176,7 @@ mod test {
         let panner = VbapPanner::new(speakers, active_triangles);
         let mut gains = vec![0.0f32; 3];
 
-        assert_ok!(panner.calculate_gains(Degrees(0.0), Degrees(0.0), &mut gains));
+        assert_ok!(panner.calculate_gains(Degrees::ZERO, Degrees::ZERO, &mut gains));
 
         expect_near!(gains[0], 1.0, EPSILON);
         expect_near!(gains[1], 0.0, EPSILON);
@@ -190,7 +196,11 @@ mod test {
 
         for (az, el) in test_directions {
             let mut g = vec![0.0f32; 3];
-            assert_ok!(panner.calculate_gains(Degrees(az), Degrees(el), &mut g));
+            assert_ok!(panner.calculate_gains(
+                Degrees::new(az).unwrap(),
+                Degrees::new(el).unwrap(),
+                &mut g
+            ));
 
             expect_ge!(g[0], 0.0);
             expect_ge!(g[1], 0.0);
@@ -212,7 +222,11 @@ mod test {
         let panner = VbapPanner::new(speakers, active_triangles);
         let mut gains = vec![0.0f32; 3];
 
-        assert_ok!(panner.calculate_gains(Degrees(45.0), Degrees(10.0), &mut gains));
+        assert_ok!(panner.calculate_gains(
+            Degrees::new(45.0).unwrap(),
+            Degrees::new(10.0).unwrap(),
+            &mut gains
+        ));
 
         expect_true!(gains.iter().all(|&g| g == 0.0));
     }

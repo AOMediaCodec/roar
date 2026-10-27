@@ -94,7 +94,7 @@ impl LayerwisePanner {
         let n = self.ref_layers.len();
         if n == 0 {
             return LayerGainsResult {
-                items: [ElevationGain { elevation: Degrees(0.0), gain: 0.0 }; 4],
+                items: [ElevationGain { elevation: Degrees::ZERO, gain: 0.0 }; 4],
                 len: 0,
             };
         }
@@ -102,42 +102,44 @@ impl LayerwisePanner {
         let mut min_ele = f32::MAX;
         let mut max_ele = f32::MIN;
         for &el in &self.ref_layers {
-            min_ele = min_ele.min(el.0);
-            max_ele = max_ele.max(el.0);
+            min_ele = min_ele.min(el.value());
+            max_ele = max_ele.max(el.value());
         }
 
         // Check for exact match
-        if let Some(&el) = self.ref_layers.iter().find(|&&el| (el.0 - elevation.0).abs() < 1e-6) {
+        if let Some(&el) =
+            self.ref_layers.iter().find(|&&el| (el.value() - elevation.value()).abs() < 1e-6)
+        {
             return LayerGainsResult {
                 items: [
                     ElevationGain { elevation: el, gain: 1.0 },
-                    ElevationGain { elevation: Degrees(0.0), gain: 0.0 },
-                    ElevationGain { elevation: Degrees(0.0), gain: 0.0 },
-                    ElevationGain { elevation: Degrees(0.0), gain: 0.0 },
+                    ElevationGain { elevation: Degrees::ZERO, gain: 0.0 },
+                    ElevationGain { elevation: Degrees::ZERO, gain: 0.0 },
+                    ElevationGain { elevation: Degrees::ZERO, gain: 0.0 },
                 ],
                 len: 1,
             };
         }
 
-        if elevation.0 < min_ele {
+        if elevation.value() < min_ele {
             return LayerGainsResult {
                 items: [
-                    ElevationGain { elevation: Degrees(min_ele), gain: 1.0 },
-                    ElevationGain { elevation: Degrees(0.0), gain: 0.0 },
-                    ElevationGain { elevation: Degrees(0.0), gain: 0.0 },
-                    ElevationGain { elevation: Degrees(0.0), gain: 0.0 },
+                    ElevationGain { elevation: Degrees::new(min_ele).unwrap(), gain: 1.0 },
+                    ElevationGain { elevation: Degrees::ZERO, gain: 0.0 },
+                    ElevationGain { elevation: Degrees::ZERO, gain: 0.0 },
+                    ElevationGain { elevation: Degrees::ZERO, gain: 0.0 },
                 ],
                 len: 1,
             };
         }
 
-        if elevation.0 > max_ele {
+        if elevation.value() > max_ele {
             return LayerGainsResult {
                 items: [
-                    ElevationGain { elevation: Degrees(max_ele), gain: 1.0 },
-                    ElevationGain { elevation: Degrees(0.0), gain: 0.0 },
-                    ElevationGain { elevation: Degrees(0.0), gain: 0.0 },
-                    ElevationGain { elevation: Degrees(0.0), gain: 0.0 },
+                    ElevationGain { elevation: Degrees::new(max_ele).unwrap(), gain: 1.0 },
+                    ElevationGain { elevation: Degrees::ZERO, gain: 0.0 },
+                    ElevationGain { elevation: Degrees::ZERO, gain: 0.0 },
+                    ElevationGain { elevation: Degrees::ZERO, gain: 0.0 },
                 ],
                 len: 1,
             };
@@ -147,37 +149,51 @@ impl LayerwisePanner {
         let ele0 = *self
             .ref_layers
             .iter()
-            .min_by(|&&a, &&b| (a.0 - elevation.0).abs().total_cmp(&(b.0 - elevation.0).abs()))
+            .min_by(|&&a, &&b| {
+                (a.value() - elevation.value())
+                    .abs()
+                    .total_cmp(&(b.value() - elevation.value()).abs())
+            })
             .unwrap();
-        let sign0 = (ele0.0 - elevation.0).signum();
+        let sign0 = (ele0.value() - elevation.value()).signum();
 
         let mut ele1 = ele0;
         if let Some(&el) = self
             .ref_layers
             .iter()
-            .filter(|&&el| (el.0 - elevation.0).signum() != sign0)
-            .min_by(|&&a, &&b| (a.0 - elevation.0).abs().total_cmp(&(b.0 - elevation.0).abs()))
+            .filter(|&&el| (el.value() - elevation.value()).signum() != sign0)
+            .min_by(|&&a, &&b| {
+                (a.value() - elevation.value())
+                    .abs()
+                    .total_cmp(&(b.value() - elevation.value()).abs())
+            })
         {
             ele1 = el;
         }
 
-        let speaker_angle = (ele1.0 - ele0.0).abs() / 2.0;
-        let source_angle = speaker_angle - (ele0.0 - elevation.0).abs();
+        let speaker_angle = (ele1.value() - ele0.value()).abs() / 2.0;
+        let source_angle = speaker_angle - (ele0.value() - elevation.value()).abs();
 
         let mut ele_gains = [0.0; 2];
-        if tanlaw(Degrees(source_angle), Degrees(speaker_angle), &mut ele_gains).is_ok() {
+        if tanlaw(
+            Degrees::new(source_angle).unwrap(),
+            Degrees::new(speaker_angle).unwrap(),
+            &mut ele_gains,
+        )
+        .is_ok()
+        {
             LayerGainsResult {
                 items: [
                     ElevationGain { elevation: ele0, gain: ele_gains[0] },
                     ElevationGain { elevation: ele1, gain: ele_gains[1] },
-                    ElevationGain { elevation: Degrees(0.0), gain: 0.0 },
-                    ElevationGain { elevation: Degrees(0.0), gain: 0.0 },
+                    ElevationGain { elevation: Degrees::ZERO, gain: 0.0 },
+                    ElevationGain { elevation: Degrees::ZERO, gain: 0.0 },
                 ],
                 len: 2,
             }
         } else {
             LayerGainsResult {
-                items: [ElevationGain { elevation: Degrees(0.0), gain: 0.0 }; 4],
+                items: [ElevationGain { elevation: Degrees::ZERO, gain: 0.0 }; 4],
                 len: 0,
             }
         }
@@ -189,17 +205,17 @@ fn tanlaw(
     speaker_angle: Degrees,
     gains: &mut [f32; 2],
 ) -> Result<(), OarError> {
-    if source_angle.0 > speaker_angle.0 {
+    if source_angle.value() > speaker_angle.value() {
         return Err(OarError::InvalidParameter);
     }
-    if speaker_angle.0 < 0.0 || speaker_angle.0 >= 90.0 {
+    if speaker_angle.value() < 0.0 || speaker_angle.value() >= 90.0 {
         return Err(OarError::InvalidParameter);
     }
 
-    let source_rad = Radians::from(source_angle);
-    let speaker_rad = Radians::from(speaker_angle);
-    let c = source_rad.0.cos() / speaker_rad.0.cos();
-    let s = source_rad.0.sin() / speaker_rad.0.sin();
+    let source_rad = Radians::from(source_angle).value();
+    let speaker_rad = Radians::from(speaker_angle).value();
+    let c = source_rad.cos() / speaker_rad.cos();
+    let s = source_rad.sin() / speaker_rad.sin();
     gains[0] = c + s;
     gains[1] = c - s;
     let gains_norm = (gains[0] * gains[0] + gains[1] * gains[1]).sqrt();
@@ -251,8 +267,8 @@ impl CustomGainCalculator {
 
         let mut unique_elevations: Vec<f32> = Vec::new();
         for sp in speakers.iter().filter(|sp| !sp.is_lfe) {
-            if !unique_elevations.iter().any(|&el| (el - sp.elevation.0).abs() < 1e-6) {
-                unique_elevations.push(sp.elevation.0);
+            if !unique_elevations.iter().any(|&el| (el - sp.elevation.value()).abs() < 1e-6) {
+                unique_elevations.push(sp.elevation.value());
             }
         }
 
@@ -261,10 +277,10 @@ impl CustomGainCalculator {
             let mut layer_speakers = Vec::new();
             let mut speaker_indices = Vec::new();
             for (j, sp) in speakers.iter().filter(|sp| !sp.is_lfe).enumerate() {
-                if (sp.elevation.0 - el).abs() < 1e-6 {
+                if (sp.elevation.value() - el).abs() < 1e-6 {
                     layer_speakers.push(SpeakerNode {
-                        x: sp.azimuth.0,
-                        y: sp.elevation.0,
+                        x: sp.azimuth.value(),
+                        y: sp.elevation.value(),
                         index: 0, // Will be set below
                     });
                     speaker_indices.push(j);
@@ -294,7 +310,7 @@ impl CustomGainCalculator {
             };
 
             layers.push(LayerInfo {
-                elevation: Degrees(el),
+                elevation: Degrees::new(el).unwrap(),
                 vbap_panner,
                 dbap_panner,
                 speaker_indices,
@@ -302,7 +318,8 @@ impl CustomGainCalculator {
             });
         }
 
-        let ref_layers = unique_elevations.iter().map(|&el| Degrees(el)).collect::<Vec<_>>();
+        let ref_layers =
+            unique_elevations.iter().map(|&el| Degrees::new(el).unwrap()).collect::<Vec<_>>();
         let layerwise_panner = LayerwisePanner::new(ref_layers);
         let speaker_indices = (0..speakers.len()).collect();
 
@@ -319,8 +336,8 @@ impl CustomGainCalculator {
         let mut mn = SENTINEL_ANGLE_DEGREES;
         let mut mx = -SENTINEL_ANGLE_DEGREES;
         for ly in &self.layers {
-            mn = mn.min(ly.elevation.0);
-            mx = mx.max(ly.elevation.0);
+            mn = mn.min(ly.elevation.value());
+            mx = mx.max(ly.elevation.value());
         }
         *min = mn;
         *max = mx;
@@ -367,7 +384,7 @@ impl GainCalculator for CustomGainCalculator {
             let ly = match self
                 .layers
                 .iter()
-                .find(|ly| (ly.elevation.0 - ele_gain.elevation.0).abs() < 1e-6)
+                .find(|ly| (ly.elevation.value() - ele_gain.elevation.value()).abs() < 1e-6)
             {
                 Some(ly) => ly,
                 None => {
@@ -380,13 +397,14 @@ impl GainCalculator for CustomGainCalculator {
 
             // Support back speaker of asymmetric layout
             if layer_cnt >= 0
-                && ele_gain.elevation.0 != 0.0
+                && ele_gain.elevation.value() != 0.0
                 && !ly.vbap_panner.is_convex_hull()
-                && azimuth.0.abs() > ly.max_az
+                && azimuth.value().abs() > ly.max_az
             {
-                new_elevation = ele_gain.elevation.0
-                    * (1.0 - (azimuth.0.abs() - ly.max_az) / (180.0 - ly.max_az));
-                let layerwise_gains = self.layerwise_panner.calculate_gains(Degrees(new_elevation));
+                new_elevation = ele_gain.elevation.value()
+                    * (1.0 - (azimuth.value().abs() - ly.max_az) / (180.0 - ly.max_az));
+                let layerwise_gains =
+                    self.layerwise_panner.calculate_gains(Degrees::new(new_elevation)?);
                 for lg in layerwise_gains.as_slice().iter().copied() {
                     let mut item_lg = lg;
                     item_lg.gain *= ele_gain.gain;
@@ -401,16 +419,17 @@ impl GainCalculator for CustomGainCalculator {
             let mut dbap_gains = [0.0f32; MAX_OUTPUT_CHANNEL_COUNT];
             let mut gains_2d = [0.0f32; MAX_OUTPUT_CHANNEL_COUNT];
 
-            let current_elevation = if layer_cnt < 0 { new_elevation } else { elevation.0 };
+            let current_elevation = if layer_cnt < 0 { new_elevation } else { elevation.value() };
+            let current_elevation_deg = Degrees::new(current_elevation)?;
 
             self.get_layer_max_min_elevation(&mut max, &mut min);
             let mut current_distance = distance.value();
             if current_elevation > max || current_elevation < min {
-                current_distance *= Radians::from(Degrees(current_elevation)).0.cos();
+                current_distance *= Radians::from(current_elevation_deg).value().cos();
             }
 
             // Calculate VBAP
-            let mut final_azimuth = azimuth.0;
+            let mut final_azimuth = azimuth.value();
             if !ly.vbap_panner.is_convex_hull() {
                 if final_azimuth > 90.0 && final_azimuth <= 180.0 {
                     final_azimuth = 180.0 - final_azimuth;
@@ -419,8 +438,8 @@ impl GainCalculator for CustomGainCalculator {
                 }
             }
             let _ = ly.vbap_panner.calculate_gains(
-                Degrees(final_azimuth),
-                Degrees(current_elevation),
+                Degrees::new(final_azimuth)?,
+                current_elevation_deg,
                 Distance::new(1.0).unwrap(),
                 &mut vbap_gains[..m],
             );
@@ -443,7 +462,7 @@ impl GainCalculator for CustomGainCalculator {
             // Calculate DBAP
             let _ = ly.dbap_panner.calculate_gains(
                 azimuth,
-                Degrees(current_elevation),
+                current_elevation_deg,
                 Distance::new(dbap_dist).unwrap(),
                 &mut dbap_gains[..m],
             );
@@ -518,8 +537,8 @@ mod test {
         let mut gains = [0.0; 2];
 
         let result = calculator.calculate_gains(
-            Degrees(30.0),
-            Degrees(0.0),
+            Degrees::new(30.0).unwrap(),
+            Degrees::ZERO,
             Distance::new(1.0).unwrap(),
             &mut gains,
         );
@@ -535,8 +554,8 @@ mod test {
         let mut gains = [0.0; 2];
 
         let result = calculator.calculate_gains(
-            Degrees(0.0),
-            Degrees(0.0),
+            Degrees::ZERO,
+            Degrees::ZERO,
             Distance::new(1.0).unwrap(),
             &mut gains,
         );
