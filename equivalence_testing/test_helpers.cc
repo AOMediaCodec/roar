@@ -44,13 +44,21 @@ std::vector<oar_layout_t> GetAllChannelBasedInputs() {
 }
 
 std::vector<oar_layout_t> GetAllOutputLayouts() {
-  return {ck_oar_layout_mono, ck_oar_layout_stereo, ck_oar_layout_51,
-          ck_oar_layout_512, ck_oar_layout_514, ck_oar_layout_71,
-          ck_oar_layout_712, ck_oar_layout_714, ck_oar_layout_312,
+  return {ck_oar_layout_mono,
+          ck_oar_layout_stereo,
+          ck_oar_layout_51,
+          ck_oar_layout_512,
+          ck_oar_layout_514,
+          ck_oar_layout_71,
+          ck_oar_layout_712,
+          ck_oar_layout_714,
+          ck_oar_layout_312,
           ck_oar_layout_916,
-          // ck_oar_layout_a293,
-          ck_oar_layout_7154, ck_oar_layout_sound_system_e_451,
-          ck_oar_layout_sound_system_f_370, ck_oar_layout_sound_system_g_490,
+          ck_oar_layout_a293,
+          ck_oar_layout_7154,
+          ck_oar_layout_sound_system_e_451,
+          ck_oar_layout_sound_system_f_370,
+          ck_oar_layout_sound_system_g_490,
           ck_oar_layout_binaural};
 }
 

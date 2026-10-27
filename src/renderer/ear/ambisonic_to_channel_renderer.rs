@@ -1401,9 +1401,9 @@ pub fn element_renderer_render_h2m(
         return Err(OarError::InvalidParameter);
     }
 
-    let n_size = h2m_matrix.n;
-    let lfe1 = h2m_matrix.lfe1;
-    let lfe2 = h2m_matrix.lfe2;
+    let num_non_lfe_channels = h2m_matrix.n;
+    let lfe1_index = h2m_matrix.lfe1;
+    let lfe2_index = h2m_matrix.lfe2;
 
     let mv = MatrixView {
         data: h2m_matrix.mat,
@@ -1415,20 +1415,18 @@ pub fn element_renderer_render_h2m(
     };
     matrix_render(&mv, inputs, outputs)?;
 
-    if lfe1 >= 0 || lfe2 >= 0 {
+    if lfe1_index >= 0 || lfe2_index >= 0 {
         let mut map = [0usize; MAX_OUTPUT_CHANNEL_COUNT];
-        let mut n = 0usize;
-        for i in 0..n_size {
-            if lfe1 == i as i32 {
-                n += 1;
-            }
-            if lfe2 == i as i32 {
-                n += 1;
+        let mut chan_i = 0usize;
+        for i in 0..num_non_lfe_channels {
+            // Skip LFE channels.
+            while chan_i as i32 == lfe1_index || chan_i as i32 == lfe2_index {
+                chan_i += 1;
             }
             if i < map.len() {
-                map[i] = n;
+                map[i] = chan_i;
             }
-            n += 1;
+            chan_i += 1;
         }
         let nsamples = inputs.num_samples();
         let num_out_channels = outputs.num_channels();
@@ -1440,7 +1438,7 @@ pub fn element_renderer_render_h2m(
         // the planar output buffer (`out_slices_ref[dest_idx] = out_slices_ref[i]`), reverse
         // iteration guarantees higher destination slots are populated before lower channels
         // can overwrite them.
-        for i in (0..n_size).rev() {
+        for i in (0..num_non_lfe_channels).rev() {
             let dest_idx = *map.get(i).unwrap_or(&i);
             if dest_idx != i && dest_idx < out_slices_ref.len() && i < out_slices_ref.len() {
                 if dest_idx > i {
@@ -1461,12 +1459,12 @@ pub fn element_renderer_render_h2m(
             }
         }
 
-        if lfe1 >= 0 && (lfe1 as usize) < out_slices_ref.len() {
-            let lfe_slice = &mut out_slices_ref[lfe1 as usize];
+        if lfe1_index >= 0 && (lfe1_index as usize) < out_slices_ref.len() {
+            let lfe_slice = &mut out_slices_ref[lfe1_index as usize];
             lfe_slice[..nsamples].fill(0.0);
         }
-        if lfe2 >= 0 && (lfe2 as usize) < out_slices_ref.len() {
-            let lfe_slice = &mut out_slices_ref[lfe2 as usize];
+        if lfe2_index >= 0 && (lfe2_index as usize) < out_slices_ref.len() {
+            let lfe_slice = &mut out_slices_ref[lfe2_index as usize];
             lfe_slice[..nsamples].fill(0.0);
         }
     }
@@ -1643,9 +1641,22 @@ mod tests {
         };
 
         assert_ok!(result);
-        expect_that!(out_bufs[3][0], eq(0.0));
-        expect_that!(out_bufs[9][0], eq(0.0));
+        // With a 1.0 ZOA input, non-LFE outputs equal the 22 entries of `ZOA_BS9A3`, shifted to
+        // skip the zeroed LFE slots (`lfe1 = 3` and `lfe2 = 9`):
+        // - Outputs 0..=2 map to `ZOA_BS9A3[0..=2]` (unshifted before `lfe1`).
         expect_that!(out_bufs[0][0], near(0.09620442f32, EPSILON));
+        expect_that!(out_bufs[2][0], near(0.05768647f32, EPSILON));
+        // - Output 3 (`lfe1`) is zeroed.
+        expect_that!(out_bufs[3][0], eq(0.0));
+        // - Outputs 4..=8 map to `ZOA_BS9A3[3..=7]` (shifted by 1 after `lfe1`).
+        expect_that!(out_bufs[4][0], near(0.34302436f32, EPSILON));
+        expect_that!(out_bufs[8][0], near(0.34302018f32, EPSILON));
+        // - Output 9 (`lfe2`) is zeroed.
+        expect_that!(out_bufs[9][0], eq(0.0));
+        // - Outputs 10..=23 map to `ZOA_BS9A3[8..=21]` (shifted by 2 after `lfe1` and `lfe2`).
+        expect_that!(out_bufs[10][0], near(0.31330675f32, EPSILON));
+        expect_that!(out_bufs[11][0], near(0.31331476f32, EPSILON));
+        expect_that!(out_bufs[12][0], near(0.12986508f32, EPSILON));
         expect_that!(out_bufs[23][0], near(0.21963451f32, EPSILON));
     }
 }
