@@ -71,7 +71,7 @@ impl AudioElementVariant {
             return Err(OarError::InvalidParameter);
         }
         let default_channel =
-            AudioObjectInputChannel::new(Degrees::ZERO, Degrees::ZERO, Distance::new(1.0).unwrap());
+            AudioObjectInputChannel::new(Degrees::ZERO, Degrees::ZERO, Distance::ONE);
         Ok(Self::Objects(vec![default_channel; num_objects]))
     }
 

@@ -258,7 +258,7 @@ impl ProcessingGroup {
                         LinearGain::ONE,
                         source.azimuth,
                         source.elevation,
-                        Distance::new(1.0).unwrap(),
+                        Distance::ONE,
                     );
                     enc_idx += 1;
                 }
@@ -593,7 +593,7 @@ mod test {
         for obj in object_channels {
             obj.azimuth = Degrees::new(45.0).unwrap();
             obj.elevation = Degrees::ZERO;
-            obj.distance = Distance::new(1.0).unwrap();
+            obj.distance = Distance::ONE;
         }
 
         expect_true!(group.update_ambisonic_encoder(&mut audio_elements).is_ok());
@@ -749,7 +749,7 @@ mod test {
         for obj in object_channels {
             obj.azimuth = Degrees::ZERO;
             obj.elevation = Degrees::ZERO;
-            obj.distance = Distance::new(1.0).unwrap();
+            obj.distance = Distance::ONE;
         }
 
         expect_true!(group.update_ambisonic_encoder(&mut audio_elements).is_ok());
@@ -944,7 +944,7 @@ mod test {
         for obj in object_channels {
             obj.azimuth = Degrees::new(90.0).unwrap();
             obj.elevation = Degrees::ZERO;
-            obj.distance = Distance::new(1.0).unwrap();
+            obj.distance = Distance::ONE;
         }
 
         expect_true!(group.update_ambisonic_encoder(&mut audio_elements).is_ok());

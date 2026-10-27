@@ -51,6 +51,9 @@ pub struct CartesianCoordinate {
 // ===== Distance =====
 
 impl Distance {
+    /// Represents a distance of 1.0.
+    pub const ONE: Self = Self(1.0);
+
     /// Creates a new Distance. Returns error if value is not finite or negative.
     pub fn new(val: f32) -> Result<Self, OarError> {
         if val.is_finite() && val >= 0.0 {
@@ -229,6 +232,11 @@ mod test {
 
     use super::*;
     use googletest::prelude::*;
+
+    #[gtest]
+    fn test_distance_constant() {
+        expect_that!(Distance::ONE.value(), eq(1.0));
+    }
 
     #[gtest]
     fn test_polar_coordinate_valid_creation() {

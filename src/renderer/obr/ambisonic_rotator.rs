@@ -391,7 +391,7 @@ mod test {
             LinearGain::ONE,
             Degrees::new(INITIAL_SOURCE_ANGLE.0).unwrap(),
             Degrees::new(INITIAL_SOURCE_ANGLE.1).unwrap(),
-            Distance::new(1.0).unwrap(),
+            Distance::ONE,
         );
 
         let mut reference_source_mono_codec = AmbisonicEncoder::new(1, AMBISONIC_ORDER as usize);
@@ -400,7 +400,7 @@ mod test {
             LinearGain::ONE,
             Degrees::new(expected_source_angle.0).unwrap(),
             Degrees::new(expected_source_angle.1).unwrap(),
-            Distance::new(1.0).unwrap(),
+            Distance::ONE,
         );
 
         let num_channels = get_num_periphonic_components(AMBISONIC_ORDER);

@@ -440,7 +440,7 @@ impl GainCalculator for CustomGainCalculator {
             let _ = ly.vbap_panner.calculate_gains(
                 Degrees::new(final_azimuth)?,
                 current_elevation_deg,
-                Distance::new(1.0).unwrap(),
+                Distance::ONE,
                 &mut vbap_gains[..m],
             );
 
@@ -539,7 +539,7 @@ mod test {
         let result = calculator.calculate_gains(
             Degrees::new(30.0).unwrap(),
             Degrees::ZERO,
-            Distance::new(1.0).unwrap(),
+            Distance::ONE,
             &mut gains,
         );
 
@@ -553,12 +553,8 @@ mod test {
         let calculator = CustomGainCalculator::new(OutputLayout::Stereo).unwrap();
         let mut gains = [0.0; 2];
 
-        let result = calculator.calculate_gains(
-            Degrees::ZERO,
-            Degrees::ZERO,
-            Distance::new(1.0).unwrap(),
-            &mut gains,
-        );
+        let result =
+            calculator.calculate_gains(Degrees::ZERO, Degrees::ZERO, Distance::ONE, &mut gains);
 
         assert_ok!(result);
         expect_that!(gains[0], near(std::f32::consts::FRAC_1_SQRT_2, EPSILON));

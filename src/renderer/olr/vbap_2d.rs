@@ -303,7 +303,7 @@ mod test {
         assert_ok!(panner.calculate_gains(
             Degrees::new(30.0).unwrap(),
             Degrees::ZERO,
-            Distance::new(1.0).unwrap(),
+            Distance::ONE,
             &mut gains
         ));
 
@@ -323,7 +323,7 @@ mod test {
         assert_ok!(panner.calculate_gains(
             Degrees::new(-30.0).unwrap(),
             Degrees::ZERO,
-            Distance::new(1.0).unwrap(),
+            Distance::ONE,
             &mut gains
         ));
 
@@ -340,12 +340,7 @@ mod test {
         let panner = VbapPanner2D::new(speakers);
         let mut gains = [0.0; 2];
 
-        assert_ok!(panner.calculate_gains(
-            Degrees::ZERO,
-            Degrees::ZERO,
-            Distance::new(1.0).unwrap(),
-            &mut gains
-        ));
+        assert_ok!(panner.calculate_gains(Degrees::ZERO, Degrees::ZERO, Distance::ONE, &mut gains));
 
         expect_that!(gains[0], near(FRAC_1_SQRT_2, EPSILON));
         expect_that!(gains[1], near(FRAC_1_SQRT_2, EPSILON));
@@ -363,7 +358,7 @@ mod test {
         assert_ok!(panner.calculate_gains(
             Degrees::new(90.0).unwrap(),
             Degrees::ZERO,
-            Distance::new(1.0).unwrap(),
+            Distance::ONE,
             &mut gains
         ));
 
@@ -383,7 +378,7 @@ mod test {
         assert_ok!(panner.calculate_gains(
             Degrees::new(-90.0).unwrap(),
             Degrees::ZERO,
-            Distance::new(1.0).unwrap(),
+            Distance::ONE,
             &mut gains
         ));
 

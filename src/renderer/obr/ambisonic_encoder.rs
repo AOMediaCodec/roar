@@ -336,7 +336,7 @@ mod test {
             LinearGain::ONE,
             Degrees::new(azimuth).unwrap(),
             Degrees::new(elevation).unwrap(),
-            Distance::new(1.0).unwrap(),
+            Distance::ONE,
         );
         let mut input_buffer = AudioBuffer::new(NUMBER_OF_INPUT_CHANNELS, BUFFER_SIZE);
         input_buffer.channel_mut(0).as_mut_slice().fill(1.0);
@@ -442,19 +442,13 @@ mod test {
         let ambisonic_order = 1;
         let num_out = 4;
         let mut encoder = AmbisonicEncoder::new(NUMBER_OF_INPUT_CHANNELS, ambisonic_order);
-        encoder.set_source(
-            0,
-            LinearGain::ONE,
-            Degrees::ZERO,
-            Degrees::ZERO,
-            Distance::new(1.0).unwrap(),
-        );
+        encoder.set_source(0, LinearGain::ONE, Degrees::ZERO, Degrees::ZERO, Distance::ONE);
         encoder.set_source(
             0,
             LinearGain::ONE,
             Degrees::new(90.0).unwrap(),
             Degrees::ZERO,
-            Distance::new(1.0).unwrap(),
+            Distance::ONE,
         );
         let mut input_buffer = AudioBuffer::new(NUMBER_OF_INPUT_CHANNELS, buffer_size);
         input_buffer.channel_mut(0).as_mut_slice().fill(1.0);
@@ -477,13 +471,7 @@ mod test {
         let ambisonic_order = 1;
         let num_out = 4;
         let mut encoder = AmbisonicEncoder::new(NUMBER_OF_INPUT_CHANNELS, ambisonic_order);
-        encoder.set_source(
-            0,
-            LinearGain::ONE,
-            Degrees::ZERO,
-            Degrees::ZERO,
-            Distance::new(1.0).unwrap(),
-        );
+        encoder.set_source(0, LinearGain::ONE, Degrees::ZERO, Degrees::ZERO, Distance::ONE);
         let mut input_buffer = AudioBuffer::new(NUMBER_OF_INPUT_CHANNELS, buffer_size);
         input_buffer.channel_mut(0).as_mut_slice().fill(1.0);
         let mut output_buffer = AudioBuffer::new(num_out, buffer_size);
@@ -494,7 +482,7 @@ mod test {
             LinearGain::ONE,
             Degrees::new(90.0).unwrap(),
             Degrees::ZERO,
-            Distance::new(1.0).unwrap(),
+            Distance::ONE,
         );
         encoder.process_planar_audio_data(&input_buffer, &mut output_buffer);
 
