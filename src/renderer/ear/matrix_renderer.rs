@@ -86,8 +86,13 @@ pub(crate) const fn s(in_ch: u8, out_ch: u8, lookup_idx: u8) -> SparseMatrixEntr
 /// passes).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MatrixData<'a> {
-    /// Uncompressed dense slice of `f32` weights.
-    Dense(&'a [f32]),
+    /// Dense slice of `f32` weights scaled by a uniform scalar multiplier `scale`.
+    Dense {
+        /// Base dense `f32` matrix weights.
+        weights: &'a [f32],
+        /// Scalar normalization factor applied to each weight.
+        scale: f32,
+    },
     /// Sparse non-zero entries paired with a lookup table of `f32` gain weights.
     Sparse {
         /// Non-zero `(in_ch, out_ch, lookup_idx)` entries.
@@ -113,27 +118,33 @@ pub struct MatrixView<'a> {
     pub in_idx_map: Option<&'a [usize]>,
 }
 
-/// Accumulates dense `weights` across all `(in_idx, out_idx)` pairs into zero-initialized
-/// `out_slices`.
+/// Accumulates dense `weights` scaled by `scale` across all `(in_idx, out_idx)` pairs into
+/// zero-initialized `out_slices`.
 fn multiply_dense_matrix(
     weights: &[f32],
+    scale: f32,
     matrix: &MatrixView<'_>,
     inputs: PlanarBufferRef<'_, '_>,
     out_slices: &mut [&mut [f32]],
 ) -> Result<(), OarError> {
+    if scale == 0.0 {
+        return Ok(());
+    }
     for in_idx in 0..matrix.in_dim {
         let in_slice = inputs.channel(in_idx);
         let in_mapped_idx = match matrix.in_idx_map {
             Some(map) => *map.get(in_idx).ok_or(OarError::InvalidParameter)?,
             None => in_idx,
         };
+        let col_offset = in_mapped_idx * matrix.in_stride;
 
         for (out_idx, out_slice) in out_slices.iter_mut().enumerate().take(matrix.out_dim) {
-            let mat_idx = out_idx * matrix.out_stride + in_mapped_idx * matrix.in_stride;
-            let Some(&c) = weights.get(mat_idx) else {
-                continue;
-            };
-            simd_utils::scalar_multiply_and_accumulate(c, in_slice, out_slice);
+            let mat_idx = out_idx * matrix.out_stride + col_offset;
+            if let Some(&raw_c) = weights.get(mat_idx)
+                && raw_c != 0.0
+            {
+                simd_utils::scalar_multiply_and_accumulate(raw_c * scale, in_slice, out_slice);
+            }
         }
     }
     Ok(())
@@ -232,8 +243,14 @@ pub fn multiply_channels_by_matrix_c(
     }
 
     match matrix.data {
-        MatrixData::Dense(weights) => {
-            multiply_dense_matrix(weights, matrix, inputs, &mut out_slices[..matrix.out_dim])?;
+        MatrixData::Dense { weights, scale } => {
+            multiply_dense_matrix(
+                weights,
+                scale,
+                matrix,
+                inputs,
+                &mut out_slices[..matrix.out_dim],
+            )?;
         }
         MatrixData::Sparse { entries, lookup } => {
             multiply_sparse_matrix(
@@ -290,7 +307,7 @@ mod tests {
         let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 2, samples_2).unwrap();
 
         let mv = MatrixView {
-            data: MatrixData::Dense(&mat),
+            data: MatrixData::Dense { weights: &mat, scale: 1.0 },
             in_dim: 2,
             in_stride: 1,
             out_dim: 2,
@@ -319,7 +336,7 @@ mod tests {
         let inputs_buf = PlanarBufferRef::new(&inputs, 1, samples_1).unwrap();
         let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 1, samples_1).unwrap();
         let mv = MatrixView {
-            data: MatrixData::Dense(&mat),
+            data: MatrixData::Dense { weights: &mat, scale: 1.0 },
             in_dim: 1,
             in_stride: 1,
             out_dim: 1,
@@ -344,7 +361,7 @@ mod tests {
         let inputs_buf = PlanarBufferRef::new(&inputs, 1, samples_1).unwrap();
         let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 1, samples_1).unwrap();
         let mv = MatrixView {
-            data: MatrixData::Dense(&mat),
+            data: MatrixData::Dense { weights: &mat, scale: 1.0 },
             in_dim: 0,
             in_stride: 1,
             out_dim: 1,
@@ -369,7 +386,7 @@ mod tests {
         let inputs_buf = PlanarBufferRef::new(&inputs, 1, samples_2).unwrap();
         let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 1, samples_2).unwrap();
         let mv = MatrixView {
-            data: MatrixData::Dense(&mat),
+            data: MatrixData::Dense { weights: &mat, scale: 1.0 },
             in_dim: 1,
             in_stride: 1,
             out_dim: 1,
@@ -396,7 +413,7 @@ mod tests {
         let inputs_buf = PlanarBufferRef::new(&inputs, 2, samples_1).unwrap();
         let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 1, samples_1).unwrap();
         let mv = MatrixView {
-            data: MatrixData::Dense(&mat),
+            data: MatrixData::Dense { weights: &mat, scale: 1.0 },
             in_dim: 2,
             in_stride: 1,
             out_dim: 1,
@@ -483,5 +500,33 @@ mod tests {
         expect_ok!(result);
         expect_that!(out_left[0], eq(0.0f32));
         expect_that!(out_right[0], eq(21.0f32));
+    }
+
+    #[gtest]
+    fn multiply_channels_by_matrix_dense_with_scale_scales_weights_and_accumulates() {
+        let mat = [2.0f32, 3.0f32, 99.0f32, 4.0f32, 5.0f32, 99.0f32];
+        let in_ch0 = [10.0f32];
+        let in_ch1 = [2.0f32];
+        let mut out_ch0 = [0.0f32];
+        let mut out_ch1 = [0.0f32];
+        let inputs = [&in_ch0[..], &in_ch1[..]];
+        let mut out_slices = [&mut out_ch0[..], &mut out_ch1[..]];
+        let samples_1 = Samples::new(1).unwrap();
+        let inputs_buf = PlanarBufferRef::new(&inputs, 2, samples_1).unwrap();
+        let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 2, samples_1).unwrap();
+        let mv = MatrixView {
+            data: MatrixData::Dense { weights: &mat, scale: 1.5 },
+            in_dim: 2,
+            in_stride: 1,
+            out_dim: 2,
+            out_stride: 3,
+            in_idx_map: None,
+        };
+
+        let result = multiply_channels_by_matrix_c(&mv, inputs_buf, &mut outputs_buf);
+
+        expect_ok!(result);
+        expect_that!(out_ch0[0], eq(39.0f32));
+        expect_that!(out_ch1[0], eq(75.0f32));
     }
 }

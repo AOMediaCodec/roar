@@ -14,16 +14,17 @@
 //!
 //! Direct Rust port of `liboar/src/renderer/ear/ear.c` and `ear.h`.
 //! Responsible for applying exact multi-channel to multi-channel and
-//! High-Order Ambisonics to multi-channel (H2M) rendering to channel-based
+//! High-Order Ambisonics to multi-channel rendering to channel-based
 //! and scene-based audio elements according to target loudspeaker layouts.
 
 use crate::common::definitions::{
-    AudioElementConfig, HighOrderAmbisonics, InputLayout, OarError, OutputLayout, PlanarBufferMut,
-    PlanarBufferRef, MAX_OUTPUT_CHANNEL_COUNT,
+    AudioElementConfig, InputLayout, OarError, OutputLayout, PlanarBufferMut, PlanarBufferRef,
+    MAX_OUTPUT_CHANNEL_COUNT,
 };
 use crate::renderer::audio_renderer_api::AudioRenderer;
 use crate::renderer::ear::ambisonic_to_channel_renderer::{
-    element_renderer_get_h2m_matrix, element_renderer_render_h2m, H2mRdr,
+    element_renderer_get_ambi_to_chan_matrix, element_renderer_render_ambi_to_chan,
+    AmbisonicToChannelRenderer,
 };
 use crate::renderer::ear::channel_to_channel_renderer::{
     element_renderer_get_chan_to_chan_custom_matrix, element_renderer_get_chan_to_chan_matrix,
@@ -55,8 +56,8 @@ pub enum EarRenderingMode {
         /// Physical channel mapping index slice.
         channels_map: Vec<usize>,
     },
-    /// High-Order Ambisonics to multichannel matrix (`H2M`).
-    Scene(H2mRdr),
+    /// High-Order Ambisonics to multichannel matrix.
+    Scene(AmbisonicToChannelRenderer),
 }
 
 impl EarRenderer {
@@ -136,22 +137,9 @@ impl AudioRenderer for EarRenderer {
                 Err(OarError::NotSupported)
             }
             AudioElementConfig::SceneBased(sb) => {
-                let mut h2m = H2mRdr {
-                    in_order: HighOrderAmbisonics::Zoa,
-                    out_system: OutputLayout::Mono,
-                    channels: 0,
-                    lfe1: 0,
-                    lfe2: 0,
-                    mat: &[],
-                    m: 0,
-                    n: 0,
-                };
-                if element_renderer_get_h2m_matrix(sb.order, out_system, &mut h2m).is_ok() {
-                    self.active_mode = Some(EarRenderingMode::Scene(h2m));
-                    Ok(())
-                } else {
-                    Err(OarError::NotSupported)
-                }
+                let ambi_to_chan = element_renderer_get_ambi_to_chan_matrix(sb.order, out_system)?;
+                self.active_mode = Some(EarRenderingMode::Scene(ambi_to_chan));
+                Ok(())
             }
             AudioElementConfig::ObjectBased(_) => Err(OarError::NotSupported),
         }
@@ -174,7 +162,7 @@ impl AudioRenderer for EarRenderer {
                 (chan_to_chan.m, chan_to_chan.n)
             }
             Some(EarRenderingMode::ChannelCustom { matrix, .. }) => (matrix.m, matrix.n),
-            Some(EarRenderingMode::Scene(h2m)) => (h2m.m, h2m.channels),
+            Some(EarRenderingMode::Scene(ambi_to_chan)) => (ambi_to_chan.m, ambi_to_chan.channels),
             None => return Err(OarError::NotSupported),
         };
         if inputs.num_channels() != expected_in_channels
@@ -192,7 +180,9 @@ impl AudioRenderer for EarRenderer {
             Some(EarRenderingMode::ChannelCustom { matrix, channels_map }) => {
                 element_renderer_render_chan_to_chan_custom(matrix, inputs, output, channels_map)
             }
-            Some(EarRenderingMode::Scene(h2m)) => element_renderer_render_h2m(h2m, inputs, output),
+            Some(EarRenderingMode::Scene(ambi_to_chan)) => {
+                element_renderer_render_ambi_to_chan(ambi_to_chan, inputs, output)
+            }
             None => Err(OarError::NotSupported),
         }
     }
