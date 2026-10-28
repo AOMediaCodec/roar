@@ -13,7 +13,7 @@
 //! A spatially-oriented headphone/binaural renderer (`EAR` library port).
 //!
 //! Direct Rust port of `liboar/src/renderer/ear/ear.c` and `ear.h`.
-//! Responsible for applying exact multi-channel to multi-channel (M2M) and
+//! Responsible for applying exact multi-channel to multi-channel and
 //! High-Order Ambisonics to multi-channel (H2M) rendering to channel-based
 //! and scene-based audio elements according to target loudspeaker layouts.
 
@@ -26,14 +26,14 @@ use crate::renderer::ear::ambisonic_to_channel_renderer::{
     element_renderer_get_h2m_matrix, element_renderer_render_h2m, H2mRdr,
 };
 use crate::renderer::ear::channel_to_channel_renderer::{
-    element_renderer_get_m2m_custom_matrix, element_renderer_get_m2m_matrix,
-    element_renderer_render_m2m, element_renderer_render_m2m_custom, is_predefined_input_layout,
-    layout_to_subset_custom, M2mRdr,
+    element_renderer_get_chan_to_chan_custom_matrix, element_renderer_get_chan_to_chan_matrix,
+    element_renderer_render_chan_to_chan, element_renderer_render_chan_to_chan_custom,
+    is_predefined_input_layout, layout_to_subset_custom, ChannelToChannelRenderer,
 };
 
 /// A spatially-oriented headphone/binaural renderer.
 ///
-/// `EarRenderer` applies target-layout conversion matrices (`M2M` and `H2M`)
+/// `EarRenderer` applies target-layout conversion matrices
 /// to spatialized planar audio outputs, matching `ear_renderer_t` of `ear.c`.
 #[derive(Debug, Clone)]
 pub struct EarRenderer {
@@ -47,11 +47,11 @@ pub struct EarRenderer {
 #[derive(Debug, Clone)]
 pub enum EarRenderingMode {
     /// Predefined channel-to-channel matrix (`sp_type == 0`).
-    ChannelPredefined(M2mRdr),
+    ChannelPredefined(ChannelToChannelRenderer),
     /// Custom subset layout channel matrix (`sp_type == 1`).
     ChannelCustom {
         /// Matrix structure containing matching strides.
-        matrix: M2mRdr,
+        matrix: ChannelToChannelRenderer,
         /// Physical channel mapping index slice.
         channels_map: Vec<usize>,
     },
@@ -87,22 +87,28 @@ impl AudioRenderer for EarRenderer {
             AudioElementConfig::ChannelBased(cb) => {
                 // Determine if this is a full predefined input layout or custom subset
                 if is_predefined_input_layout(cb.layout) {
-                    let mut m2m = M2mRdr {
+                    let mut chan_to_chan = ChannelToChannelRenderer {
                         in_system: InputLayout::Mono,
                         out_system: OutputLayout::Mono,
                         mat: &[],
                         m: 0,
                         n: 0,
                     };
-                    if element_renderer_get_m2m_matrix(cb.layout, out_system, &mut m2m).is_ok() {
-                        self.active_mode = Some(EarRenderingMode::ChannelPredefined(m2m));
+                    if element_renderer_get_chan_to_chan_matrix(
+                        cb.layout,
+                        out_system,
+                        &mut chan_to_chan,
+                    )
+                    .is_ok()
+                    {
+                        self.active_mode = Some(EarRenderingMode::ChannelPredefined(chan_to_chan));
                         return Ok(());
                     }
                 }
 
                 // Try subset custom layout check (`_rid_sp_labels_map`)
                 if let Some((base_system, flags)) = layout_to_subset_custom(cb.layout) {
-                    let mut m2m = M2mRdr {
+                    let mut chan_to_chan = ChannelToChannelRenderer {
                         in_system: InputLayout::Mono,
                         out_system: OutputLayout::Mono,
                         mat: &[],
@@ -110,18 +116,18 @@ impl AudioRenderer for EarRenderer {
                         n: 0,
                     };
                     let mut chmap_buf = [0usize; MAX_OUTPUT_CHANNEL_COUNT];
-                    if element_renderer_get_m2m_custom_matrix(
+                    if element_renderer_get_chan_to_chan_custom_matrix(
                         base_system,
                         flags,
                         out_system,
-                        &mut m2m,
+                        &mut chan_to_chan,
                         &mut chmap_buf,
                     )
                     .is_ok()
                     {
                         self.active_mode = Some(EarRenderingMode::ChannelCustom {
-                            matrix: m2m,
-                            channels_map: chmap_buf[..m2m.m].to_vec(),
+                            matrix: chan_to_chan,
+                            channels_map: chmap_buf[..chan_to_chan.m].to_vec(),
                         });
                         return Ok(());
                     }
@@ -164,7 +170,9 @@ impl AudioRenderer for EarRenderer {
             return Err(OarError::InvalidParameter);
         }
         let (expected_in_channels, expected_out_channels) = match &self.active_mode {
-            Some(EarRenderingMode::ChannelPredefined(m2m)) => (m2m.m, m2m.n),
+            Some(EarRenderingMode::ChannelPredefined(chan_to_chan)) => {
+                (chan_to_chan.m, chan_to_chan.n)
+            }
             Some(EarRenderingMode::ChannelCustom { matrix, .. }) => (matrix.m, matrix.n),
             Some(EarRenderingMode::Scene(h2m)) => (h2m.m, h2m.channels),
             None => return Err(OarError::NotSupported),
@@ -178,11 +186,11 @@ impl AudioRenderer for EarRenderer {
         }
 
         match &self.active_mode {
-            Some(EarRenderingMode::ChannelPredefined(m2m)) => {
-                element_renderer_render_m2m(m2m, inputs, output)
+            Some(EarRenderingMode::ChannelPredefined(chan_to_chan)) => {
+                element_renderer_render_chan_to_chan(chan_to_chan, inputs, output)
             }
             Some(EarRenderingMode::ChannelCustom { matrix, channels_map }) => {
-                element_renderer_render_m2m_custom(matrix, inputs, output, channels_map)
+                element_renderer_render_chan_to_chan_custom(matrix, inputs, output, channels_map)
             }
             Some(EarRenderingMode::Scene(h2m)) => element_renderer_render_h2m(h2m, inputs, output),
             None => Err(OarError::NotSupported),

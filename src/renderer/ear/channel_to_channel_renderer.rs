@@ -11,7 +11,7 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::excessive_precision)]
 
-//! Multi-channel to multi-channel (M2M) renderer and pre-computed gain matrices.
+//! Multi-channel to multi-channel renderer and pre-computed gain matrices.
 //!
 //! Direct Rust port of `liboar/src/renderer/ear/m2m_rdr.c` and `ae_rdr.h`.
 
@@ -19,7 +19,7 @@ use crate::common::definitions::{
     InputLayout, OarError, OutputLayout, PlanarBufferMut, PlanarBufferRef,
 };
 use crate::renderer::ear::matrix_renderer::{
-    matrix_render, MatrixData, MatrixView, SparseMatrixEntry,
+    matrix_render, s, MatrixData, MatrixView, SparseMatrixEntry,
 };
 use std::f32::consts::FRAC_1_SQRT_2;
 
@@ -61,10 +61,10 @@ pub const SP_BM135: u64 = 0x200000000;
 /// Channel-to-channel matrix entry defining input/output systems and sparse non-zero gain
 /// routing (`m2m_rdr_t`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct M2mRdr {
+pub struct ChannelToChannelRenderer {
     pub in_system: InputLayout,
     pub out_system: OutputLayout,
-    /// Non-zero `(in_ch, out_ch, lut_idx)` entries indexing into [`M2M_GAIN_LUT`].
+    /// Non-zero `(in_ch, out_ch, lookup_idx)` entries indexing into [`CHAN_TO_CHAN_GAIN_LOOKUP`].
     pub mat: &'static [SparseMatrixEntry],
     /// Number of input channels.
     pub m: usize,
@@ -141,14 +141,14 @@ pub fn layout_to_subset_custom(layout: InputLayout) -> Option<(InputLayout, u64)
 // processing below. 3.1.2ch -> 5.1.2ch -> Playback layout 7.1.2ch -> 7.1.4ch ->
 // Playback layout
 
-/// Lookup table of the 8 unique non-zero `f32` gain coefficients used across all M2M
-/// conversion matrices.
+/// Lookup table of the 8 unique non-zero `f32` gain coefficients used across all
+/// channel-to-channel conversion matrices.
 ///
 /// Zero weights (`0.0`, which account for 89.3% of dense matrix cells) are omitted by the
 /// sparse representation. Combining 2-byte [`SparseMatrixEntry`] values with this 8-entry
 /// table compresses the 18,839 matrix weights from 75,356 bytes to 4,062 bytes (18.6x
 /// reduction) without any loss of precision.
-pub static M2M_GAIN_LUT: [f32; 8] = [
+pub static CHAN_TO_CHAN_GAIN_LOOKUP: [f32; 8] = [
     1.0,                       // 0: 1
     0.5,                       // 1: 1/2
     FRAC_1_SQRT_2,             // 2: 1/sqrt(2)
@@ -158,11 +158,6 @@ pub static M2M_GAIN_LUT: [f32; 8] = [
     0.5 + FRAC_1_SQRT_2,       // 6: 1/2 + 1/sqrt(2)
     0.5 + FRAC_1_SQRT_2 / 2.0, // 7: 1/2 + 1/(2*sqrt(2))
 ];
-
-/// Shorthand compile-time constructor for [`SparseMatrixEntry::new`].
-const fn s(in_ch: u8, out_ch: u8, lut_idx: u8) -> SparseMatrixEntry {
-    SparseMatrixEntry::new(in_ch, out_ch, lut_idx)
-}
 
 #[rustfmt::skip]
 pub static MONO_BS020: [SparseMatrixEntry; 2] = [
@@ -1100,215 +1095,215 @@ pub static IAMF10293_IAMF916: [SparseMatrixEntry; 30] = [
 ////////////////////////////////
 
 #[rustfmt::skip]
-pub static M2M_RDR_TAB: [M2mRdr; 208] = [
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::Stereo, mat: &MONO_BS020, m: 1, n: 2 },
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::Layout51, mat: &MONO_BS050, m: 1, n: 6 },
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::Layout512, mat: &MONO_BS250, m: 1, n: 8 },
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::Layout514, mat: &MONO_BS450, m: 1, n: 10 },
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::SoundSystemE451, mat: &MONO_BS451, m: 1, n: 11 },
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::SoundSystemF370, mat: &MONO_BS370, m: 1, n: 12 },
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::SoundSystemG490, mat: &MONO_BS490, m: 1, n: 14 },
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::LayoutA293, mat: &MONO_BS9A3, m: 1, n: 24 },
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::Layout71, mat: &MONO_BS070, m: 1, n: 8 },
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::Layout714, mat: &MONO_BS470, m: 1, n: 12 },
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::Layout312, mat: &MONO_IAMF312, m: 1, n: 6 },
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::Layout712, mat: &MONO_IAMF712, m: 1, n: 10 },
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::Binaural, mat: &MONO_BS020, m: 1, n: 2 },
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::Mono, mat: &MONO_MONO, m: 1, n: 1 },
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::Layout916, mat: &MONO_IAMF916, m: 1, n: 16 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::Stereo, mat: &STEREO_BS020, m: 2, n: 2 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout51, mat: &STEREO_BS050, m: 2, n: 6 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout512, mat: &STEREO_BS250, m: 2, n: 8 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout514, mat: &STEREO_BS450, m: 2, n: 10 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::SoundSystemE451, mat: &STEREO_BS451, m: 2, n: 11 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::SoundSystemF370, mat: &STEREO_BS370, m: 2, n: 12 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::SoundSystemG490, mat: &STEREO_BS490, m: 2, n: 14 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::LayoutA293, mat: &STEREO_BS9A3, m: 2, n: 24 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout71, mat: &STEREO_BS070, m: 2, n: 8 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout714, mat: &STEREO_BS470, m: 2, n: 12 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout312, mat: &STEREO_IAMF312, m: 2, n: 6 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout712, mat: &STEREO_IAMF712, m: 2, n: 10 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::Binaural, mat: &STEREO_BS020, m: 2, n: 2 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::Mono, mat: &STEREO_MONO, m: 2, n: 1 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout916, mat: &STEREO_IAMF916, m: 2, n: 16 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::Stereo, mat: &IAMF312_BS020, m: 6, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout51, mat: &IAMF312_BS050, m: 6, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout512, mat: &IAMF312_BS250, m: 6, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout514, mat: &IAMF312_BS450, m: 6, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::SoundSystemE451, mat: &IAMF312_BS451, m: 6, n: 11 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::SoundSystemF370, mat: &IAMF312_BS370, m: 6, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::SoundSystemG490, mat: &IAMF312_BS490, m: 6, n: 14 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::LayoutA293, mat: &IAMF312_BS9A3, m: 6, n: 24 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout71, mat: &IAMF312_BS070, m: 6, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout714, mat: &IAMF312_BS470, m: 6, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout312, mat: &IAMF312_IAMF312, m: 6, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout712, mat: &IAMF312_IAMF712, m: 6, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::Binaural, mat: &IAMF312_BS020, m: 6, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::Mono, mat: &IAMF312_MONO, m: 6, n: 1 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout916, mat: &IAMF312_IAMF916, m: 6, n: 16 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::Stereo, mat: &IAMF51_BS020, m: 6, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout51, mat: &IAMF51_BS050, m: 6, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout512, mat: &IAMF51_BS250, m: 6, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout514, mat: &IAMF51_BS450, m: 6, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::SoundSystemE451, mat: &IAMF51_BS451, m: 6, n: 11 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::SoundSystemF370, mat: &IAMF51_BS370, m: 6, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::SoundSystemG490, mat: &IAMF51_BS490, m: 6, n: 14 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::LayoutA293, mat: &IAMF51_BS9A3, m: 6, n: 24 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout71, mat: &IAMF51_BS070, m: 6, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout714, mat: &IAMF51_BS470, m: 6, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout312, mat: &IAMF51_IAMF312, m: 6, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout712, mat: &IAMF51_IAMF712, m: 6, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::Binaural, mat: &IAMF51_BS020, m: 6, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::Mono, mat: &IAMF51_MONO, m: 6, n: 1 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout916, mat: &IAMF51_IAMF916, m: 6, n: 16 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::Stereo, mat: &IAMF512_BS020, m: 8, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout51, mat: &IAMF512_BS050, m: 8, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout512, mat: &IAMF512_BS250, m: 8, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout514, mat: &IAMF512_BS450, m: 8, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::SoundSystemE451, mat: &IAMF512_BS451, m: 8, n: 11 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::SoundSystemF370, mat: &IAMF512_BS370, m: 8, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::SoundSystemG490, mat: &IAMF512_BS490, m: 8, n: 14 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::LayoutA293, mat: &IAMF512_BS9A3, m: 8, n: 24 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout71, mat: &IAMF512_BS070, m: 8, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout714, mat: &IAMF512_BS470, m: 8, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout312, mat: &IAMF512_IAMF312, m: 8, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout712, mat: &IAMF512_IAMF712, m: 8, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::Binaural, mat: &IAMF512_BS020, m: 8, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::Mono, mat: &IAMF512_MONO, m: 8, n: 1 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout916, mat: &IAMF512_IAMF916, m: 8, n: 16 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::Stereo, mat: &IAMF514_BS020, m: 10, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout51, mat: &IAMF514_BS050, m: 10, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout512, mat: &IAMF514_BS250, m: 10, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout514, mat: &IAMF514_BS450, m: 10, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::SoundSystemE451, mat: &IAMF514_BS451, m: 10, n: 11 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::SoundSystemF370, mat: &IAMF514_BS370, m: 10, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::SoundSystemG490, mat: &IAMF514_BS490, m: 10, n: 14 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::LayoutA293, mat: &IAMF514_BS9A3, m: 10, n: 24 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout71, mat: &IAMF514_BS070, m: 10, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout714, mat: &IAMF514_BS470, m: 10, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout312, mat: &IAMF514_IAMF312, m: 10, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout712, mat: &IAMF514_IAMF712, m: 10, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::Binaural, mat: &IAMF514_BS020, m: 10, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::Mono, mat: &IAMF514_MONO, m: 10, n: 1 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout916, mat: &IAMF514_IAMF916, m: 10, n: 16 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::Stereo, mat: &IAMF71_BS020, m: 8, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout51, mat: &IAMF71_BS050, m: 8, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout512, mat: &IAMF71_BS250, m: 8, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout514, mat: &IAMF71_BS450, m: 8, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::SoundSystemE451, mat: &IAMF71_BS451, m: 8, n: 11 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::SoundSystemF370, mat: &IAMF71_BS370, m: 8, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::SoundSystemG490, mat: &IAMF71_BS490, m: 8, n: 14 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::LayoutA293, mat: &IAMF71_BS9A3, m: 8, n: 24 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout71, mat: &IAMF71_BS070, m: 8, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout714, mat: &IAMF71_BS470, m: 8, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout312, mat: &IAMF71_IAMF312, m: 8, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout712, mat: &IAMF71_IAMF712, m: 8, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::Binaural, mat: &IAMF71_BS020, m: 8, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::Mono, mat: &IAMF71_MONO, m: 8, n: 1 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout916, mat: &IAMF71_IAMF916, m: 8, n: 16 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::Stereo, mat: &IAMF712_BS020, m: 10, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout51, mat: &IAMF712_BS050, m: 10, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout512, mat: &IAMF712_BS250, m: 10, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout514, mat: &IAMF712_BS450, m: 10, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::SoundSystemE451, mat: &IAMF712_BS451, m: 10, n: 11 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::SoundSystemF370, mat: &IAMF712_BS370, m: 10, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::SoundSystemG490, mat: &IAMF712_BS490, m: 10, n: 14 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::LayoutA293, mat: &IAMF712_BS9A3, m: 10, n: 24 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout71, mat: &IAMF712_BS070, m: 10, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout714, mat: &IAMF712_BS470, m: 10, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout312, mat: &IAMF712_IAMF312, m: 10, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout712, mat: &IAMF712_IAMF712, m: 10, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::Binaural, mat: &IAMF712_BS020, m: 10, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::Mono, mat: &IAMF712_MONO, m: 10, n: 1 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout916, mat: &IAMF712_IAMF916, m: 10, n: 16 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::Stereo, mat: &IAMF714_BS020, m: 12, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout51, mat: &IAMF714_BS050, m: 12, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout512, mat: &IAMF714_BS250, m: 12, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout514, mat: &IAMF714_BS450, m: 12, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::SoundSystemE451, mat: &IAMF714_BS451, m: 12, n: 11 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::SoundSystemF370, mat: &IAMF714_BS370, m: 12, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::SoundSystemG490, mat: &IAMF714_BS490, m: 12, n: 14 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::LayoutA293, mat: &IAMF714_BS9A3, m: 12, n: 24 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout71, mat: &IAMF714_BS070, m: 12, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout714, mat: &IAMF714_BS470, m: 12, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout312, mat: &IAMF714_IAMF312, m: 12, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout712, mat: &IAMF714_IAMF712, m: 12, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::Binaural, mat: &IAMF714_BS020, m: 12, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::Mono, mat: &IAMF714_MONO, m: 12, n: 1 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout916, mat: &IAMF714_IAMF916, m: 12, n: 16 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::Stereo, mat: &STEREO_BS020, m: 2, n: 2 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout51, mat: &STEREO_BS050, m: 2, n: 6 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout512, mat: &STEREO_BS250, m: 2, n: 8 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout514, mat: &STEREO_BS450, m: 2, n: 10 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::SoundSystemE451, mat: &STEREO_BS451, m: 2, n: 11 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::SoundSystemF370, mat: &STEREO_BS370, m: 2, n: 12 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::SoundSystemG490, mat: &STEREO_BS490, m: 2, n: 14 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::LayoutA293, mat: &STEREO_BS9A3, m: 2, n: 24 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout71, mat: &STEREO_BS070, m: 2, n: 8 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout714, mat: &STEREO_BS470, m: 2, n: 12 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout312, mat: &STEREO_IAMF312, m: 2, n: 6 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout712, mat: &STEREO_IAMF712, m: 2, n: 10 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::Binaural, mat: &STEREO_BS020, m: 2, n: 2 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::Mono, mat: &STEREO_MONO, m: 2, n: 1 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout916, mat: &STEREO_IAMF916, m: 2, n: 16 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::Stereo, mat: &IAMF916_BS020, m: 16, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout51, mat: &IAMF916_BS050, m: 16, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout512, mat: &IAMF916_BS250, m: 16, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout514, mat: &IAMF916_BS450, m: 16, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::SoundSystemE451, mat: &IAMF916_BS451, m: 16, n: 11 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::SoundSystemF370, mat: &IAMF916_BS370, m: 16, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::SoundSystemG490, mat: &IAMF916_BS490, m: 16, n: 14 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::LayoutA293, mat: &IAMF916_BS9A3, m: 16, n: 24 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout71, mat: &IAMF916_BS070, m: 16, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout714, mat: &IAMF916_BS470, m: 16, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout312, mat: &IAMF916_IAMF312, m: 16, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout712, mat: &IAMF916_IAMF712, m: 16, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::Binaural, mat: &IAMF916_BS020, m: 16, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::Mono, mat: &IAMF916_MONO, m: 16, n: 1 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout916, mat: &IAMF916_IAMF916, m: 16, n: 16 },
-    M2mRdr { in_system: InputLayout::Mono, out_system: OutputLayout::Layout7154, mat: &MONO_IAMF7154, m: 1, n: 17 },
-    M2mRdr { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout7154, mat: &STEREO_IAMF7154, m: 2, n: 17 },
-    M2mRdr { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout7154, mat: &IAMF312_IAMF7154, m: 6, n: 17 },
-    M2mRdr { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout7154, mat: &IAMF51_IAMF7154, m: 6, n: 17 },
-    M2mRdr { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout7154, mat: &IAMF512_IAMF7154, m: 8, n: 17 },
-    M2mRdr { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout7154, mat: &IAMF514_IAMF7154, m: 10, n: 17 },
-    M2mRdr { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout7154, mat: &IAMF71_IAMF7154, m: 8, n: 17 },
-    M2mRdr { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout7154, mat: &IAMF712_IAMF7154, m: 10, n: 17 },
-    M2mRdr { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout7154, mat: &IAMF714_IAMF7154, m: 12, n: 17 },
-    M2mRdr { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout7154, mat: &IAMF916_IAMF7154, m: 16, n: 17 },
-    M2mRdr { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout7154, mat: &STEREO_IAMF7154, m: 2, n: 17 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::Stereo, mat: &IAMF7154_BS020, m: 17, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout51, mat: &IAMF7154_BS050, m: 17, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout512, mat: &IAMF7154_BS250, m: 17, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout514, mat: &IAMF7154_BS450, m: 17, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::SoundSystemE451, mat: &IAMF7154_BS451, m: 17, n: 11 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::SoundSystemF370, mat: &IAMF7154_BS370, m: 17, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::SoundSystemG490, mat: &IAMF7154_BS490, m: 17, n: 14 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::LayoutA293, mat: &IAMF7154_BS9A3, m: 17, n: 24 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout71, mat: &IAMF7154_BS070, m: 17, n: 8 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout714, mat: &IAMF7154_BS470, m: 17, n: 12 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout312, mat: &IAMF7154_IAMF312, m: 17, n: 6 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout712, mat: &IAMF7154_IAMF712, m: 17, n: 10 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout916, mat: &IAMF7154_IAMF916, m: 17, n: 16 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::Binaural, mat: &IAMF7154_BS020, m: 17, n: 2 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::Mono, mat: &IAMF7154_MONO, m: 17, n: 1 },
-    M2mRdr { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout7154, mat: &IAMF7154_IAMF7154, m: 17, n: 17 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Stereo, mat: &IAMF10293_BS020, m: 24, n: 2 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout51, mat: &IAMF10293_BS050, m: 24, n: 6 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout512, mat: &IAMF10293_BS250, m: 24, n: 8 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout514, mat: &IAMF10293_BS450, m: 24, n: 10 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::SoundSystemE451, mat: &IAMF10293_BS451, m: 24, n: 11 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::SoundSystemF370, mat: &IAMF10293_BS370, m: 24, n: 12 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::SoundSystemG490, mat: &IAMF10293_BS490, m: 24, n: 14 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::LayoutA293, mat: &IAMF10293_BS9A3, m: 24, n: 24 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout71, mat: &IAMF10293_BS070, m: 24, n: 8 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout714, mat: &IAMF10293_BS470, m: 24, n: 12 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout312, mat: &IAMF10293_IAMF312, m: 24, n: 6 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout712, mat: &IAMF10293_IAMF712, m: 24, n: 10 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout916, mat: &IAMF10293_IAMF916, m: 24, n: 16 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Binaural, mat: &IAMF10293_BS020, m: 24, n: 2 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Mono, mat: &IAMF10293_MONO, m: 24, n: 1 },
-    M2mRdr { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout7154, mat: &IAMF10293_IAMF7154, m: 24, n: 17 },
+pub static CHAN_TO_CHAN_RDR_TAB: [ChannelToChannelRenderer; 208] = [
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::Stereo, mat: &MONO_BS020, m: 1, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::Layout51, mat: &MONO_BS050, m: 1, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::Layout512, mat: &MONO_BS250, m: 1, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::Layout514, mat: &MONO_BS450, m: 1, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::SoundSystemE451, mat: &MONO_BS451, m: 1, n: 11 },
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::SoundSystemF370, mat: &MONO_BS370, m: 1, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::SoundSystemG490, mat: &MONO_BS490, m: 1, n: 14 },
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::LayoutA293, mat: &MONO_BS9A3, m: 1, n: 24 },
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::Layout71, mat: &MONO_BS070, m: 1, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::Layout714, mat: &MONO_BS470, m: 1, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::Layout312, mat: &MONO_IAMF312, m: 1, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::Layout712, mat: &MONO_IAMF712, m: 1, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::Binaural, mat: &MONO_BS020, m: 1, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::Mono, mat: &MONO_MONO, m: 1, n: 1 },
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::Layout916, mat: &MONO_IAMF916, m: 1, n: 16 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::Stereo, mat: &STEREO_BS020, m: 2, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout51, mat: &STEREO_BS050, m: 2, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout512, mat: &STEREO_BS250, m: 2, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout514, mat: &STEREO_BS450, m: 2, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::SoundSystemE451, mat: &STEREO_BS451, m: 2, n: 11 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::SoundSystemF370, mat: &STEREO_BS370, m: 2, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::SoundSystemG490, mat: &STEREO_BS490, m: 2, n: 14 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::LayoutA293, mat: &STEREO_BS9A3, m: 2, n: 24 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout71, mat: &STEREO_BS070, m: 2, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout714, mat: &STEREO_BS470, m: 2, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout312, mat: &STEREO_IAMF312, m: 2, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout712, mat: &STEREO_IAMF712, m: 2, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::Binaural, mat: &STEREO_BS020, m: 2, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::Mono, mat: &STEREO_MONO, m: 2, n: 1 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout916, mat: &STEREO_IAMF916, m: 2, n: 16 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::Stereo, mat: &IAMF312_BS020, m: 6, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout51, mat: &IAMF312_BS050, m: 6, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout512, mat: &IAMF312_BS250, m: 6, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout514, mat: &IAMF312_BS450, m: 6, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::SoundSystemE451, mat: &IAMF312_BS451, m: 6, n: 11 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::SoundSystemF370, mat: &IAMF312_BS370, m: 6, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::SoundSystemG490, mat: &IAMF312_BS490, m: 6, n: 14 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::LayoutA293, mat: &IAMF312_BS9A3, m: 6, n: 24 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout71, mat: &IAMF312_BS070, m: 6, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout714, mat: &IAMF312_BS470, m: 6, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout312, mat: &IAMF312_IAMF312, m: 6, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout712, mat: &IAMF312_IAMF712, m: 6, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::Binaural, mat: &IAMF312_BS020, m: 6, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::Mono, mat: &IAMF312_MONO, m: 6, n: 1 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout916, mat: &IAMF312_IAMF916, m: 6, n: 16 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::Stereo, mat: &IAMF51_BS020, m: 6, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout51, mat: &IAMF51_BS050, m: 6, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout512, mat: &IAMF51_BS250, m: 6, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout514, mat: &IAMF51_BS450, m: 6, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::SoundSystemE451, mat: &IAMF51_BS451, m: 6, n: 11 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::SoundSystemF370, mat: &IAMF51_BS370, m: 6, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::SoundSystemG490, mat: &IAMF51_BS490, m: 6, n: 14 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::LayoutA293, mat: &IAMF51_BS9A3, m: 6, n: 24 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout71, mat: &IAMF51_BS070, m: 6, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout714, mat: &IAMF51_BS470, m: 6, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout312, mat: &IAMF51_IAMF312, m: 6, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout712, mat: &IAMF51_IAMF712, m: 6, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::Binaural, mat: &IAMF51_BS020, m: 6, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::Mono, mat: &IAMF51_MONO, m: 6, n: 1 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout916, mat: &IAMF51_IAMF916, m: 6, n: 16 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::Stereo, mat: &IAMF512_BS020, m: 8, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout51, mat: &IAMF512_BS050, m: 8, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout512, mat: &IAMF512_BS250, m: 8, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout514, mat: &IAMF512_BS450, m: 8, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::SoundSystemE451, mat: &IAMF512_BS451, m: 8, n: 11 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::SoundSystemF370, mat: &IAMF512_BS370, m: 8, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::SoundSystemG490, mat: &IAMF512_BS490, m: 8, n: 14 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::LayoutA293, mat: &IAMF512_BS9A3, m: 8, n: 24 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout71, mat: &IAMF512_BS070, m: 8, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout714, mat: &IAMF512_BS470, m: 8, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout312, mat: &IAMF512_IAMF312, m: 8, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout712, mat: &IAMF512_IAMF712, m: 8, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::Binaural, mat: &IAMF512_BS020, m: 8, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::Mono, mat: &IAMF512_MONO, m: 8, n: 1 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout916, mat: &IAMF512_IAMF916, m: 8, n: 16 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::Stereo, mat: &IAMF514_BS020, m: 10, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout51, mat: &IAMF514_BS050, m: 10, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout512, mat: &IAMF514_BS250, m: 10, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout514, mat: &IAMF514_BS450, m: 10, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::SoundSystemE451, mat: &IAMF514_BS451, m: 10, n: 11 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::SoundSystemF370, mat: &IAMF514_BS370, m: 10, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::SoundSystemG490, mat: &IAMF514_BS490, m: 10, n: 14 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::LayoutA293, mat: &IAMF514_BS9A3, m: 10, n: 24 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout71, mat: &IAMF514_BS070, m: 10, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout714, mat: &IAMF514_BS470, m: 10, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout312, mat: &IAMF514_IAMF312, m: 10, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout712, mat: &IAMF514_IAMF712, m: 10, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::Binaural, mat: &IAMF514_BS020, m: 10, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::Mono, mat: &IAMF514_MONO, m: 10, n: 1 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout916, mat: &IAMF514_IAMF916, m: 10, n: 16 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::Stereo, mat: &IAMF71_BS020, m: 8, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout51, mat: &IAMF71_BS050, m: 8, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout512, mat: &IAMF71_BS250, m: 8, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout514, mat: &IAMF71_BS450, m: 8, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::SoundSystemE451, mat: &IAMF71_BS451, m: 8, n: 11 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::SoundSystemF370, mat: &IAMF71_BS370, m: 8, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::SoundSystemG490, mat: &IAMF71_BS490, m: 8, n: 14 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::LayoutA293, mat: &IAMF71_BS9A3, m: 8, n: 24 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout71, mat: &IAMF71_BS070, m: 8, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout714, mat: &IAMF71_BS470, m: 8, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout312, mat: &IAMF71_IAMF312, m: 8, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout712, mat: &IAMF71_IAMF712, m: 8, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::Binaural, mat: &IAMF71_BS020, m: 8, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::Mono, mat: &IAMF71_MONO, m: 8, n: 1 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout916, mat: &IAMF71_IAMF916, m: 8, n: 16 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::Stereo, mat: &IAMF712_BS020, m: 10, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout51, mat: &IAMF712_BS050, m: 10, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout512, mat: &IAMF712_BS250, m: 10, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout514, mat: &IAMF712_BS450, m: 10, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::SoundSystemE451, mat: &IAMF712_BS451, m: 10, n: 11 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::SoundSystemF370, mat: &IAMF712_BS370, m: 10, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::SoundSystemG490, mat: &IAMF712_BS490, m: 10, n: 14 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::LayoutA293, mat: &IAMF712_BS9A3, m: 10, n: 24 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout71, mat: &IAMF712_BS070, m: 10, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout714, mat: &IAMF712_BS470, m: 10, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout312, mat: &IAMF712_IAMF312, m: 10, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout712, mat: &IAMF712_IAMF712, m: 10, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::Binaural, mat: &IAMF712_BS020, m: 10, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::Mono, mat: &IAMF712_MONO, m: 10, n: 1 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout916, mat: &IAMF712_IAMF916, m: 10, n: 16 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::Stereo, mat: &IAMF714_BS020, m: 12, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout51, mat: &IAMF714_BS050, m: 12, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout512, mat: &IAMF714_BS250, m: 12, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout514, mat: &IAMF714_BS450, m: 12, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::SoundSystemE451, mat: &IAMF714_BS451, m: 12, n: 11 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::SoundSystemF370, mat: &IAMF714_BS370, m: 12, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::SoundSystemG490, mat: &IAMF714_BS490, m: 12, n: 14 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::LayoutA293, mat: &IAMF714_BS9A3, m: 12, n: 24 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout71, mat: &IAMF714_BS070, m: 12, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout714, mat: &IAMF714_BS470, m: 12, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout312, mat: &IAMF714_IAMF312, m: 12, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout712, mat: &IAMF714_IAMF712, m: 12, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::Binaural, mat: &IAMF714_BS020, m: 12, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::Mono, mat: &IAMF714_MONO, m: 12, n: 1 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout916, mat: &IAMF714_IAMF916, m: 12, n: 16 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::Stereo, mat: &STEREO_BS020, m: 2, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout51, mat: &STEREO_BS050, m: 2, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout512, mat: &STEREO_BS250, m: 2, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout514, mat: &STEREO_BS450, m: 2, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::SoundSystemE451, mat: &STEREO_BS451, m: 2, n: 11 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::SoundSystemF370, mat: &STEREO_BS370, m: 2, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::SoundSystemG490, mat: &STEREO_BS490, m: 2, n: 14 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::LayoutA293, mat: &STEREO_BS9A3, m: 2, n: 24 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout71, mat: &STEREO_BS070, m: 2, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout714, mat: &STEREO_BS470, m: 2, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout312, mat: &STEREO_IAMF312, m: 2, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout712, mat: &STEREO_IAMF712, m: 2, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::Binaural, mat: &STEREO_BS020, m: 2, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::Mono, mat: &STEREO_MONO, m: 2, n: 1 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout916, mat: &STEREO_IAMF916, m: 2, n: 16 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::Stereo, mat: &IAMF916_BS020, m: 16, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout51, mat: &IAMF916_BS050, m: 16, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout512, mat: &IAMF916_BS250, m: 16, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout514, mat: &IAMF916_BS450, m: 16, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::SoundSystemE451, mat: &IAMF916_BS451, m: 16, n: 11 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::SoundSystemF370, mat: &IAMF916_BS370, m: 16, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::SoundSystemG490, mat: &IAMF916_BS490, m: 16, n: 14 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::LayoutA293, mat: &IAMF916_BS9A3, m: 16, n: 24 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout71, mat: &IAMF916_BS070, m: 16, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout714, mat: &IAMF916_BS470, m: 16, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout312, mat: &IAMF916_IAMF312, m: 16, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout712, mat: &IAMF916_IAMF712, m: 16, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::Binaural, mat: &IAMF916_BS020, m: 16, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::Mono, mat: &IAMF916_MONO, m: 16, n: 1 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout916, mat: &IAMF916_IAMF916, m: 16, n: 16 },
+    ChannelToChannelRenderer { in_system: InputLayout::Mono, out_system: OutputLayout::Layout7154, mat: &MONO_IAMF7154, m: 1, n: 17 },
+    ChannelToChannelRenderer { in_system: InputLayout::Stereo, out_system: OutputLayout::Layout7154, mat: &STEREO_IAMF7154, m: 2, n: 17 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout312, out_system: OutputLayout::Layout7154, mat: &IAMF312_IAMF7154, m: 6, n: 17 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout51, out_system: OutputLayout::Layout7154, mat: &IAMF51_IAMF7154, m: 6, n: 17 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout512, out_system: OutputLayout::Layout7154, mat: &IAMF512_IAMF7154, m: 8, n: 17 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout514, out_system: OutputLayout::Layout7154, mat: &IAMF514_IAMF7154, m: 10, n: 17 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout71, out_system: OutputLayout::Layout7154, mat: &IAMF71_IAMF7154, m: 8, n: 17 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout712, out_system: OutputLayout::Layout7154, mat: &IAMF712_IAMF7154, m: 10, n: 17 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout714, out_system: OutputLayout::Layout7154, mat: &IAMF714_IAMF7154, m: 12, n: 17 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout916, out_system: OutputLayout::Layout7154, mat: &IAMF916_IAMF7154, m: 16, n: 17 },
+    ChannelToChannelRenderer { in_system: InputLayout::Binaural, out_system: OutputLayout::Layout7154, mat: &STEREO_IAMF7154, m: 2, n: 17 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::Stereo, mat: &IAMF7154_BS020, m: 17, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout51, mat: &IAMF7154_BS050, m: 17, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout512, mat: &IAMF7154_BS250, m: 17, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout514, mat: &IAMF7154_BS450, m: 17, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::SoundSystemE451, mat: &IAMF7154_BS451, m: 17, n: 11 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::SoundSystemF370, mat: &IAMF7154_BS370, m: 17, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::SoundSystemG490, mat: &IAMF7154_BS490, m: 17, n: 14 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::LayoutA293, mat: &IAMF7154_BS9A3, m: 17, n: 24 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout71, mat: &IAMF7154_BS070, m: 17, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout714, mat: &IAMF7154_BS470, m: 17, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout312, mat: &IAMF7154_IAMF312, m: 17, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout712, mat: &IAMF7154_IAMF712, m: 17, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout916, mat: &IAMF7154_IAMF916, m: 17, n: 16 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::Binaural, mat: &IAMF7154_BS020, m: 17, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::Mono, mat: &IAMF7154_MONO, m: 17, n: 1 },
+    ChannelToChannelRenderer { in_system: InputLayout::Layout7154, out_system: OutputLayout::Layout7154, mat: &IAMF7154_IAMF7154, m: 17, n: 17 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Stereo, mat: &IAMF10293_BS020, m: 24, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout51, mat: &IAMF10293_BS050, m: 24, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout512, mat: &IAMF10293_BS250, m: 24, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout514, mat: &IAMF10293_BS450, m: 24, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::SoundSystemE451, mat: &IAMF10293_BS451, m: 24, n: 11 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::SoundSystemF370, mat: &IAMF10293_BS370, m: 24, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::SoundSystemG490, mat: &IAMF10293_BS490, m: 24, n: 14 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::LayoutA293, mat: &IAMF10293_BS9A3, m: 24, n: 24 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout71, mat: &IAMF10293_BS070, m: 24, n: 8 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout714, mat: &IAMF10293_BS470, m: 24, n: 12 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout312, mat: &IAMF10293_IAMF312, m: 24, n: 6 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout712, mat: &IAMF10293_IAMF712, m: 24, n: 10 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout916, mat: &IAMF10293_IAMF916, m: 24, n: 16 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Binaural, mat: &IAMF10293_BS020, m: 24, n: 2 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Mono, mat: &IAMF10293_MONO, m: 24, n: 1 },
+    ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout7154, mat: &IAMF10293_IAMF7154, m: 24, n: 17 },
 ];
 
 #[rustfmt::skip]
@@ -1361,13 +1356,13 @@ pub static IAMF_SPLABEL_PER_LAYOUT: [IamfSplabelPerLayout; 13] = [
 /// # Parameters
 /// * `in_system`: Predefined input layout.
 /// * `out_system`: Target output layout.
-/// * `out_matrix`: Target `M2mRdr` structure to populate on match.
-pub fn element_renderer_get_m2m_matrix(
+/// * `out_matrix`: Target [`ChannelToChannelRenderer`] structure to populate on match.
+pub fn element_renderer_get_chan_to_chan_matrix(
     in_system: InputLayout,
     out_system: OutputLayout,
-    out_matrix: &mut M2mRdr,
+    out_matrix: &mut ChannelToChannelRenderer,
 ) -> Result<(), OarError> {
-    for entry in M2M_RDR_TAB.iter() {
+    for entry in CHAN_TO_CHAN_RDR_TAB.iter() {
         if entry.in_system == in_system && entry.out_system == out_system {
             *out_matrix = *entry;
             return Ok(());
@@ -1385,17 +1380,17 @@ pub fn element_renderer_get_m2m_matrix(
 /// * `base_system`: Base input layout containing the subset channels.
 /// * `sp_flags`: Speaker bitmask flags for the active subset channels.
 /// * `out_system`: Target output layout.
-/// * `out_matrix`: Target `M2mRdr` structure to populate on match.
+/// * `out_matrix`: Target [`ChannelToChannelRenderer`] structure to populate on match.
 /// * `chmap`: Mutable slice to receive channel mappings.
-pub fn element_renderer_get_m2m_custom_matrix(
+pub fn element_renderer_get_chan_to_chan_custom_matrix(
     base_system: InputLayout,
     sp_flags: u64,
     out_system: OutputLayout,
-    out_matrix: &mut M2mRdr,
+    out_matrix: &mut ChannelToChannelRenderer,
     chmap: &mut [usize],
 ) -> Result<(), OarError> {
     let mut m = 0;
-    for entry in M2M_RDR_TAB.iter() {
+    for entry in CHAN_TO_CHAN_RDR_TAB.iter() {
         if entry.in_system == base_system && entry.out_system == out_system {
             *out_matrix = *entry;
 
@@ -1425,27 +1420,32 @@ pub fn element_renderer_get_m2m_custom_matrix(
 /// Port of `IAMF_element_renderer_render_M2M`.
 ///
 /// # Parameters
-/// * `m2m_matrix`: Conversion matrix configuration obtained via
-///   [`element_renderer_get_m2m_matrix`].
+/// * `chan_to_chan_matrix`: Conversion matrix configuration obtained via
+///   [`element_renderer_get_chan_to_chan_matrix`].
 /// * `inputs`: Validated read-only view of planar input channels.
 /// * `outputs`: Validated mutable view of planar output channels to be overwritten with accumulated
 ///   outputs.
-pub fn element_renderer_render_m2m(
-    m2m_matrix: &M2mRdr,
+pub fn element_renderer_render_chan_to_chan(
+    chan_to_chan_matrix: &ChannelToChannelRenderer,
     inputs: PlanarBufferRef<'_, '_>,
     outputs: &mut PlanarBufferMut<'_, '_>,
 ) -> Result<(), OarError> {
-    if inputs.num_channels() != m2m_matrix.m || outputs.num_channels() != m2m_matrix.n {
+    if inputs.num_channels() != chan_to_chan_matrix.m
+        || outputs.num_channels() != chan_to_chan_matrix.n
+    {
         return Err(OarError::InvalidParameter);
     }
     if outputs.num_samples() != inputs.num_samples() {
         return Err(OarError::InvalidParameter);
     }
     let mv = MatrixView {
-        data: MatrixData::Sparse { entries: m2m_matrix.mat, lut: &M2M_GAIN_LUT },
-        in_dim: m2m_matrix.m,
-        in_stride: m2m_matrix.n,
-        out_dim: m2m_matrix.n,
+        data: MatrixData::Sparse {
+            entries: chan_to_chan_matrix.mat,
+            lookup: &CHAN_TO_CHAN_GAIN_LOOKUP,
+        },
+        in_dim: chan_to_chan_matrix.m,
+        in_stride: chan_to_chan_matrix.n,
+        out_dim: chan_to_chan_matrix.n,
         out_stride: 1,
         in_idx_map: None,
     };
@@ -1458,28 +1458,34 @@ pub fn element_renderer_render_m2m(
 /// Port of `IAMF_element_renderer_render_M2M_custom`.
 ///
 /// # Parameters
-/// * `m2m_matrix`: Conversion matrix configuration obtained via
-///   [`element_renderer_get_m2m_custom_matrix`].
+/// * `chan_to_chan_matrix`: Conversion matrix configuration obtained via
+///   [`element_renderer_get_chan_to_chan_custom_matrix`].
 /// * `inputs`: Validated read-only view of planar input channels.
 /// * `outputs`: Validated mutable view of planar output channels to be accumulated or overwritten.
-/// * `chmap`: Channel mapping slice obtained during [`element_renderer_get_m2m_custom_matrix`].
-pub fn element_renderer_render_m2m_custom(
-    m2m_matrix: &M2mRdr,
+/// * `chmap`: Channel mapping slice obtained during
+///   [`element_renderer_get_chan_to_chan_custom_matrix`].
+pub fn element_renderer_render_chan_to_chan_custom(
+    chan_to_chan_matrix: &ChannelToChannelRenderer,
     inputs: PlanarBufferRef<'_, '_>,
     outputs: &mut PlanarBufferMut<'_, '_>,
     chmap: &[usize],
 ) -> Result<(), OarError> {
-    if inputs.num_channels() != m2m_matrix.m || outputs.num_channels() != m2m_matrix.n {
+    if inputs.num_channels() != chan_to_chan_matrix.m
+        || outputs.num_channels() != chan_to_chan_matrix.n
+    {
         return Err(OarError::InvalidParameter);
     }
     if outputs.num_samples() != inputs.num_samples() {
         return Err(OarError::InvalidParameter);
     }
     let mv = MatrixView {
-        data: MatrixData::Sparse { entries: m2m_matrix.mat, lut: &M2M_GAIN_LUT },
-        in_dim: m2m_matrix.m,
-        in_stride: m2m_matrix.n,
-        out_dim: m2m_matrix.n,
+        data: MatrixData::Sparse {
+            entries: chan_to_chan_matrix.mat,
+            lookup: &CHAN_TO_CHAN_GAIN_LOOKUP,
+        },
+        in_dim: chan_to_chan_matrix.m,
+        in_stride: chan_to_chan_matrix.n,
+        out_dim: chan_to_chan_matrix.n,
         out_stride: 1,
         in_idx_map: Some(chmap),
     };
@@ -1497,8 +1503,8 @@ mod tests {
     const EPSILON: f32 = 1e-6;
 
     #[gtest]
-    fn get_m2m_matrix_predefined_mono_to_stereo_populates_matching_matrix() {
-        let mut out_matrix = M2mRdr {
+    fn get_chan_to_chan_matrix_predefined_mono_to_stereo_populates_matching_matrix() {
+        let mut out_matrix = ChannelToChannelRenderer {
             in_system: InputLayout::Mono,
             out_system: OutputLayout::Mono,
             mat: &[],
@@ -1506,7 +1512,7 @@ mod tests {
             n: 0,
         };
 
-        let result = element_renderer_get_m2m_matrix(
+        let result = element_renderer_get_chan_to_chan_matrix(
             InputLayout::Mono,
             OutputLayout::Stereo,
             &mut out_matrix,
@@ -1520,9 +1526,9 @@ mod tests {
     }
 
     #[gtest]
-    fn get_m2m_custom_matrix_custom_layout_with_two_channels_populates_channel_map_and_channel_count(
+    fn get_chan_to_chan_custom_matrix_custom_layout_with_two_channels_populates_channel_map_and_channel_count(
     ) {
-        let mut out_matrix = M2mRdr {
+        let mut out_matrix = ChannelToChannelRenderer {
             in_system: InputLayout::Mono,
             out_system: OutputLayout::Mono,
             mat: &[],
@@ -1531,7 +1537,7 @@ mod tests {
         };
         let mut chmap = [0usize; 6];
 
-        let result = element_renderer_get_m2m_custom_matrix(
+        let result = element_renderer_get_chan_to_chan_custom_matrix(
             InputLayout::Layout51,
             SP_MP030 | SP_MM030,
             OutputLayout::Stereo,
@@ -1548,8 +1554,8 @@ mod tests {
     }
 
     #[gtest]
-    fn render_m2m_mono_to_stereo_planar_inputs_produces_expected_scaled_outputs() {
-        let m2m_matrix = M2mRdr {
+    fn render_chan_to_chan_mono_to_stereo_planar_inputs_produces_expected_scaled_outputs() {
+        let chan_to_chan_matrix = ChannelToChannelRenderer {
             in_system: InputLayout::Mono,
             out_system: OutputLayout::Stereo,
             mat: &MONO_BS020,
@@ -1566,7 +1572,7 @@ mod tests {
             let inputs_buf = PlanarBufferRef::new(&inputs, 1, Samples::new(2).unwrap()).unwrap();
             let mut outputs_buf =
                 PlanarBufferMut::new(&mut out_slices, 2, Samples::new(2).unwrap()).unwrap();
-            element_renderer_render_m2m(&m2m_matrix, inputs_buf, &mut outputs_buf)
+            element_renderer_render_chan_to_chan(&chan_to_chan_matrix, inputs_buf, &mut outputs_buf)
         };
 
         assert_ok!(result);
@@ -1577,8 +1583,9 @@ mod tests {
     }
 
     #[gtest]
-    fn render_m2m_custom_subset_channels_with_mapping_accumulates_outputs_using_mapped_indices() {
-        let m2m_matrix = M2mRdr {
+    fn render_chan_to_chan_custom_subset_channels_with_mapping_accumulates_outputs_using_mapped_indices(
+    ) {
+        let chan_to_chan_matrix = ChannelToChannelRenderer {
             in_system: InputLayout::Stereo,
             out_system: OutputLayout::Stereo,
             mat: &STEREO_BS020,
@@ -1596,7 +1603,12 @@ mod tests {
             let inputs_buf = PlanarBufferRef::new(&inputs, 1, Samples::new(2).unwrap()).unwrap();
             let mut outputs_buf =
                 PlanarBufferMut::new(&mut out_slices, 2, Samples::new(2).unwrap()).unwrap();
-            element_renderer_render_m2m_custom(&m2m_matrix, inputs_buf, &mut outputs_buf, &chmap)
+            element_renderer_render_chan_to_chan_custom(
+                &chan_to_chan_matrix,
+                inputs_buf,
+                &mut outputs_buf,
+                &chmap,
+            )
         };
 
         assert_ok!(result);
@@ -1607,8 +1619,8 @@ mod tests {
     }
 
     #[gtest]
-    fn get_m2m_matrix_unsupported_predefined_combination_returns_error() {
-        let mut out_matrix = M2mRdr {
+    fn get_chan_to_chan_matrix_unsupported_predefined_combination_returns_error() {
+        let mut out_matrix = ChannelToChannelRenderer {
             in_system: InputLayout::StereoS,
             out_system: OutputLayout::Stereo,
             mat: &[],
@@ -1616,7 +1628,7 @@ mod tests {
             n: 0,
         };
 
-        let result = element_renderer_get_m2m_matrix(
+        let result = element_renderer_get_chan_to_chan_matrix(
             InputLayout::StereoS,
             OutputLayout::Stereo,
             &mut out_matrix,
@@ -1626,8 +1638,8 @@ mod tests {
     }
 
     #[gtest]
-    fn get_m2m_custom_matrix_no_matching_speaker_flags_returns_zero_active_channels() {
-        let mut out_matrix = M2mRdr {
+    fn get_chan_to_chan_custom_matrix_no_matching_speaker_flags_returns_zero_active_channels() {
+        let mut out_matrix = ChannelToChannelRenderer {
             in_system: InputLayout::Mono,
             out_system: OutputLayout::Mono,
             mat: &[],
@@ -1636,7 +1648,7 @@ mod tests {
         };
         let mut chmap = [0usize; 6];
 
-        let result = element_renderer_get_m2m_custom_matrix(
+        let result = element_renderer_get_chan_to_chan_custom_matrix(
             InputLayout::Layout51,
             0,
             OutputLayout::Stereo,
@@ -1649,8 +1661,8 @@ mod tests {
     }
 
     #[gtest]
-    fn render_m2m_stereo_to_stereo_accumulates_inputs_correctly() {
-        let m2m_matrix = M2mRdr {
+    fn render_chan_to_chan_stereo_to_stereo_accumulates_inputs_correctly() {
+        let chan_to_chan_matrix = ChannelToChannelRenderer {
             in_system: InputLayout::Stereo,
             out_system: OutputLayout::Stereo,
             mat: &STEREO_BS020,
@@ -1668,7 +1680,7 @@ mod tests {
             let inputs_buf = PlanarBufferRef::new(&inputs, 2, Samples::new(1).unwrap()).unwrap();
             let mut outputs_buf =
                 PlanarBufferMut::new(&mut out_slices, 2, Samples::new(1).unwrap()).unwrap();
-            element_renderer_render_m2m(&m2m_matrix, inputs_buf, &mut outputs_buf)
+            element_renderer_render_chan_to_chan(&chan_to_chan_matrix, inputs_buf, &mut outputs_buf)
         };
 
         assert_ok!(result);

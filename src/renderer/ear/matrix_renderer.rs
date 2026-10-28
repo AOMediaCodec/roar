@@ -23,12 +23,12 @@ use crate::common::definitions::{
     OarError, PlanarBufferMut, PlanarBufferRef, MAX_OUTPUT_CHANNEL_COUNT,
 };
 
-/// Bit-packed sparse matrix entry encoding `(in_ch, out_ch, lut_idx)` in 16 bits (`u16`).
+/// Bit-packed sparse matrix entry encoding `(in_ch, out_ch, lookup_idx)` in 16 bits (`u16`).
 ///
 /// Bit layout:
 /// * Bits `0..5` (5 bits): `in_ch` (`0..32`, logical input channel index).
 /// * Bits `5..10` (5 bits): `out_ch` (`0..32`, output channel index).
-/// * Bits `10..16` (6 bits): `lut_idx` (`0..64`, index into the non-zero gain lookup table).
+/// * Bits `10..16` (6 bits): `lookup_idx` (`0..64`, index into the non-zero gain lookup table).
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SparseMatrixEntry(u16);
@@ -40,13 +40,13 @@ impl SparseMatrixEntry {
     /// # Parameters
     /// * `in_ch`: Logical input channel index (`0..32`).
     /// * `out_ch`: Output channel index (`0..32`).
-    /// * `lut_idx`: Index into the non-zero gain lookup table (`0..64`).
+    /// * `lookup_idx`: Index into the non-zero gain lookup table (`0..64`).
     #[inline]
-    pub const fn new(in_ch: u8, out_ch: u8, lut_idx: u8) -> Self {
+    pub const fn new(in_ch: u8, out_ch: u8, lookup_idx: u8) -> Self {
         debug_assert!(in_ch < 32);
         debug_assert!(out_ch < 32);
-        debug_assert!(lut_idx < 64);
-        Self((in_ch as u16) | ((out_ch as u16) << 5) | ((lut_idx as u16) << 10))
+        debug_assert!(lookup_idx < 64);
+        Self((in_ch as u16) | ((out_ch as u16) << 5) | ((lookup_idx as u16) << 10))
     }
 
     /// Extracts the logical input channel index (`0..32`).
@@ -63,9 +63,20 @@ impl SparseMatrixEntry {
 
     /// Extracts the lookup-table gain index (`0..64`).
     #[inline]
-    pub const fn lut_idx(self) -> usize {
+    pub const fn lookup_idx(self) -> usize {
         (self.0 >> 10) as usize
     }
+}
+
+/// Shorthand compile-time constructor for [`SparseMatrixEntry::new`].
+///
+/// # Parameters
+/// * `in_ch`: Logical input channel index (`0..32`).
+/// * `out_ch`: Output channel index (`0..32`).
+/// * `lookup_idx`: Index into the non-zero gain lookup table (`0..64`).
+#[inline]
+pub(crate) const fn s(in_ch: u8, out_ch: u8, lookup_idx: u8) -> SparseMatrixEntry {
+    SparseMatrixEntry::new(in_ch, out_ch, lookup_idx)
 }
 
 /// Storage representation for transformation matrix weights.
@@ -79,10 +90,10 @@ pub enum MatrixData<'a> {
     Dense(&'a [f32]),
     /// Sparse non-zero entries paired with a lookup table of `f32` gain weights.
     Sparse {
-        /// Non-zero `(in_ch, out_ch, lut_idx)` entries.
+        /// Non-zero `(in_ch, out_ch, lookup_idx)` entries.
         entries: &'a [SparseMatrixEntry],
-        /// Lookup table mapping `lut_idx` to its non-zero `f32` gain weight.
-        lut: &'a [f32],
+        /// Lookup table mapping `lookup_idx` to its non-zero `f32` gain weight.
+        lookup: &'a [f32],
     },
 }
 
@@ -132,7 +143,7 @@ fn multiply_dense_matrix(
 /// `out_slices`.
 fn multiply_sparse_matrix(
     entries: &[SparseMatrixEntry],
-    lut: &[f32],
+    lookup: &[f32],
     matrix: &MatrixView<'_>,
     inputs: PlanarBufferRef<'_, '_>,
     out_slices: &mut [&mut [f32]],
@@ -144,7 +155,7 @@ fn multiply_sparse_matrix(
                 let out_idx = entry.out_ch();
                 if in_idx < matrix.in_dim
                     && out_idx < matrix.out_dim
-                    && let Some(&c) = lut.get(entry.lut_idx())
+                    && let Some(&c) = lookup.get(entry.lookup_idx())
                 {
                     simd_utils::scalar_multiply_and_accumulate(
                         c,
@@ -161,7 +172,7 @@ fn multiply_sparse_matrix(
                     if entry.in_ch() == in_mapped_idx {
                         let out_idx = entry.out_ch();
                         if out_idx < matrix.out_dim
-                            && let Some(&c) = lut.get(entry.lut_idx())
+                            && let Some(&c) = lookup.get(entry.lookup_idx())
                         {
                             simd_utils::scalar_multiply_and_accumulate(
                                 c,
@@ -224,8 +235,14 @@ pub fn multiply_channels_by_matrix_c(
         MatrixData::Dense(weights) => {
             multiply_dense_matrix(weights, matrix, inputs, &mut out_slices[..matrix.out_dim])?;
         }
-        MatrixData::Sparse { entries, lut } => {
-            multiply_sparse_matrix(entries, lut, matrix, inputs, &mut out_slices[..matrix.out_dim]);
+        MatrixData::Sparse { entries, lookup } => {
+            multiply_sparse_matrix(
+                entries,
+                lookup,
+                matrix,
+                inputs,
+                &mut out_slices[..matrix.out_dim],
+            );
         }
     }
     Ok(())
@@ -394,21 +411,21 @@ mod tests {
     }
 
     #[gtest]
-    fn sparse_matrix_entry_new_packs_and_extracts_coordinates_and_lut_index() {
+    fn sparse_matrix_entry_new_packs_and_extracts_coordinates_and_lookup_index() {
         let entry = SparseMatrixEntry::new(23, 17, 7);
 
         let in_ch = entry.in_ch();
         let out_ch = entry.out_ch();
-        let lut_idx = entry.lut_idx();
+        let lookup_idx = entry.lookup_idx();
 
         expect_that!(in_ch, eq(23));
         expect_that!(out_ch, eq(17));
-        expect_that!(lut_idx, eq(7));
+        expect_that!(lookup_idx, eq(7));
     }
 
     #[gtest]
-    fn multiply_channels_by_matrix_sparse_resolves_lut_weights_and_accumulates() {
-        let lut = [2.0f32, 3.0f32];
+    fn multiply_channels_by_matrix_sparse_resolves_lookup_weights_and_accumulates() {
+        let lookup = [2.0f32, 3.0f32];
         let entries = [
             SparseMatrixEntry::new(0, 0, 0),
             SparseMatrixEntry::new(0, 1, 1),
@@ -424,7 +441,7 @@ mod tests {
         let inputs_buf = PlanarBufferRef::new(&inputs, 2, samples_1).unwrap();
         let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 2, samples_1).unwrap();
         let mv = MatrixView {
-            data: MatrixData::Sparse { entries: &entries, lut: &lut },
+            data: MatrixData::Sparse { entries: &entries, lookup: &lookup },
             in_dim: 2,
             in_stride: 1,
             out_dim: 2,
@@ -441,7 +458,7 @@ mod tests {
 
     #[gtest]
     fn multiply_channels_by_matrix_sparse_with_channel_map_routes_mapped_input() {
-        let lut = [5.0f32, 7.0f32];
+        let lookup = [5.0f32, 7.0f32];
         let entries = [SparseMatrixEntry::new(0, 0, 0), SparseMatrixEntry::new(2, 1, 1)];
         let map = [2usize];
         let in_channel = [3.0f32];
@@ -453,7 +470,7 @@ mod tests {
         let inputs_buf = PlanarBufferRef::new(&inputs, 1, samples_1).unwrap();
         let mut outputs_buf = PlanarBufferMut::new(&mut out_slices, 2, samples_1).unwrap();
         let mv = MatrixView {
-            data: MatrixData::Sparse { entries: &entries, lut: &lut },
+            data: MatrixData::Sparse { entries: &entries, lookup: &lookup },
             in_dim: 1,
             in_stride: 1,
             out_dim: 2,
