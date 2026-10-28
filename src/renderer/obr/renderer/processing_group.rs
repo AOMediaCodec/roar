@@ -16,7 +16,7 @@
 //! into a single `ProcessingGroup`. This optimizes DSP processing by reducing the number of
 //! rotations, convolutions, and FFT operations.
 
-use super::audio_element_config::AudioElementConfig;
+use super::audio_element_config::ObrAudioElement;
 use crate::common::audio_buffer::AudioBuffer;
 use crate::common::definitions::{
     BinauralFilterProfile, Distance, LinearGain, OarError, Quaternion, SampleRate, Samples,
@@ -142,7 +142,7 @@ impl ProcessingGroup {
     pub fn process(
         &mut self,
         input_buffer: &AudioBuffer,
-        audio_elements: &[AudioElementConfig],
+        audio_elements: &[ObrAudioElement],
         head_tracking_enabled: bool,
         world_rotation: &Quaternion,
         output_buffer: &mut AudioBuffer,
@@ -239,7 +239,7 @@ impl ProcessingGroup {
     /// head-locked elements in this processing group.
     pub fn update_ambisonic_encoder(
         &mut self,
-        audio_elements: &mut [AudioElementConfig],
+        audio_elements: &[ObrAudioElement],
     ) -> Result<(), OarError> {
         let ambisonic_order = self.key.ambisonic_order as usize;
         Self::update_encoder_for_lock_mode(
@@ -272,7 +272,7 @@ impl ProcessingGroup {
         audio_element_indices: &[usize],
         buffer_size_per_channel: Samples,
         ambisonic_order: usize,
-        audio_elements: &mut [AudioElementConfig],
+        audio_elements: &[ObrAudioElement],
         head_locked: bool,
         encoder: &mut Option<AmbisonicEncoder>,
         input_buffer: &mut AudioBuffer,
@@ -300,7 +300,7 @@ impl ProcessingGroup {
         if let Some(enc) = encoder {
             let mut enc_idx = 0;
             for &ae_index in audio_element_indices {
-                let audio_element = &mut audio_elements[ae_index];
+                let audio_element = &audio_elements[ae_index];
                 if audio_element.is_head_locked() != head_locked {
                     continue;
                 }
@@ -314,13 +314,13 @@ impl ProcessingGroup {
                     );
                     enc_idx += 1;
                 }
-                for source in audio_element.get_object_channels() {
+                for source in audio_element.object_positions() {
                     enc.set_source(
                         enc_idx,
                         LinearGain::ONE,
-                        source.azimuth,
-                        source.elevation,
-                        source.distance,
+                        source.azimuth(),
+                        source.elevation(),
+                        source.distance(),
                     );
                     enc_idx += 1;
                 }
@@ -332,7 +332,7 @@ impl ProcessingGroup {
 impl ProcessingGroup {
     fn populate_encoder_source_channel_indices(
         audio_element_indices: &[usize],
-        audio_elements: &[AudioElementConfig],
+        audio_elements: &[ObrAudioElement],
         filter_head_locked: Option<bool>,
         out_indices: &mut Vec<usize>,
     ) {
@@ -377,8 +377,11 @@ impl ProcessingGroup {
 mod test {
 
     use super::*;
-    use crate::common::definitions::{Degrees, HighOrderAmbisonics, InputLayout};
-    use crate::renderer::obr::renderer::audio_element_config::AudioElementVariant;
+    use crate::common::definitions::{
+        AudioElementConfig, ChannelBasedConfig, ChannelCount, ElementRenderingConfig,
+        HeadphonesRenderingMode, HighOrderAmbisonics, InputLayout, ObjectBasedConfig,
+        PolarCoordinate, SceneBasedConfig,
+    };
     use googletest::prelude::*;
     use std::f32::consts::PI;
 
@@ -391,6 +394,51 @@ mod test {
 
     fn get_buffer_size() -> Samples {
         Samples::new(BUFFER_SIZE as u32).unwrap()
+    }
+
+    fn ambisonics_element(
+        order: HighOrderAmbisonics,
+        binaural_filter_profile: BinauralFilterProfile,
+        headphones_rendering_mode: HeadphonesRenderingMode,
+    ) -> ObrAudioElement {
+        ObrAudioElement::new(AudioElementConfig::SceneBased(SceneBasedConfig {
+            order,
+            rendering_config: Some(ElementRenderingConfig {
+                headphones_rendering_mode,
+                binaural_filter_profile,
+            }),
+        }))
+        .unwrap()
+    }
+
+    fn layout_element(
+        layout: InputLayout,
+        binaural_filter_profile: BinauralFilterProfile,
+        headphones_rendering_mode: HeadphonesRenderingMode,
+    ) -> ObrAudioElement {
+        ObrAudioElement::new(AudioElementConfig::ChannelBased(ChannelBasedConfig {
+            layout,
+            downmix_info: None,
+            rendering_config: Some(ElementRenderingConfig {
+                headphones_rendering_mode,
+                binaural_filter_profile,
+            }),
+        }))
+        .unwrap()
+    }
+
+    fn mono_object_element(
+        binaural_filter_profile: BinauralFilterProfile,
+        headphones_rendering_mode: HeadphonesRenderingMode,
+    ) -> ObrAudioElement {
+        ObrAudioElement::new(AudioElementConfig::ObjectBased(ObjectBasedConfig {
+            num_objects: ChannelCount::new(1).unwrap(),
+            rendering_config: Some(ElementRenderingConfig {
+                headphones_rendering_mode,
+                binaural_filter_profile,
+            }),
+        }))
+        .unwrap()
     }
 
     fn generate_sine(sampling_rate: i32, channel: &mut [f32]) {
@@ -548,9 +596,10 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let audio_elements = vec![AudioElementConfig::new(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+        let audio_elements = vec![ambisonics_element(
+            HighOrderAmbisonics::Order1,
             BinauralFilterProfile::Direct,
+            HeadphonesRenderingMode::WorldLockedRestricted,
         )];
 
         let mut input_buffer = AudioBuffer::new(4, BUFFER_SIZE);
@@ -585,12 +634,13 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let mut audio_elements = vec![AudioElementConfig::new(
-            AudioElementVariant::loudspeaker_layout(InputLayout::Stereo),
+        let audio_elements = vec![layout_element(
+            InputLayout::Stereo,
             BinauralFilterProfile::Direct,
+            HeadphonesRenderingMode::WorldLockedRestricted,
         )];
 
-        expect_true!(group.update_ambisonic_encoder(&mut audio_elements).is_ok());
+        expect_true!(group.update_ambisonic_encoder(&audio_elements).is_ok());
 
         let mut input_buffer = AudioBuffer::new(2, BUFFER_SIZE);
         let mut output_buffer = AudioBuffer::new(2, BUFFER_SIZE);
@@ -624,19 +674,14 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let mut audio_elements = vec![AudioElementConfig::new(
-            AudioElementVariant::object_mono(),
+        let mut audio_elements = vec![mono_object_element(
             BinauralFilterProfile::Direct,
+            HeadphonesRenderingMode::WorldLockedRestricted,
         )];
+        audio_elements[0].object_positions_mut()[0] =
+            PolarCoordinate::new_from_floats(45.0, 0.0, 1.0).unwrap();
 
-        let object_channels = audio_elements[0].get_object_channels();
-        for obj in object_channels {
-            obj.azimuth = Degrees::new(45.0).unwrap();
-            obj.elevation = Degrees::ZERO;
-            obj.distance = Distance::ONE;
-        }
-
-        expect_true!(group.update_ambisonic_encoder(&mut audio_elements).is_ok());
+        expect_true!(group.update_ambisonic_encoder(&audio_elements).is_ok());
 
         let mut input_buffer = AudioBuffer::new(1, BUFFER_SIZE);
         let mut output_buffer = AudioBuffer::new(2, BUFFER_SIZE);
@@ -668,9 +713,10 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let audio_elements = vec![AudioElementConfig::new(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+        let audio_elements = vec![ambisonics_element(
+            HighOrderAmbisonics::Order1,
             BinauralFilterProfile::Direct,
+            HeadphonesRenderingMode::WorldLockedRestricted,
         )];
 
         let mut input_buffer = AudioBuffer::new(4, BUFFER_SIZE);
@@ -707,26 +753,22 @@ mod test {
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
         let mut audio_elements = vec![
-            AudioElementConfig::new(
-                AudioElementVariant::ambisonics(HighOrderAmbisonics::Order2),
+            ambisonics_element(
+                HighOrderAmbisonics::Order2,
                 BinauralFilterProfile::Direct,
+                HeadphonesRenderingMode::WorldLockedRestricted,
             ),
-            AudioElementConfig::new(
-                AudioElementVariant::object_mono(),
+            mono_object_element(
                 BinauralFilterProfile::Direct,
+                HeadphonesRenderingMode::WorldLockedRestricted,
             ),
         ];
 
         audio_elements[1].set_first_channel_index(9);
+        audio_elements[1].object_positions_mut()[0] =
+            PolarCoordinate::new_from_floats(90.0, 30.0, 0.5).unwrap();
 
-        let object_channels = audio_elements[1].get_object_channels();
-        for obj in object_channels {
-            obj.azimuth = Degrees::new(90.0).unwrap();
-            obj.elevation = Degrees::new(30.0).unwrap();
-            obj.distance = Distance::new(0.5).unwrap();
-        }
-
-        expect_true!(group.update_ambisonic_encoder(&mut audio_elements).is_ok());
+        expect_true!(group.update_ambisonic_encoder(&audio_elements).is_ok());
 
         let mut input_buffer = AudioBuffer::new(10, BUFFER_SIZE);
         let mut output_buffer = AudioBuffer::new(2, BUFFER_SIZE);
@@ -760,12 +802,13 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let mut audio_elements = vec![AudioElementConfig::new(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+        let audio_elements = vec![ambisonics_element(
+            HighOrderAmbisonics::Order1,
             BinauralFilterProfile::Direct,
+            HeadphonesRenderingMode::WorldLockedRestricted,
         )];
 
-        expect_true!(group.update_ambisonic_encoder(&mut audio_elements).is_ok());
+        expect_true!(group.update_ambisonic_encoder(&audio_elements).is_ok());
     }
 
     #[gtest]
@@ -780,28 +823,17 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let mut audio_elements = vec![AudioElementConfig::new(
-            AudioElementVariant::object_mono(),
+        let mut audio_elements = vec![mono_object_element(
             BinauralFilterProfile::Direct,
+            HeadphonesRenderingMode::WorldLockedRestricted,
         )];
 
-        let object_channels = audio_elements[0].get_object_channels();
-        for obj in object_channels {
-            obj.azimuth = Degrees::ZERO;
-            obj.elevation = Degrees::ZERO;
-            obj.distance = Distance::ONE;
-        }
+        expect_true!(group.update_ambisonic_encoder(&audio_elements).is_ok());
 
-        expect_true!(group.update_ambisonic_encoder(&mut audio_elements).is_ok());
+        audio_elements[0].object_positions_mut()[0] =
+            PolarCoordinate::new_from_floats(180.0, 45.0, 0.8).unwrap();
 
-        let object_channels = audio_elements[0].get_object_channels();
-        for obj in object_channels {
-            obj.azimuth = Degrees::new(180.0).unwrap();
-            obj.elevation = Degrees::new(45.0).unwrap();
-            obj.distance = Distance::new(0.8).unwrap();
-        }
-
-        expect_true!(group.update_ambisonic_encoder(&mut audio_elements).is_ok());
+        expect_true!(group.update_ambisonic_encoder(&audio_elements).is_ok());
     }
 
     #[gtest]
@@ -821,9 +853,10 @@ mod test {
                 ProcessingGroup::new(key, indices, get_buffer_size(), get_sample_rate());
             assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-            let audio_elements = vec![AudioElementConfig::new(
-                AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+            let audio_elements = vec![ambisonics_element(
+                HighOrderAmbisonics::Order1,
                 profile,
+                HeadphonesRenderingMode::WorldLockedRestricted,
             )];
 
             let mut input_buffer = AudioBuffer::new(4, BUFFER_SIZE);
@@ -859,9 +892,10 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let audio_elements = vec![AudioElementConfig::new(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+        let audio_elements = vec![ambisonics_element(
+            HighOrderAmbisonics::Order1,
             BinauralFilterProfile::Direct,
+            HeadphonesRenderingMode::WorldLockedRestricted,
         )];
         expect_that!(audio_elements[0].is_head_locked(), eq(false));
 
@@ -927,11 +961,11 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let mut audio_elements = vec![AudioElementConfig::new(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+        let audio_elements = vec![ambisonics_element(
+            HighOrderAmbisonics::Order1,
             BinauralFilterProfile::Direct,
+            HeadphonesRenderingMode::HeadLocked,
         )];
-        audio_elements[0].set_head_locked(true);
         expect_that!(audio_elements[0].is_head_locked(), eq(true));
 
         let mut input_buffer = AudioBuffer::new(4, BUFFER_SIZE);
@@ -973,33 +1007,25 @@ mod test {
         assert!(head_only_group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
         let mut mixed_elements = vec![
-            AudioElementConfig::new(
-                AudioElementVariant::loudspeaker_layout(InputLayout::Stereo),
+            layout_element(
+                InputLayout::Stereo,
                 BinauralFilterProfile::Direct,
+                HeadphonesRenderingMode::WorldLockedRestricted,
             ),
-            AudioElementConfig::new(
-                AudioElementVariant::object_mono(),
-                BinauralFilterProfile::Direct,
-            ),
+            mono_object_element(BinauralFilterProfile::Direct, HeadphonesRenderingMode::HeadLocked),
         ];
-        mixed_elements[0].set_head_locked(false);
-        mixed_elements[1].set_head_locked(true);
         mixed_elements[1].set_first_channel_index(2);
+        mixed_elements[1].object_positions_mut()[0] =
+            PolarCoordinate::new_from_floats(-90.0, 0.0, 1.0).unwrap();
 
-        let object_channels = mixed_elements[1].get_object_channels();
-        for obj in object_channels {
-            obj.azimuth = Degrees::from_const(-90.0);
-            obj.elevation = Degrees::ZERO;
-            obj.distance = Distance::ONE;
-        }
-        let mut world_only_elements = vec![mixed_elements[0].clone()];
-        let mut head_only_element = mixed_elements[1].clone();
+        let world_only_elements = vec![mixed_elements[0]];
+        let mut head_only_element = mixed_elements[1];
         head_only_element.set_first_channel_index(0);
-        let mut head_only_elements = vec![head_only_element];
+        let head_only_elements = vec![head_only_element];
 
-        expect_true!(mixed_group.update_ambisonic_encoder(&mut mixed_elements).is_ok());
-        expect_true!(world_only_group.update_ambisonic_encoder(&mut world_only_elements).is_ok());
-        expect_true!(head_only_group.update_ambisonic_encoder(&mut head_only_elements).is_ok());
+        expect_true!(mixed_group.update_ambisonic_encoder(&mixed_elements).is_ok());
+        expect_true!(world_only_group.update_ambisonic_encoder(&world_only_elements).is_ok());
+        expect_true!(head_only_group.update_ambisonic_encoder(&head_only_elements).is_ok());
 
         let mut mixed_input = AudioBuffer::new(3, BUFFER_SIZE);
         generate_sine(SAMPLING_RATE, mixed_input.channel_mut(0).as_mut_slice());
@@ -1069,11 +1095,11 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let mut audio_elements = vec![AudioElementConfig::new(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+        let audio_elements = vec![ambisonics_element(
+            HighOrderAmbisonics::Order1,
             BinauralFilterProfile::Direct,
+            HeadphonesRenderingMode::WorldLockedRestricted,
         )];
-        audio_elements[0].set_head_locked(false);
 
         let mut input_buffer = AudioBuffer::new(4, BUFFER_SIZE);
         let mut output_buffer = AudioBuffer::new(2, BUFFER_SIZE);
@@ -1107,11 +1133,11 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let mut audio_elements = vec![AudioElementConfig::new(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+        let audio_elements = vec![ambisonics_element(
+            HighOrderAmbisonics::Order1,
             BinauralFilterProfile::Direct,
+            HeadphonesRenderingMode::HeadLocked,
         )];
-        audio_elements[0].set_head_locked(true);
 
         let mut input_buffer = AudioBuffer::new(4, BUFFER_SIZE);
         let mut output_buffer = AudioBuffer::new(2, BUFFER_SIZE);
@@ -1145,11 +1171,11 @@ mod test {
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let mut audio_elements = vec![AudioElementConfig::new(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+        let audio_elements = vec![ambisonics_element(
+            HighOrderAmbisonics::Order1,
             BinauralFilterProfile::Direct,
+            HeadphonesRenderingMode::WorldLockedRestricted,
         )];
-        audio_elements[0].set_head_locked(false);
 
         let mut input_buffer = AudioBuffer::new(4, BUFFER_SIZE);
         let mut output_buffer1 = AudioBuffer::new(2, BUFFER_SIZE);

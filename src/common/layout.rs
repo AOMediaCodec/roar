@@ -472,7 +472,7 @@ impl InputLayout {
     /// - `Layout514` places its four upper speakers at `±45°` and `±135°` azimuth instead of `±30°`
     ///   and `±110°`.
     /// - All upper-layer speakers (`30°` elevation) are elevated to `45°`.
-    pub(crate) fn obr_speakers(&self) -> Option<Vec<SpeakerPosition>> {
+    pub(crate) fn obr_speakers(self) -> Option<impl ExactSizeIterator<Item = SpeakerPosition>> {
         let base_speakers = match self {
             Self::Layout514 => &[
                 SP_MP030, SP_MM030, SP_MP000, SP_LFE, SP_MP110, SP_MM110, SP_UP045, SP_UM045,
@@ -480,19 +480,14 @@ impl InputLayout {
             ],
             other => other.speakers()?,
         };
-        Some(
-            base_speakers
-                .iter()
-                .map(|&sp| {
-                    let elevation = if sp.elevation == Degrees::from_const(30.0) {
-                        Degrees::from_const(45.0)
-                    } else {
-                        sp.elevation
-                    };
-                    SpeakerPosition { elevation, ..sp }
-                })
-                .collect(),
-        )
+        Some(base_speakers.iter().map(|&sp| {
+            let elevation = if sp.elevation == Degrees::from_const(30.0) {
+                Degrees::from_const(45.0)
+            } else {
+                sp.elevation
+            };
+            SpeakerPosition { elevation, ..sp }
+        }))
     }
 }
 
@@ -652,9 +647,9 @@ mod test {
 
     #[gtest]
     fn obr_speakers_applies_514_azimuth_and_upper_layer_elevation_overrides() {
-        let obr_514 = InputLayout::Layout514.obr_speakers().unwrap();
-        let obr_top4 = InputLayout::Top4ch.obr_speakers().unwrap();
-        let obr_bottom3 = InputLayout::Bottom3ch.obr_speakers().unwrap();
+        let obr_514: Vec<_> = InputLayout::Layout514.obr_speakers().unwrap().collect();
+        let obr_top4: Vec<_> = InputLayout::Top4ch.obr_speakers().unwrap().collect();
+        let obr_bottom3: Vec<_> = InputLayout::Bottom3ch.obr_speakers().unwrap().collect();
         let obr_binaural = InputLayout::Binaural.obr_speakers();
 
         expect_that!(obr_514.len(), eq(10));
@@ -666,6 +661,6 @@ mod test {
         expect_that!(obr_top4[0].elevation, eq(Degrees::from_const(45.0)));
         expect_that!(obr_bottom3.len(), eq(3));
         expect_that!(obr_bottom3[0].elevation, eq(Degrees::from_const(-30.0)));
-        expect_that!(obr_binaural, none());
+        expect_true!(obr_binaural.is_none());
     }
 }

@@ -20,17 +20,13 @@
 //! Crucially, `ObrImpl` is designed to be allocation-free on its real-time audio thread
 //! processing loop once initialized.
 
-use super::audio_element_config::{AudioElementConfig, AudioElementVariant};
+use super::audio_element_config::ObrAudioElement;
 use super::processing_group::{ProcessingGroup, ProcessingGroupKey};
 use crate::common::audio_buffer::simd_utils::add_pointwise_in_place;
 use crate::common::audio_buffer::AudioBuffer;
-use crate::common::definitions::ChannelCount;
 use crate::common::definitions::{
-    AudioElementConfig as OarAudioElementConfig, BinauralFilterProfile, Gain, OarError,
-    ObjectPosition,
-};
-use crate::common::definitions::{
-    PlanarBufferMut, PlanarBufferRef, PolarCoordinate, Quaternion, SampleRate, Samples,
+    AudioElementConfig, ChannelCount, Gain, OarError, ObjectPosition, PlanarBufferMut,
+    PlanarBufferRef, PolarCoordinate, Quaternion, SampleRate, Samples,
 };
 use crate::renderer::audio_renderer_api::AudioRenderer;
 use crate::renderer::gain_parameter::{generate_gain_multipliers, GainParameter, GainUpdate};
@@ -53,7 +49,7 @@ pub struct ObrImpl {
     sampling_rate: SampleRate,
     head_tracking_enabled: bool,
     world_rotation: Quaternion,
-    audio_elements: Vec<AudioElementConfig>,
+    audio_elements: Vec<ObrAudioElement>,
     processing_groups: Vec<ProcessingGroup>,
     resampler: Resampler,
     fft_manager: FftManager,
@@ -121,7 +117,7 @@ impl ObrImpl {
         self.create_processing_groups();
         for group in &mut self.processing_groups {
             group.initialize(&mut self.fft_manager, &mut self.resampler)?;
-            group.update_ambisonic_encoder(&mut self.audio_elements)?;
+            group.update_ambisonic_encoder(&self.audio_elements)?;
         }
         Ok(())
     }
@@ -150,12 +146,11 @@ impl ObrImpl {
     }
 
     /// Adds an audio element to the renderer and updates the DSP lifecycle.
-    pub fn add_audio_element(
-        &mut self,
-        variant: AudioElementVariant,
-        filter_profile: BinauralFilterProfile,
-    ) -> Result<(), OarError> {
-        let mut cfg = AudioElementConfig::new(variant, filter_profile);
+    ///
+    /// # Parameters
+    /// * `config` - Configuration for the audio element to add.
+    pub fn add_audio_element(&mut self, config: &AudioElementConfig) -> Result<(), OarError> {
+        let mut cfg = ObrAudioElement::try_from(config)?;
         if !self.audio_elements.is_empty() {
             let last = self.audio_elements.last().unwrap();
             let first_idx = last.get_first_channel_index() + last.get_number_of_input_channels();
@@ -209,19 +204,13 @@ impl ObrImpl {
         elevation: f32,
         distance: f32,
     ) -> Result<(), OarError> {
-        if audio_element_index >= self.audio_elements.len() {
-            return Err(OarError::InvalidParameter);
-        }
-        let obj_chans = self.audio_elements[audio_element_index].get_object_channels();
-        if obj_chans.is_empty() || channel_index >= obj_chans.len() {
-            return Err(OarError::InvalidParameter);
-        }
-        let pos = PolarCoordinate::new_from_floats(azimuth, elevation, distance)?;
-        obj_chans[channel_index].azimuth = pos.azimuth();
-        obj_chans[channel_index].elevation = pos.elevation();
-        obj_chans[channel_index].distance = pos.distance();
+        let elem =
+            self.audio_elements.get_mut(audio_element_index).ok_or(OarError::InvalidParameter)?;
+        let slot =
+            elem.object_positions_mut().get_mut(channel_index).ok_or(OarError::InvalidParameter)?;
+        *slot = PolarCoordinate::new_from_floats(azimuth, elevation, distance)?;
         for g in &mut self.processing_groups {
-            g.update_ambisonic_encoder(&mut self.audio_elements)?;
+            g.update_ambisonic_encoder(&self.audio_elements)?;
         }
         Ok(())
     }
@@ -240,27 +229,6 @@ impl ObrImpl {
         Ok(())
     }
 
-    /// Sets head-locked rendering mode for a specific audio element.
-    pub fn set_element_head_locked(
-        &mut self,
-        audio_element_index: usize,
-        head_locked: bool,
-    ) -> Result<(), OarError> {
-        if audio_element_index >= self.audio_elements.len() {
-            return Err(OarError::InvalidParameter);
-        }
-        if self.audio_elements[audio_element_index].is_passthrough() {
-            return Ok(());
-        }
-        if self.audio_elements[audio_element_index].is_head_locked() != head_locked {
-            self.audio_elements[audio_element_index].set_head_locked(head_locked);
-            for g in &mut self.processing_groups {
-                g.update_ambisonic_encoder(&mut self.audio_elements)?;
-            }
-        }
-        Ok(())
-    }
-
     /// Processes planar audio data from `input_buffer` to a 2-channel binaural `output_buffer`.
     pub fn process(&mut self, input_buffer: &AudioBuffer, output_buffer: &mut AudioBuffer) {
         let frames_usize = self.buffer_size_per_channel.value() as usize;
@@ -275,27 +243,23 @@ impl ObrImpl {
         }
 
         for audio_element in &self.audio_elements {
+            if !audio_element.is_passthrough() {
+                continue;
+            }
             let first_ch = audio_element.get_first_channel_index();
             // TODO(b/525080422): Optimize by retrieving output buffer slices once at the start
             // of process using as_slices_mut to avoid repeated channel_mut calls in the loop.
-            match audio_element.variant() {
-                AudioElementVariant::PassthroughMono => {
-                    let in_ch = input_buffer.channel(first_ch);
-                    let out_l = output_buffer.channel_mut(0);
-                    add_pointwise_in_place(out_l.data, in_ch.data);
-                    let out_r = output_buffer.channel_mut(1);
-                    add_pointwise_in_place(out_r.data, in_ch.data);
-                }
-                AudioElementVariant::PassthroughStereo => {
-                    let in_l = input_buffer.channel(first_ch);
-                    let in_r = input_buffer.channel(first_ch + 1);
-                    let out_l = output_buffer.channel_mut(0);
-                    add_pointwise_in_place(out_l.data, in_l.data);
-                    let out_r = output_buffer.channel_mut(1);
-                    add_pointwise_in_place(out_r.data, in_r.data);
-                }
-                _ => {}
-            }
+            // Mono passthrough (ZOA) duplicates its single channel to both ears; stereo
+            // passthrough (Binaural) maps channels 0 and 1 to left and right ears respectively.
+            let right_ch = if audio_element.get_number_of_input_channels() == 2 {
+                first_ch + 1
+            } else {
+                first_ch
+            };
+            let out_l = output_buffer.channel_mut(0);
+            add_pointwise_in_place(out_l.data, input_buffer.channel(first_ch).data);
+            let out_r = output_buffer.channel_mut(1);
+            add_pointwise_in_place(out_r.data, input_buffer.channel(right_ch).data);
         }
 
         if self.processing_groups.is_empty() {
@@ -393,24 +357,11 @@ impl ObrAudioRendererAdapter {
 }
 
 impl AudioRenderer for ObrAudioRendererAdapter {
-    fn add_element(&mut self, id: u32, config: &OarAudioElementConfig) -> Result<(), OarError> {
+    fn add_element(&mut self, id: u32, config: &AudioElementConfig) -> Result<(), OarError> {
         if self.id_to_element_index.contains_key(&id) {
             return Err(OarError::InvalidParameter);
         }
-        let variant = match config {
-            OarAudioElementConfig::ChannelBased(cbc) => {
-                AudioElementVariant::loudspeaker_layout(cbc.layout)
-            }
-            OarAudioElementConfig::SceneBased(sbc) => AudioElementVariant::ambisonics(sbc.order),
-            OarAudioElementConfig::ObjectBased(obc) => {
-                AudioElementVariant::objects(obc.num_objects.get())?
-            }
-        };
-        let profile = config
-            .rendering_config()
-            .map_or(BinauralFilterProfile::Ambient, |rc| rc.binaural_filter_profile);
-
-        self.obr.add_audio_element(variant, profile)?;
+        self.obr.add_audio_element(config)?;
         let idx = self.obr.get_number_of_audio_elements() - 1;
         self.id_to_element_index.insert(id, idx);
         self.element_channels.insert(id, config.channels());
@@ -418,14 +369,6 @@ impl AudioRenderer for ObrAudioRendererAdapter {
         let expected_ins = self.obr.get_number_of_input_channels();
         let frames_usize = self.obr.get_buffer_size_per_channel().value() as usize;
         self.scratch_input.resize(expected_ins, frames_usize);
-
-        let head_locked = if let Some(rc) = config.rendering_config() {
-            rc.headphones_rendering_mode
-                == crate::common::definitions::HeadphonesRenderingMode::HeadLocked
-        } else {
-            false
-        };
-        self.obr.set_element_head_locked(idx, head_locked)?;
         Ok(())
     }
 
@@ -572,7 +515,10 @@ impl AudioRenderer for ObrAudioRendererAdapter {
 mod test {
 
     use super::*;
-    use crate::common::definitions::{HighOrderAmbisonics, InputLayout};
+    use crate::common::definitions::{
+        BinauralFilterProfile, ChannelBasedConfig, ElementRenderingConfig, HeadphonesRenderingMode,
+        HighOrderAmbisonics, InputLayout, ObjectBasedConfig, SceneBasedConfig,
+    };
     use googletest::prelude::*;
     use std::f32::consts::PI;
 
@@ -585,6 +531,46 @@ mod test {
 
     fn get_buffer_size() -> Samples {
         Samples::new(BUFFER_SIZE as u32).unwrap()
+    }
+
+    fn ambisonics_config(
+        order: HighOrderAmbisonics,
+        binaural_filter_profile: BinauralFilterProfile,
+    ) -> AudioElementConfig {
+        AudioElementConfig::SceneBased(SceneBasedConfig {
+            order,
+            rendering_config: Some(ElementRenderingConfig {
+                headphones_rendering_mode: HeadphonesRenderingMode::WorldLockedRestricted,
+                binaural_filter_profile,
+            }),
+        })
+    }
+
+    fn layout_config(
+        layout: InputLayout,
+        binaural_filter_profile: BinauralFilterProfile,
+    ) -> AudioElementConfig {
+        AudioElementConfig::ChannelBased(ChannelBasedConfig {
+            layout,
+            downmix_info: None,
+            rendering_config: Some(ElementRenderingConfig {
+                headphones_rendering_mode: HeadphonesRenderingMode::WorldLockedRestricted,
+                binaural_filter_profile,
+            }),
+        })
+    }
+
+    fn mono_object_config(
+        binaural_filter_profile: BinauralFilterProfile,
+        headphones_rendering_mode: HeadphonesRenderingMode,
+    ) -> AudioElementConfig {
+        AudioElementConfig::ObjectBased(ObjectBasedConfig {
+            num_objects: ChannelCount::new(1).unwrap(),
+            rendering_config: Some(ElementRenderingConfig {
+                headphones_rendering_mode,
+                binaural_filter_profile,
+            }),
+        })
     }
 
     fn generate_sine(sampling_rate: i32, channel: &mut [f32]) {
@@ -619,10 +605,10 @@ mod test {
     #[gtest]
     fn test_add_and_remove_audio_element() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add_result = renderer.add_audio_element(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order3),
+        let add_result = renderer.add_audio_element(&ambisonics_config(
+            HighOrderAmbisonics::Order3,
             BinauralFilterProfile::Direct,
-        );
+        ));
 
         expect_true!(add_result.is_ok());
         expect_that!(renderer.get_number_of_input_channels(), eq(16));
@@ -636,18 +622,18 @@ mod test {
     #[gtest]
     fn test_add_and_remove_multiple_audio_elements() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add1 = renderer.add_audio_element(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order3),
+        let add1 = renderer.add_audio_element(&ambisonics_config(
+            HighOrderAmbisonics::Order3,
             BinauralFilterProfile::Direct,
-        );
+        ));
 
         expect_true!(add1.is_ok());
         expect_that!(renderer.get_number_of_input_channels(), eq(16));
 
-        let add2 = renderer.add_audio_element(
-            AudioElementVariant::loudspeaker_layout(InputLayout::Layout714),
+        let add2 = renderer.add_audio_element(&layout_config(
+            InputLayout::Layout714,
             BinauralFilterProfile::Direct,
-        );
+        ));
 
         expect_true!(add2.is_ok());
         expect_that!(renderer.get_number_of_input_channels(), eq(28));
@@ -674,16 +660,13 @@ mod test {
     fn remove_first_audio_element_updates_remaining_channel_offsets() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
         expect_true!(renderer
-            .add_audio_element(
-                AudioElementVariant::ambisonics(HighOrderAmbisonics::Order3),
-                BinauralFilterProfile::Direct
-            )
+            .add_audio_element(&ambisonics_config(
+                HighOrderAmbisonics::Order3,
+                BinauralFilterProfile::Direct,
+            ))
             .is_ok());
         expect_true!(renderer
-            .add_audio_element(
-                AudioElementVariant::loudspeaker_layout(InputLayout::Stereo),
-                BinauralFilterProfile::Direct
-            )
+            .add_audio_element(&layout_config(InputLayout::Stereo, BinauralFilterProfile::Direct))
             .is_ok());
         expect_that!(renderer.get_number_of_input_channels(), eq(18));
 
@@ -705,10 +688,10 @@ mod test {
     #[gtest]
     fn test_process_audio_buffer_with_wrong_number_of_channels() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add = renderer.add_audio_element(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order3),
+        let add = renderer.add_audio_element(&ambisonics_config(
+            HighOrderAmbisonics::Order3,
             BinauralFilterProfile::Direct,
-        );
+        ));
 
         expect_true!(add.is_ok());
 
@@ -729,17 +712,17 @@ mod test {
     #[gtest]
     fn test_add_multiple_audio_elements_with_different_types_same_filter_type_succeeds() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add1 = renderer.add_audio_element(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order3),
+        let add1 = renderer.add_audio_element(&ambisonics_config(
+            HighOrderAmbisonics::Order3,
             BinauralFilterProfile::Direct,
-        );
+        ));
 
         expect_true!(add1.is_ok());
 
-        let add2 = renderer.add_audio_element(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+        let add2 = renderer.add_audio_element(&ambisonics_config(
+            HighOrderAmbisonics::Order1,
             BinauralFilterProfile::Direct,
-        );
+        ));
 
         expect_true!(add2.is_ok());
 
@@ -751,17 +734,17 @@ mod test {
     #[gtest]
     fn test_add_multiple_audio_elements_same_type_different_filter_types_succeeds() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add1 = renderer.add_audio_element(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order3),
+        let add1 = renderer.add_audio_element(&ambisonics_config(
+            HighOrderAmbisonics::Order3,
             BinauralFilterProfile::Direct,
-        );
+        ));
 
         expect_true!(add1.is_ok());
 
-        let add2 = renderer.add_audio_element(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order3),
+        let add2 = renderer.add_audio_element(&ambisonics_config(
+            HighOrderAmbisonics::Order3,
             BinauralFilterProfile::Reverberant,
-        );
+        ));
 
         expect_true!(add2.is_ok());
 
@@ -773,17 +756,17 @@ mod test {
     #[gtest]
     fn test_ambisonics_and_loudspeaker_layouts_same_filter_profile() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add1 = renderer.add_audio_element(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order2),
+        let add1 = renderer.add_audio_element(&ambisonics_config(
+            HighOrderAmbisonics::Order2,
             BinauralFilterProfile::Direct,
-        );
+        ));
 
         expect_true!(add1.is_ok());
 
-        let add2 = renderer.add_audio_element(
-            AudioElementVariant::loudspeaker_layout(InputLayout::Layout714),
+        let add2 = renderer.add_audio_element(&layout_config(
+            InputLayout::Layout714,
             BinauralFilterProfile::Direct,
-        );
+        ));
 
         expect_true!(add2.is_ok());
 
@@ -794,8 +777,10 @@ mod test {
     #[gtest]
     fn test_passthrough_mono() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add = renderer
-            .add_audio_element(AudioElementVariant::PassthroughMono, BinauralFilterProfile::Direct);
+        let add = renderer.add_audio_element(&ambisonics_config(
+            HighOrderAmbisonics::Zoa,
+            BinauralFilterProfile::Direct,
+        ));
 
         expect_true!(add.is_ok());
 
@@ -820,10 +805,10 @@ mod test {
     #[gtest]
     fn test_passthrough_stereo() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add = renderer.add_audio_element(
-            AudioElementVariant::PassthroughStereo,
+        let add = renderer.add_audio_element(&layout_config(
+            InputLayout::Binaural,
             BinauralFilterProfile::Direct,
-        );
+        ));
 
         expect_true!(add.is_ok());
 
@@ -851,15 +836,17 @@ mod test {
     #[gtest]
     fn test_process_mixed_ambisonics_and_object() {
         let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
-        let add1 = renderer.add_audio_element(
-            AudioElementVariant::ambisonics(HighOrderAmbisonics::Order1),
+        let add1 = renderer.add_audio_element(&ambisonics_config(
+            HighOrderAmbisonics::Order1,
             BinauralFilterProfile::Direct,
-        );
+        ));
 
         expect_true!(add1.is_ok());
 
-        let add2 = renderer
-            .add_audio_element(AudioElementVariant::object_mono(), BinauralFilterProfile::Direct);
+        let add2 = renderer.add_audio_element(&mono_object_config(
+            BinauralFilterProfile::Direct,
+            HeadphonesRenderingMode::WorldLockedRestricted,
+        ));
 
         expect_true!(add2.is_ok());
 
@@ -900,31 +887,106 @@ mod test {
     #[gtest]
     fn add_element_with_binaural_layout_configures_stereo_passthrough() {
         let mut adapter = ObrAudioRendererAdapter::new(get_buffer_size(), get_sample_rate());
-        let config =
-            OarAudioElementConfig::ChannelBased(crate::common::definitions::ChannelBasedConfig {
-                layout: InputLayout::Binaural,
-                downmix_info: None,
-                rendering_config: None,
-            });
+        let config = AudioElementConfig::ChannelBased(ChannelBasedConfig {
+            layout: InputLayout::Binaural,
+            downmix_info: None,
+            rendering_config: None,
+        });
 
         let result = adapter.add_element(1, &config);
 
         expect_ok!(result);
         expect_eq!(adapter.obr.get_number_of_input_channels(), 2);
-        expect_eq!(
-            *adapter.obr.audio_elements[0].variant(),
-            AudioElementVariant::PassthroughStereo
-        );
+        expect_true!(adapter.obr.audio_elements[0].is_passthrough());
+        expect_true!(adapter.obr.audio_elements[0].is_head_locked());
+    }
+
+    #[gtest]
+    fn add_audio_element_with_head_locked_ignores_head_rotation() {
+        let yaw_90 = Quaternion::new(0.70710677, 0.0, 0.0, 0.70710677).unwrap();
+        let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
+        renderer
+            .add_audio_element(&mono_object_config(
+                BinauralFilterProfile::Direct,
+                HeadphonesRenderingMode::HeadLocked,
+            ))
+            .unwrap();
+        renderer.update_object_channel_position(0, 0, 90.0, 0.0, 1.0).unwrap();
+        renderer.enable_head_tracking(true);
+        renderer.set_head_rotation(yaw_90).unwrap();
+
+        let mut unrotated_reference = ObrImpl::new(get_buffer_size(), get_sample_rate());
+        unrotated_reference
+            .add_audio_element(&mono_object_config(
+                BinauralFilterProfile::Direct,
+                HeadphonesRenderingMode::WorldLockedRestricted,
+            ))
+            .unwrap();
+        unrotated_reference.update_object_channel_position(0, 0, 90.0, 0.0, 1.0).unwrap();
+
+        let mut input = AudioBuffer::new(1, BUFFER_SIZE);
+        generate_sine(SAMPLING_RATE, input.channel_mut(0).as_mut_slice());
+        let mut head_locked_output = AudioBuffer::new(2, BUFFER_SIZE);
+        let mut reference_output = AudioBuffer::new(2, BUFFER_SIZE);
+
+        renderer.process(&input, &mut head_locked_output);
+        unrotated_reference.process(&input, &mut reference_output);
+
+        for ch in 0..2 {
+            expect_eq!(
+                head_locked_output.channel(ch).as_slice(),
+                reference_output.channel(ch).as_slice()
+            );
+        }
+    }
+
+    #[gtest]
+    fn add_audio_element_mixed_world_and_head_locked_isolates_encoders() {
+        let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
+        renderer
+            .add_audio_element(&mono_object_config(
+                BinauralFilterProfile::Direct,
+                HeadphonesRenderingMode::HeadLocked,
+            ))
+            .unwrap();
+        renderer
+            .add_audio_element(&mono_object_config(
+                BinauralFilterProfile::Direct,
+                HeadphonesRenderingMode::WorldLockedRestricted,
+            ))
+            .unwrap();
+        renderer.update_object_channel_position(0, 0, 90.0, 0.0, 1.0).unwrap();
+        renderer.update_object_channel_position(1, 0, -90.0, 0.0, 1.0).unwrap();
+
+        let mut reference = ObrImpl::new(get_buffer_size(), get_sample_rate());
+        reference
+            .add_audio_element(&mono_object_config(
+                BinauralFilterProfile::Direct,
+                HeadphonesRenderingMode::WorldLockedRestricted,
+            ))
+            .unwrap();
+        reference.update_object_channel_position(0, 0, -90.0, 0.0, 1.0).unwrap();
+
+        let mut input = AudioBuffer::new(2, BUFFER_SIZE);
+        generate_sine(SAMPLING_RATE, input.channel_mut(1).as_mut_slice());
+        let mut reference_input = AudioBuffer::new(1, BUFFER_SIZE);
+        generate_sine(SAMPLING_RATE, reference_input.channel_mut(0).as_mut_slice());
+        let mut output = AudioBuffer::new(2, BUFFER_SIZE);
+        let mut reference_output = AudioBuffer::new(2, BUFFER_SIZE);
+
+        renderer.process(&input, &mut output);
+        reference.process(&reference_input, &mut reference_output);
+
+        for ch in 0..2 {
+            expect_eq!(output.channel(ch).as_slice(), reference_output.channel(ch).as_slice());
+        }
     }
 
     #[gtest]
     fn remove_first_element_in_adapter_shifts_remaining_element_indices() {
         let mut adapter = ObrAudioRendererAdapter::new(get_buffer_size(), get_sample_rate());
         let obj_config =
-            OarAudioElementConfig::ObjectBased(crate::common::definitions::ObjectBasedConfig {
-                num_objects: ChannelCount::new(1).unwrap(),
-                rendering_config: None,
-            });
+            mono_object_config(BinauralFilterProfile::Direct, HeadphonesRenderingMode::WorldLocked);
         adapter.add_element(10, &obj_config).unwrap();
         adapter.add_element(20, &obj_config).unwrap();
         let position = ObjectPosition::Polar(vec![
@@ -947,10 +1009,7 @@ mod test {
     fn remove_middle_element_in_adapter_shifts_only_higher_element_indices() {
         let mut adapter = ObrAudioRendererAdapter::new(get_buffer_size(), get_sample_rate());
         let obj_config =
-            OarAudioElementConfig::ObjectBased(crate::common::definitions::ObjectBasedConfig {
-                num_objects: ChannelCount::new(1).unwrap(),
-                rendering_config: None,
-            });
+            mono_object_config(BinauralFilterProfile::Direct, HeadphonesRenderingMode::WorldLocked);
         adapter.add_element(10, &obj_config).unwrap();
         adapter.add_element(20, &obj_config).unwrap();
         adapter.add_element(30, &obj_config).unwrap();

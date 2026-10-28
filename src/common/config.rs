@@ -73,6 +73,13 @@ pub enum HeadphonesRenderingMode {
     Reserved = 3,
 }
 
+impl HeadphonesRenderingMode {
+    /// Returns `true` if this mode locks the audio element to the listener's head.
+    pub fn is_head_locked(self) -> bool {
+        matches!(self, Self::HeadLocked)
+    }
+}
+
 /// Selected binaural filter profile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum BinauralFilterProfile {
@@ -216,5 +223,13 @@ mod test {
 
         let el_ch_clone = el_ch;
         expect_that!(el_ch, eq(el_ch_clone));
+    }
+
+    #[gtest]
+    fn headphones_rendering_mode_is_head_locked_returns_true_only_for_head_locked() {
+        expect_false!(HeadphonesRenderingMode::WorldLockedRestricted.is_head_locked());
+        expect_false!(HeadphonesRenderingMode::WorldLocked.is_head_locked());
+        expect_true!(HeadphonesRenderingMode::HeadLocked.is_head_locked());
+        expect_false!(HeadphonesRenderingMode::Reserved.is_head_locked());
     }
 }

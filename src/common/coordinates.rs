@@ -72,6 +72,11 @@ impl Distance {
 // ===== PolarCoordinate =====
 
 impl PolarCoordinate {
+    /// Default unit-distance front position (`azimuth = 0.0°`, `elevation = 0.0°`,
+    /// `distance = 1.0`).
+    pub const FRONT: Self =
+        Self { azimuth: Degrees::ZERO, elevation: Degrees::ZERO, distance: Distance::ONE };
+
     /// Creates a new PolarCoordinate.
     ///
     /// Validates and normalizes coordinate values:
