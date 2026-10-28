@@ -70,7 +70,8 @@ std::vector<oar_metadata_t> GetHeadTrackingMetadata() {
 }
 
 // Run the test with head rotations with a given config and elements.
-void RunTest(const oar_config_t& config, const ElementWithMetadata& element,
+void RunTest(const oar_config_t& config,
+             const std::vector<ElementWithMetadata>& elements,
              std::string_view error_message) {
   // Wrap the C pointers in unique_ptrs with custom deleters for automatic
   // memory management.
@@ -94,35 +95,38 @@ void RunTest(const oar_config_t& config, const ElementWithMetadata& element,
   const int r_group_id = roar_add_audio_group(roar.get());
   ASSERT_GE(r_group_id, 0) << error_message;
 
-  // Add elements
-  uint32_t element_id = 42;
-  const int c_add = oar_add_audio_element(oar.get(), c_group_id, element_id,
-                                          &element.element_config);
-  ASSERT_EQ(c_add, 0) << error_message;
-  const int r_add = roar_add_audio_element(roar.get(), r_group_id, element_id,
-                                           &element.element_config);
-  ASSERT_EQ(r_add, 0) << error_message;
+  // Add elements and prepare input audio for each audio element.
+  std::vector<std::vector<float>> all_input_data(elements.size());
+  std::vector<oar_audio_block_t> input_blocks(elements.size());
+  for (size_t i = 0; i < elements.size(); ++i) {
+    const uint32_t element_id = 42 + i;
+    const auto& element = elements[i];
+    const int c_add = oar_add_audio_element(oar.get(), c_group_id, element_id,
+                                            &element.element_config);
+    ASSERT_EQ(c_add, 0) << error_message;
+    const int r_add = roar_add_audio_element(roar.get(), r_group_id, element_id,
+                                             &element.element_config);
+    ASSERT_EQ(r_add, 0) << error_message;
 
-  if (element.metadata.has_value()) {
-    ASSERT_EQ(oar_update_audio_element_metadata(oar.get(), element_id,
-                                                &element.metadata.value()),
-              0)
-        << error_message;
-    ASSERT_EQ(roar_update_audio_element_metadata(roar.get(), element_id,
-                                                 &element.metadata.value()),
-              0)
-        << error_message;
+    if (element.metadata.has_value()) {
+      ASSERT_EQ(oar_update_audio_element_metadata(oar.get(), element_id,
+                                                  &element.metadata.value()),
+                0)
+          << error_message;
+      ASSERT_EQ(roar_update_audio_element_metadata(roar.get(), element_id,
+                                                   &element.metadata.value()),
+                0)
+          << error_message;
+    }
+
+    const uint32_t input_channels =
+        oar_get_number_of_audio_element_channels(oar.get(), element_id);
+    all_input_data[i] = GetInputData(c_samples_per_channel, input_channels,
+                                     config.sampling_rate, 200.0f + 50.0f * i);
+    input_blocks[i].channels = input_channels;
+    input_blocks[i].samples_per_channel = c_samples_per_channel;
+    input_blocks[i].data = all_input_data[i].data();
   }
-
-  // Prepare input audio for the audio element.
-  const uint32_t input_channels =
-      oar_get_number_of_audio_element_channels(oar.get(), element_id);
-  auto input_data =
-      GetInputData(c_samples_per_channel, input_channels, config.sampling_rate);
-  oar_audio_block_t input_block = {};
-  input_block.channels = input_channels;
-  input_block.samples_per_channel = c_samples_per_channel;
-  input_block.data = input_data.data();
 
   // Get output buffers ready
   const uint32_t c_output_channels =
@@ -152,13 +156,18 @@ void RunTest(const oar_config_t& config, const ElementWithMetadata& element,
   for (size_t step = 0; step < head_metadata_list.size(); ++step) {
     const auto& head_metadata = head_metadata_list[step];
 
-    // Feed input audio before each render call
-    ASSERT_EQ(
-        oar_update_audio_element_data(oar.get(), element_id, &input_block), 0)
-        << error_message << " at step " << step;
-    ASSERT_EQ(
-        roar_update_audio_element_data(roar.get(), element_id, &input_block), 0)
-        << error_message << " at step " << step;
+    // Feed input audio before each render.
+    for (size_t i = 0; i < elements.size(); ++i) {
+      const uint32_t element_id = 42 + i;
+      ASSERT_EQ(oar_update_audio_element_data(oar.get(), element_id,
+                                              &input_blocks[i]),
+                0)
+          << error_message << " at step " << step;
+      ASSERT_EQ(roar_update_audio_element_data(roar.get(), element_id,
+                                               &input_blocks[i]),
+                0)
+          << error_message << " at step " << step;
+    }
 
     // Update head position before render
     ASSERT_EQ(oar_update_metadata(oar.get(), c_group_id, &head_metadata), 0)
@@ -251,7 +260,74 @@ TEST(RoarEquivalence, RenderingToBinauralWithRenderingConfig) {
             absl::StrFormat("Element: %s, rendering mode: %d, profile: %d",
                             Describe(input.element_config), mode, profile);
 
-        RunTest(config, input, error_message);
+        RunTest(config, {input}, error_message);
+      }
+    }
+  }
+}
+
+// Tests rendering an audio group containing mixed world-locked and head-locked
+// elements with head tracking enabled.
+TEST(RoarEquivalence, RenderingMixedWorldAndHeadLockedElementsInSameGroup) {
+  oar_config_t config = {};
+  config.target_layout = ck_oar_layout_binaural;
+  config.samples_per_channel = kSamplesPerChannel;
+  config.sampling_rate = 48000;
+
+  oar_audio_element_config_t channel_config = {};
+  channel_config.type = ck_channel_based;
+  channel_config.cbc.layout = ck_oar_layout_stereo;
+  channel_config.parameters.flags |=
+      def_parameter_set_flag_iamf_element_rendering_config;
+
+  oar_audio_element_config_t object_config = {};
+  object_config.type = ck_object_based;
+  object_config.obc.num_objects = 1;
+  object_config.parameters.flags |=
+      def_parameter_set_flag_iamf_element_rendering_config;
+  oar_metadata_t object_metadata = CreateObjectMetadata(
+      std::vector<polar_t>{{45.0f, 0.0f, 1.0f}}, kSamplesPerChannel);
+
+  oar_audio_element_config_t scene_config = {};
+  scene_config.type = ck_scene_based;
+  scene_config.sbc.order = ck_oar_1oa;
+  scene_config.parameters.flags |=
+      def_parameter_set_flag_iamf_element_rendering_config;
+
+  const std::vector<oar_headphones_rendering_mode_t> modes = {
+      ck_world_locked_restricted, ck_world_locked, ck_head_locked};
+  const std::vector<oar_binaural_filter_profile_t> profiles = {
+      ck_ambient, ck_direct, ck_reverberant};
+
+  for (auto profile : profiles) {
+    channel_config.parameters.element_rendering_config.binaural_filter_profile =
+        profile;
+    object_config.parameters.element_rendering_config.binaural_filter_profile =
+        profile;
+    scene_config.parameters.element_rendering_config.binaural_filter_profile =
+        profile;
+
+    for (auto first_mode : modes) {
+      for (auto second_mode : modes) {
+        if (first_mode == second_mode) {
+          continue;
+        }
+        channel_config.parameters.element_rendering_config
+            .headphones_rendering_mode = first_mode;
+        object_config.parameters.element_rendering_config
+            .headphones_rendering_mode = second_mode;
+        scene_config.parameters.element_rendering_config
+            .headphones_rendering_mode = first_mode;
+
+        std::string error_message = absl::StrFormat(
+            "Mixed group (first_mode: %d, second_mode: %d, profile: %d)",
+            first_mode, second_mode, profile);
+
+        RunTest(config,
+                {{channel_config, std::nullopt},
+                 {object_config, object_metadata},
+                 {scene_config, std::nullopt}},
+                error_message);
       }
     }
   }

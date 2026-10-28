@@ -26,9 +26,10 @@ mod test {
     };
     use aom_roar::ffi::*;
     use aom_roar::{
-        AudioElementConfig, ChannelBasedConfig, ChannelCount, Config, HighOrderAmbisonics,
-        InputLayout, ObjectBasedConfig, ObjectPosition, OutputLayout, PolarCoordinate,
-        RoarRenderer, SampleRate, Samples, SceneBasedConfig,
+        AudioElementConfig, BinauralFilterProfile, ChannelBasedConfig, ChannelCount, Config,
+        ElementRenderingConfig, HeadphonesRenderingMode, HighOrderAmbisonics, InputLayout,
+        ObjectBasedConfig, ObjectPosition, OutputLayout, PolarCoordinate, Quaternion, RoarRenderer,
+        SampleRate, Samples, SceneBasedConfig,
     };
     use googletest::prelude::*;
 
@@ -256,5 +257,107 @@ mod test {
         // Verify output is non-silent (has energy from all elements)
         expect_that!(rms(output_buffer.channel_mut(0)), gt(NON_SILENT_RMS_THRESHOLD));
         expect_that!(rms(output_buffer.channel_mut(1)), gt(NON_SILENT_RMS_THRESHOLD));
+    }
+
+    /// Verifies that an audio group containing both a world-locked stereo element and a head-locked
+    /// object element renders the exact superposition of the rotated world-locked element and the
+    /// unrotated head-locked element.
+    #[gtest]
+    fn binaural_mixed_world_and_head_locked_group_matches_superposition_under_rotation() {
+        let frame_size: usize = 256;
+        let sample_rate: u32 = 48000;
+        let output_channels: usize = 2;
+        let samples = Samples::new(frame_size as u32).unwrap();
+        let config =
+            Config::new(OutputLayout::Binaural, samples, SampleRate::new(sample_rate).unwrap())
+                .unwrap();
+        let world_locked_stereo_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
+            layout: InputLayout::Stereo,
+            downmix_info: None,
+            rendering_config: Some(ElementRenderingConfig {
+                headphones_rendering_mode: HeadphonesRenderingMode::WorldLocked,
+                binaural_filter_profile: BinauralFilterProfile::Direct,
+            }),
+        });
+        let head_locked_obj_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig {
+            num_objects: ChannelCount::new(1).unwrap(),
+            rendering_config: Some(ElementRenderingConfig {
+                headphones_rendering_mode: HeadphonesRenderingMode::HeadLocked,
+                binaural_filter_profile: BinauralFilterProfile::Direct,
+            }),
+        });
+        let obj_pos =
+            ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(-90.0, 0.0, 1.0).unwrap()]);
+        let rotation_90_yaw = Quaternion::new(
+            std::f32::consts::FRAC_1_SQRT_2,
+            0.0,
+            0.0,
+            std::f32::consts::FRAC_1_SQRT_2,
+        )
+        .unwrap();
+        let stereo_ch0: Vec<f32> =
+            (0..frame_size).map(|i| ((i as f32) * 0.07).sin() * 0.4).collect();
+        let stereo_ch1: Vec<f32> =
+            (0..frame_size).map(|i| ((i as f32) * 0.11).cos() * 0.3).collect();
+        let obj_ch0: Vec<f32> = (0..frame_size).map(|i| ((i as f32) * 0.17).sin() * 0.5).collect();
+        let stereo_refs: [&[f32]; 2] = [stereo_ch0.as_slice(), stereo_ch1.as_slice()];
+        let obj_refs: [&[f32]; 1] = [obj_ch0.as_slice()];
+
+        let mut mixed_renderer = RoarRenderer::create(&config).unwrap();
+        let mixed_group = mixed_renderer.add_audio_group().unwrap();
+        mixed_renderer.enable_head_tracking(true).unwrap();
+        mixed_renderer.add_element(mixed_group, 10, &world_locked_stereo_cfg).unwrap();
+        mixed_renderer.add_element(mixed_group, 20, &head_locked_obj_cfg).unwrap();
+        mixed_renderer.update_element_positions(20, &obj_pos, samples).unwrap();
+        mixed_renderer.set_head_rotation(rotation_90_yaw).unwrap();
+        let mut out_mixed = vec![0.0f32; output_channels * frame_size];
+        let mut slices_mixed: Vec<&mut [f32]> =
+            (0..output_channels).map(|_| &mut [] as &mut [f32]).collect();
+        let mut buf_mixed = create_planar_buffer_mut(
+            &mut out_mixed,
+            output_channels,
+            frame_size,
+            &mut slices_mixed,
+        );
+        mixed_renderer
+            .render(
+                &[
+                    (10, create_planar_buffer_ref(&stereo_refs, frame_size)),
+                    (20, create_planar_buffer_ref(&obj_refs, frame_size)),
+                ],
+                &mut buf_mixed,
+            )
+            .unwrap();
+
+        let mut wl_renderer = RoarRenderer::create(&config).unwrap();
+        let wl_group = wl_renderer.add_audio_group().unwrap();
+        wl_renderer.enable_head_tracking(true).unwrap();
+        wl_renderer.add_element(wl_group, 10, &world_locked_stereo_cfg).unwrap();
+        wl_renderer.set_head_rotation(rotation_90_yaw).unwrap();
+        let mut out_wl = vec![0.0f32; output_channels * frame_size];
+        let mut slices_wl: Vec<&mut [f32]> =
+            (0..output_channels).map(|_| &mut [] as &mut [f32]).collect();
+        let mut buf_wl =
+            create_planar_buffer_mut(&mut out_wl, output_channels, frame_size, &mut slices_wl);
+        wl_renderer
+            .render(&[(10, create_planar_buffer_ref(&stereo_refs, frame_size))], &mut buf_wl)
+            .unwrap();
+
+        let mut hl_renderer = RoarRenderer::create(&config).unwrap();
+        let hl_group = hl_renderer.add_audio_group().unwrap();
+        hl_renderer.add_element(hl_group, 20, &head_locked_obj_cfg).unwrap();
+        hl_renderer.update_element_positions(20, &obj_pos, samples).unwrap();
+        let mut out_hl = vec![0.0f32; output_channels * frame_size];
+        let mut slices_hl: Vec<&mut [f32]> =
+            (0..output_channels).map(|_| &mut [] as &mut [f32]).collect();
+        let mut buf_hl =
+            create_planar_buffer_mut(&mut out_hl, output_channels, frame_size, &mut slices_hl);
+        hl_renderer
+            .render(&[(20, create_planar_buffer_ref(&obj_refs, frame_size))], &mut buf_hl)
+            .unwrap();
+
+        for i in 0..(output_channels * frame_size) {
+            expect_that!(out_mixed[i], near(out_wl[i] + out_hl[i], 1e-5));
+        }
     }
 }

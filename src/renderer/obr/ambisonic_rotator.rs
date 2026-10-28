@@ -51,6 +51,9 @@ pub struct AmbisonicRotator {
     frames_per_buffer: usize,
     /// The current rotation of the sound field to be applied.
     current_rotation: Quaternion,
+    /// Whether audio has been processed at least once. Used to snap to the target rotation on the
+    /// first processed block rather than interpolating from identity.
+    has_processed: bool,
     /// Rotation matrices for each band of the sound field.
     /// `rotation_matrices[band]` is the (2 * band + 1) x (2 * band + 1) matrix for `band`.
     rotation_matrices: Vec<Vec<f32>>,
@@ -106,10 +109,18 @@ impl AmbisonicRotator {
             ambisonic_order,
             frames_per_buffer,
             current_rotation: Quaternion::identity(),
+            has_processed: false,
             rotation_matrices,
             uvw_tables,
             band_scratch: vec![0.0_f32; max_band_size * frames_per_buffer],
         }
+    }
+
+    /// Marks that an audio block has been rendered while the rotator was bypassed (e.g., head
+    /// tracking disabled), so that a subsequent rotation interpolates smoothly from identity rather
+    /// than snapping on its first active block.
+    pub fn mark_audio_rendered(&mut self) {
+        self.has_processed = true;
     }
 
     /// Performs a smooth in-place rotation (`buffer = R * buffer`) of the sound field buffer.
@@ -126,7 +137,20 @@ impl AmbisonicRotator {
         if self.current_rotation.angular_difference_rad(&identity) < ROTATION_QUANTIZATION_RAD
             && target_rotation.angular_difference_rad(&identity) < ROTATION_QUANTIZATION_RAD
         {
+            self.has_processed = true;
             return false;
+        }
+
+        // On the first processed block, snap immediately to target_rotation instead of slerping
+        // from identity so that a pre-configured head orientation takes full effect from sample 0.
+        if !self.has_processed {
+            self.has_processed = true;
+            if self.current_rotation.angular_difference_rad(target_rotation)
+                >= ROTATION_QUANTIZATION_RAD
+            {
+                self.current_rotation = *target_rotation;
+                self.update_rotation_matrix(target_rotation);
+            }
         }
 
         let num_frames = buffer.num_frames();
@@ -566,5 +590,137 @@ mod test {
         // to rotate away from their initial values.
         expect_that!(buffer[1], each(not(near(1.0, EPSILON))));
         expect_that!(buffer[2], each(not(near(2.0, EPSILON))));
+    }
+
+    #[gtest]
+    fn first_processed_block_applies_target_rotation_in_full() {
+        let frames_per_buffer = 2 * SLERP_FRAME_INTERVAL;
+        let num_channels = get_num_periphonic_components(AMBISONIC_ORDER);
+        let mut input_buffer = AudioBuffer::new(1, frames_per_buffer);
+        input_buffer.channel_mut(0).as_mut_slice().fill(1.0);
+        let mut source_mono_codec = AmbisonicEncoder::new(1, AMBISONIC_ORDER as usize);
+        source_mono_codec.set_source(
+            0,
+            LinearGain::ONE,
+            Degrees::from_const(INITIAL_SOURCE_ANGLE.0),
+            Degrees::from_const(INITIAL_SOURCE_ANGLE.1),
+            Distance::ONE,
+        );
+        let mut encoded_buffer = AudioBuffer::new(num_channels, frames_per_buffer);
+        source_mono_codec.process_planar_audio_data(&input_buffer, &mut encoded_buffer);
+        let mut reference_mono_codec = AmbisonicEncoder::new(1, AMBISONIC_ORDER as usize);
+        reference_mono_codec.set_source(
+            0,
+            LinearGain::ONE,
+            Degrees::from_const(Z_ROTATED_SOURCE_ANGLE.0),
+            Degrees::from_const(Z_ROTATED_SOURCE_ANGLE.1),
+            Distance::ONE,
+        );
+        let mut reference_buffer = AudioBuffer::new(num_channels, frames_per_buffer);
+        reference_mono_codec.process_planar_audio_data(&input_buffer, &mut reference_buffer);
+        let rotation = from_angle_axis(ANGLE_DEGREES.to_radians(), [0.0, 0.0, 1.0]);
+        let mut rotator = AmbisonicRotator::new(AMBISONIC_ORDER, frames_per_buffer);
+
+        let result = rotator.process_in_place(&rotation, &mut encoded_buffer);
+
+        expect_true!(result);
+        for channel in 0..num_channels {
+            for frame in 0..frames_per_buffer {
+                expect_that!(
+                    encoded_buffer[channel][frame],
+                    near(reference_buffer[channel][frame], EPSILON)
+                );
+            }
+        }
+    }
+
+    #[gtest]
+    fn rotation_after_bypassed_blocks_still_slerps() {
+        let frames_per_buffer = 2 * SLERP_FRAME_INTERVAL;
+        let num_channels = get_num_periphonic_components(AMBISONIC_ORDER);
+        let mut input_buffer = AudioBuffer::new(1, frames_per_buffer);
+        input_buffer.channel_mut(0).as_mut_slice().fill(1.0);
+        let mut source_mono_codec = AmbisonicEncoder::new(1, AMBISONIC_ORDER as usize);
+        source_mono_codec.set_source(
+            0,
+            LinearGain::ONE,
+            Degrees::from_const(INITIAL_SOURCE_ANGLE.0),
+            Degrees::from_const(INITIAL_SOURCE_ANGLE.1),
+            Distance::ONE,
+        );
+        let mut rotated_buffer = AudioBuffer::new(num_channels, frames_per_buffer);
+        source_mono_codec.process_planar_audio_data(&input_buffer, &mut rotated_buffer);
+        let mut reference_mono_codec = AmbisonicEncoder::new(1, AMBISONIC_ORDER as usize);
+        reference_mono_codec.set_source(
+            0,
+            LinearGain::ONE,
+            Degrees::from_const(Z_ROTATED_SOURCE_ANGLE.0),
+            Degrees::from_const(Z_ROTATED_SOURCE_ANGLE.1),
+            Distance::ONE,
+        );
+        let mut reference_buffer = AudioBuffer::new(num_channels, frames_per_buffer);
+        reference_mono_codec.process_planar_audio_data(&input_buffer, &mut reference_buffer);
+        let rotation = from_angle_axis(ANGLE_DEGREES.to_radians(), [0.0, 0.0, 1.0]);
+        let mut rotator = AmbisonicRotator::new(AMBISONIC_ORDER, frames_per_buffer);
+        rotator.mark_audio_rendered();
+
+        let result = rotator.process_in_place(&rotation, &mut rotated_buffer);
+
+        expect_true!(result);
+        let mut max_first_interval_difference = 0.0_f32;
+        for channel in 0..num_channels {
+            for frame in (frames_per_buffer - SLERP_FRAME_INTERVAL)..frames_per_buffer {
+                expect_that!(
+                    rotated_buffer[channel][frame],
+                    near(reference_buffer[channel][frame], EPSILON)
+                );
+            }
+            for frame in 0..SLERP_FRAME_INTERVAL {
+                max_first_interval_difference = max_first_interval_difference
+                    .max((rotated_buffer[channel][frame] - reference_buffer[channel][frame]).abs());
+            }
+        }
+        expect_that!(max_first_interval_difference, gt(0.01));
+    }
+
+    #[gtest]
+    fn rotation_change_after_first_block_still_slerps() {
+        let frames_per_buffer = 2 * SLERP_FRAME_INTERVAL;
+        let num_channels = get_num_periphonic_components(AMBISONIC_ORDER);
+        let mut input_buffer = AudioBuffer::new(1, frames_per_buffer);
+        input_buffer.channel_mut(0).as_mut_slice().fill(1.0);
+        let mut source_mono_codec = AmbisonicEncoder::new(1, AMBISONIC_ORDER as usize);
+        source_mono_codec.set_source(
+            0,
+            LinearGain::ONE,
+            Degrees::from_const(INITIAL_SOURCE_ANGLE.0),
+            Degrees::from_const(INITIAL_SOURCE_ANGLE.1),
+            Distance::ONE,
+        );
+        let mut encoded_buffer = AudioBuffer::new(num_channels, frames_per_buffer);
+        source_mono_codec.process_planar_audio_data(&input_buffer, &mut encoded_buffer);
+        let mut rotated_buffer = encoded_buffer.clone();
+        let mut transition_buffer = encoded_buffer.clone();
+        let rotation = from_angle_axis(ANGLE_DEGREES.to_radians(), [0.0, 0.0, 1.0]);
+        let mut rotator = AmbisonicRotator::new(AMBISONIC_ORDER, frames_per_buffer);
+
+        expect_true!(rotator.process_in_place(&rotation, &mut rotated_buffer));
+        expect_true!(rotator.process_in_place(&Quaternion::default(), &mut transition_buffer));
+
+        let mut max_first_interval_difference = 0.0_f32;
+        for channel in 0..num_channels {
+            for frame in (frames_per_buffer - SLERP_FRAME_INTERVAL)..frames_per_buffer {
+                expect_that!(
+                    transition_buffer[channel][frame],
+                    near(encoded_buffer[channel][frame], EPSILON)
+                );
+            }
+            for frame in 0..SLERP_FRAME_INTERVAL {
+                max_first_interval_difference = max_first_interval_difference.max(
+                    (transition_buffer[channel][frame] - encoded_buffer[channel][frame]).abs(),
+                );
+            }
+        }
+        expect_that!(max_first_interval_difference, gt(0.01));
     }
 }

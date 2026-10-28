@@ -39,7 +39,11 @@ Changes in the repo not yet in a release will appear here.
 -   Fixed rendering when input and output layouts are both binaural. Previously,
     OBR just returned an error.
 -   Fixed improper routing of channels when rendering ambisonics to Sound System
-    H. ([roar/issues/1](https://github.com/AOMediaCodec/roar/issues/1)).
+    H. (Reported in
+    [roar/issues/1](https://github.com/AOMediaCodec/roar/issues/1).)
+-   Fixed binaural rendering when world-locked and head-locked content are in
+    the same audio group. (Reported in
+    [oar/issues/53](https://github.com/AOMediaCodec/oar/issues/53).)
 
 ## [1.0.0] - 2026-10-15
 

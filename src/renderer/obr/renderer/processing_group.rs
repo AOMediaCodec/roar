@@ -54,6 +54,8 @@ pub struct ProcessingGroup {
     ambisonic_mix_bed_head_locked: AudioBuffer,
     ambisonic_encoder: Option<AmbisonicEncoder>,
     ambisonic_encoder_input_buffer: AudioBuffer,
+    ambisonic_encoder_head_locked: Option<AmbisonicEncoder>,
+    ambisonic_encoder_input_buffer_head_locked: AudioBuffer,
     ambisonic_rotator: Option<AmbisonicRotator>,
     ambisonic_binaural_decoder: Option<AmbisonicBinauralDecoder>,
     world_locked_indices: Vec<usize>,
@@ -79,6 +81,8 @@ impl ProcessingGroup {
             ambisonic_mix_bed_head_locked: AudioBuffer::new(num_ambisonic_channels, size_usize),
             ambisonic_encoder: None,
             ambisonic_encoder_input_buffer: AudioBuffer::default(),
+            ambisonic_encoder_head_locked: None,
+            ambisonic_encoder_input_buffer_head_locked: AudioBuffer::default(),
             ambisonic_rotator: None,
             ambisonic_binaural_decoder: None,
             // TODO(b/525080422): Pre-allocate these vectors to avoid heap allocations in the render
@@ -190,15 +194,15 @@ impl ProcessingGroup {
             Some(true),
             &mut self.head_locked_indices,
         );
-        if !self.head_locked_indices.is_empty() && self.ambisonic_encoder.is_some() {
+        if !self.head_locked_indices.is_empty() && self.ambisonic_encoder_head_locked.is_some() {
             for (i, &src_idx) in self.head_locked_indices.iter().enumerate() {
                 let src = input_buffer.channel(src_idx);
-                let mut dst = self.ambisonic_encoder_input_buffer.channel_mut(i);
+                let mut dst = self.ambisonic_encoder_input_buffer_head_locked.channel_mut(i);
                 dst.as_mut_slice().copy_from_slice(src.as_slice());
             }
-            if let Some(enc) = &mut self.ambisonic_encoder {
+            if let Some(enc) = &mut self.ambisonic_encoder_head_locked {
                 enc.process_planar_audio_data(
-                    &self.ambisonic_encoder_input_buffer,
+                    &self.ambisonic_encoder_input_buffer_head_locked,
                     &mut self.ambisonic_mix_bed_head_locked,
                 );
             }
@@ -216,8 +220,12 @@ impl ProcessingGroup {
             }
         }
 
-        if head_tracking_enabled && let Some(rot) = &mut self.ambisonic_rotator {
-            rot.process_in_place(world_rotation, &mut self.ambisonic_mix_bed);
+        if let Some(rot) = &mut self.ambisonic_rotator {
+            if head_tracking_enabled {
+                rot.process_in_place(world_rotation, &mut self.ambisonic_mix_bed);
+            } else {
+                rot.mark_audio_rendered();
+            }
         }
 
         self.ambisonic_mix_bed += &self.ambisonic_mix_bed_head_locked;
@@ -227,31 +235,75 @@ impl ProcessingGroup {
         }
     }
 
-    /// Updates Ambisonic encoder source positions and channel inputs.
+    /// Updates Ambisonic encoder source positions and channel inputs for both world-locked and
+    /// head-locked elements in this processing group.
     pub fn update_ambisonic_encoder(
         &mut self,
         audio_elements: &mut [AudioElementConfig],
     ) -> Result<(), OarError> {
-        let expected_channels = self.get_encoder_channels_count(audio_elements);
+        let ambisonic_order = self.key.ambisonic_order as usize;
+        Self::update_encoder_for_lock_mode(
+            &self.audio_element_indices,
+            self.buffer_size_per_channel,
+            ambisonic_order,
+            audio_elements,
+            false,
+            &mut self.ambisonic_encoder,
+            &mut self.ambisonic_encoder_input_buffer,
+        );
+        Self::update_encoder_for_lock_mode(
+            &self.audio_element_indices,
+            self.buffer_size_per_channel,
+            ambisonic_order,
+            audio_elements,
+            true,
+            &mut self.ambisonic_encoder_head_locked,
+            &mut self.ambisonic_encoder_input_buffer_head_locked,
+        );
+        Ok(())
+    }
+}
+
+impl ProcessingGroup {
+    /// Configures the Ambisonic encoder and input scratch buffer for elements matching
+    /// `head_locked`. Separate encoders prevent head-locked and world-locked passes from
+    /// overwriting each other's source positions, input channels, or ramp state.
+    fn update_encoder_for_lock_mode(
+        audio_element_indices: &[usize],
+        buffer_size_per_channel: Samples,
+        ambisonic_order: usize,
+        audio_elements: &mut [AudioElementConfig],
+        head_locked: bool,
+        encoder: &mut Option<AmbisonicEncoder>,
+        input_buffer: &mut AudioBuffer,
+    ) {
+        let mut expected_channels = 0;
+        for &ae_index in audio_element_indices {
+            let ae = &audio_elements[ae_index];
+            if ae.is_head_locked() == head_locked && ae.uses_ambisonic_encoder() {
+                expected_channels += ae.get_number_of_input_channels();
+            }
+        }
+
         if expected_channels == 0 {
-            self.ambisonic_encoder = None;
-            self.ambisonic_encoder_input_buffer = AudioBuffer::default();
-            return Ok(());
+            *encoder = None;
+            *input_buffer = AudioBuffer::default();
+            return;
         }
 
-        if self.ambisonic_encoder.is_none()
-            || self.ambisonic_encoder_input_buffer.num_channels() != expected_channels
-        {
-            self.ambisonic_encoder_input_buffer =
-                AudioBuffer::new(expected_channels, self.buffer_size_per_channel.value() as usize);
-            self.ambisonic_encoder =
-                Some(AmbisonicEncoder::new(expected_channels, self.key.ambisonic_order as usize));
+        if encoder.is_none() || input_buffer.num_channels() != expected_channels {
+            *input_buffer =
+                AudioBuffer::new(expected_channels, buffer_size_per_channel.value() as usize);
+            *encoder = Some(AmbisonicEncoder::new(expected_channels, ambisonic_order));
         }
 
-        if let Some(enc) = &mut self.ambisonic_encoder {
+        if let Some(enc) = encoder {
             let mut enc_idx = 0;
-            for &ae_index in &self.audio_element_indices {
+            for &ae_index in audio_element_indices {
                 let audio_element = &mut audio_elements[ae_index];
+                if audio_element.is_head_locked() != head_locked {
+                    continue;
+                }
                 for source in audio_element.get_loudspeaker_channels() {
                     enc.set_source(
                         enc_idx,
@@ -274,22 +326,10 @@ impl ProcessingGroup {
                 }
             }
         }
-        Ok(())
     }
 }
 
 impl ProcessingGroup {
-    fn get_encoder_channels_count(&self, audio_elements: &[AudioElementConfig]) -> usize {
-        let mut count = 0;
-        for &ae_index in &self.audio_element_indices {
-            let ae = &audio_elements[ae_index];
-            if ae.uses_ambisonic_encoder() {
-                count += ae.get_number_of_input_channels();
-            }
-        }
-        count
-    }
-
     fn populate_encoder_source_channel_indices(
         audio_element_indices: &[usize],
         audio_elements: &[AudioElementConfig],
@@ -917,18 +957,24 @@ mod test {
     #[gtest]
     fn test_mixed_world_and_head_locked_elements() {
         let key = ProcessingGroupKey {
-            ambisonic_order: 2,
+            ambisonic_order: 1,
             filter_profile: BinauralFilterProfile::Direct,
         };
-        let indices = vec![0, 1];
-        let mut group = ProcessingGroup::new(key, indices, get_buffer_size(), get_sample_rate());
+        let mut mixed_group =
+            ProcessingGroup::new(key, vec![0, 1], get_buffer_size(), get_sample_rate());
+        let mut world_only_group =
+            ProcessingGroup::new(key, vec![0], get_buffer_size(), get_sample_rate());
+        let mut head_only_group =
+            ProcessingGroup::new(key, vec![0], get_buffer_size(), get_sample_rate());
         let mut fft_manager = FftManager::new(BUFFER_SIZE);
         let mut resampler = Resampler::default();
-        assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
+        assert!(mixed_group.initialize(&mut fft_manager, &mut resampler).is_ok());
+        assert!(world_only_group.initialize(&mut fft_manager, &mut resampler).is_ok());
+        assert!(head_only_group.initialize(&mut fft_manager, &mut resampler).is_ok());
 
-        let mut audio_elements = vec![
+        let mut mixed_elements = vec![
             AudioElementConfig::new(
-                AudioElementVariant::ambisonics(HighOrderAmbisonics::Order2),
+                AudioElementVariant::loudspeaker_layout(InputLayout::Stereo),
                 BinauralFilterProfile::Direct,
             ),
             AudioElementConfig::new(
@@ -936,37 +982,79 @@ mod test {
                 BinauralFilterProfile::Direct,
             ),
         ];
-        audio_elements[0].set_head_locked(false);
-        audio_elements[1].set_head_locked(true);
-        audio_elements[1].set_first_channel_index(9);
+        mixed_elements[0].set_head_locked(false);
+        mixed_elements[1].set_head_locked(true);
+        mixed_elements[1].set_first_channel_index(2);
 
-        let object_channels = audio_elements[1].get_object_channels();
+        let object_channels = mixed_elements[1].get_object_channels();
         for obj in object_channels {
-            obj.azimuth = Degrees::new(90.0).unwrap();
+            obj.azimuth = Degrees::from_const(-90.0);
             obj.elevation = Degrees::ZERO;
             obj.distance = Distance::ONE;
         }
+        let mut world_only_elements = vec![mixed_elements[0].clone()];
+        let mut head_only_element = mixed_elements[1].clone();
+        head_only_element.set_first_channel_index(0);
+        let mut head_only_elements = vec![head_only_element];
 
-        expect_true!(group.update_ambisonic_encoder(&mut audio_elements).is_ok());
+        expect_true!(mixed_group.update_ambisonic_encoder(&mut mixed_elements).is_ok());
+        expect_true!(world_only_group.update_ambisonic_encoder(&mut world_only_elements).is_ok());
+        expect_true!(head_only_group.update_ambisonic_encoder(&mut head_only_elements).is_ok());
 
-        let mut input_buffer = AudioBuffer::new(10, BUFFER_SIZE);
-        let mut output_buffer = AudioBuffer::new(2, BUFFER_SIZE);
+        let mut mixed_input = AudioBuffer::new(3, BUFFER_SIZE);
+        generate_sine(SAMPLING_RATE, mixed_input.channel_mut(0).as_mut_slice());
+        generate_sine(SAMPLING_RATE, mixed_input.channel_mut(1).as_mut_slice());
+        generate_sine(SAMPLING_RATE, mixed_input.channel_mut(2).as_mut_slice());
+        let mut world_input = AudioBuffer::new(2, BUFFER_SIZE);
+        world_input
+            .channel_mut(0)
+            .as_mut_slice()
+            .copy_from_slice(mixed_input.channel(0).as_slice());
+        world_input
+            .channel_mut(1)
+            .as_mut_slice()
+            .copy_from_slice(mixed_input.channel(1).as_slice());
+        let mut head_input = AudioBuffer::new(1, BUFFER_SIZE);
+        head_input.channel_mut(0).as_mut_slice().copy_from_slice(mixed_input.channel(2).as_slice());
 
-        for ch in 0..input_buffer.num_channels() {
-            generate_sine(SAMPLING_RATE, input_buffer.channel_mut(ch).as_mut_slice());
-        }
+        let mut mixed_output = AudioBuffer::new(2, BUFFER_SIZE);
+        let mut world_output = AudioBuffer::new(2, BUFFER_SIZE);
+        let mut head_output = AudioBuffer::new(2, BUFFER_SIZE);
+        let rotated = Quaternion::new(0.70710677, 0.0, 0.0, 0.70710677).unwrap();
 
-        let rotated = Quaternion::new(0.707, 0.0, 0.707, 0.0).unwrap();
-        group.process(
-            &input_buffer,
-            &audio_elements,
+        mixed_group.process(
+            &mixed_input,
+            &mixed_elements,
             true,
             &rotated,
-            &mut output_buffer,
+            &mut mixed_output,
+            &mut fft_manager,
+        );
+        world_only_group.process(
+            &world_input,
+            &world_only_elements,
+            true,
+            &rotated,
+            &mut world_output,
+            &mut fft_manager,
+        );
+        head_only_group.process(
+            &head_input,
+            &head_only_elements,
+            false,
+            &Quaternion::default(),
+            &mut head_output,
             &mut fft_manager,
         );
 
-        expect_that!(has_non_zero_output(&output_buffer), eq(true));
+        expect_that!(has_non_zero_output(&mixed_output), eq(true));
+        for ch in 0..2 {
+            for i in 0..BUFFER_SIZE {
+                let expected =
+                    world_output.channel(ch).as_slice()[i] + head_output.channel(ch).as_slice()[i];
+                expect_that!(mixed_output.channel(ch).as_slice()[i], near(expected, 1e-5));
+            }
+        }
     }
 
     #[gtest]

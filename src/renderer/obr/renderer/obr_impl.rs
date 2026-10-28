@@ -187,14 +187,6 @@ impl ObrImpl {
         }
     }
 
-    /// Sets the position of an audio object.
-    ///
-    /// # Parameters
-    /// * `audio_element_index` - Index of the audio element.
-    /// * `azimuth` - Azimuth angle in degrees.
-    /// * `elevation` - Elevation angle in degrees.
-    /// * `distance` - Distance from the listener.
-
     /// Sets the position of a specific channel inside a multi-channel object.
     ///
     /// # Parameters
@@ -254,7 +246,12 @@ impl ObrImpl {
         if self.audio_elements[audio_element_index].is_passthrough() {
             return Ok(());
         }
-        self.audio_elements[audio_element_index].set_head_locked(head_locked);
+        if self.audio_elements[audio_element_index].is_head_locked() != head_locked {
+            self.audio_elements[audio_element_index].set_head_locked(head_locked);
+            for g in &mut self.processing_groups {
+                g.update_ambisonic_encoder(&mut self.audio_elements)?;
+            }
+        }
         Ok(())
     }
 
