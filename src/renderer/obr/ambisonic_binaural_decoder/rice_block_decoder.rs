@@ -25,6 +25,9 @@ pub struct BitReader<'a> {
     bit_offset: u8,
 }
 
+/// Decodes a single byte-aligned block of [`BLOCK_SIZE`] Rice-encoded 16-bit audio samples.
+pub struct RiceBlockDecoder;
+
 impl<'a> BitReader<'a> {
     /// Creates a new `BitReader` positioned at the first bit of `bytes`.
     pub fn new(bytes: &'a [u8]) -> Self {
@@ -68,9 +71,6 @@ impl<'a> BitReader<'a> {
         }
     }
 }
-
-/// Decodes a single byte-aligned block of [`BLOCK_SIZE`] Rice-encoded 16-bit audio samples.
-pub struct RiceBlockDecoder;
 
 impl RiceBlockDecoder {
     /// Converts a ZigZag-mapped unsigned integer back into a signed 16-bit integer.

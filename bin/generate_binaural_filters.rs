@@ -20,7 +20,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use rice_block_decoder::RiceBlockDecoder;
+// Use the RiceBlockDecoder from inside OBR without exposing it as part of the aom-roar API.
+#[path = "../src/renderer/obr/ambisonic_binaural_decoder/rice_block_decoder.rs"]
+mod rice_block_decoder;
 
 /// Number of audio samples per Rice-encoded block.
 const BLOCK_SIZE: usize = 256;
@@ -269,7 +271,7 @@ impl RiceBlockCodec {
     /// Decodes a single 256-sample block starting at `bytes`, returning the number of bytes
     /// consumed.
     pub fn decode_block(bytes: &[u8], output: &mut [i16; BLOCK_SIZE]) -> Option<usize> {
-        RiceBlockDecoder::decode_block(bytes, output)
+        rice_block_decoder::RiceBlockDecoder::decode_block(bytes, output)
     }
 }
 

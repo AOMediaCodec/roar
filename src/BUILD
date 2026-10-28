@@ -2,20 +2,11 @@
 
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_static_library", "rust_test")
 
-rust_static_library(
-    name = "rice_block_decoder",
+# Make this source file available to the command line tool bin/generate_binaural_filters.rs.
+filegroup(
+    name = "rice_block_decoder_src",
     srcs = ["renderer/obr/ambisonic_binaural_decoder/rice_block_decoder.rs"],
-    edition = "2024",
     visibility = ["@aom-roar//bin:__subpackages__"],
-)
-
-rust_test(
-    name = "rice_block_decoder_test",
-    srcs = ["renderer/obr/ambisonic_binaural_decoder/rice_block_decoder.rs"],
-    edition = "2024",
-    deps = [
-        "@crates//:googletest",
-    ],
 )
 
 rust_static_library(
@@ -85,6 +76,7 @@ rust_static_library(
         "renderer/obr/ambisonic_binaural_decoder/fft_manager.rs",
         "renderer/obr/ambisonic_binaural_decoder/partitioned_fft_filter.rs",
         "renderer/obr/ambisonic_binaural_decoder/resampler.rs",
+        "renderer/obr/ambisonic_binaural_decoder/rice_block_decoder.rs",
         "renderer/obr/ambisonic_binaural_decoder/rice_coding.rs",
         "renderer/obr/ambisonic_binaural_decoder/sh_hrir_creator.rs",
         "renderer/obr/ambisonic_encoder.rs",
@@ -117,7 +109,6 @@ rust_static_library(
     edition = "2024",
     visibility = ["//visibility:public"],
     deps = [
-        ":rice_block_decoder",
         "@crates//:realfft",
         "@crates//:rustfft",
     ],
@@ -190,6 +181,7 @@ rust_library(
         "renderer/obr/ambisonic_binaural_decoder/fft_manager.rs",
         "renderer/obr/ambisonic_binaural_decoder/partitioned_fft_filter.rs",
         "renderer/obr/ambisonic_binaural_decoder/resampler.rs",
+        "renderer/obr/ambisonic_binaural_decoder/rice_block_decoder.rs",
         "renderer/obr/ambisonic_binaural_decoder/rice_coding.rs",
         "renderer/obr/ambisonic_binaural_decoder/sh_hrir_creator.rs",
         "renderer/obr/ambisonic_encoder.rs",
@@ -223,7 +215,6 @@ rust_library(
     edition = "2024",
     visibility = ["//visibility:public"],
     deps = [
-        ":rice_block_decoder",
         "@crates//:realfft",
         "@crates//:rustfft",
     ],
@@ -296,6 +287,7 @@ rust_test(
         "renderer/obr/ambisonic_binaural_decoder/fft_manager.rs",
         "renderer/obr/ambisonic_binaural_decoder/partitioned_fft_filter.rs",
         "renderer/obr/ambisonic_binaural_decoder/resampler.rs",
+        "renderer/obr/ambisonic_binaural_decoder/rice_block_decoder.rs",
         "renderer/obr/ambisonic_binaural_decoder/rice_coding.rs",
         "renderer/obr/ambisonic_binaural_decoder/sh_hrir_creator.rs",
         "renderer/obr/ambisonic_encoder.rs",
@@ -327,7 +319,6 @@ rust_test(
     ],
     edition = "2024",
     deps = [
-        ":rice_block_decoder",
         "@crates//:googletest",
         "@crates//:realfft",
         "@crates//:rstest",

@@ -50,14 +50,14 @@ bazel_dep(name = "obr", version = "1.0.0", dev_dependency = True)
 
 git_override(
     module_name = "oar",
-    commit = "dfe4c571d96f38e4005bab16df11f7a745ab27e9",
+    commit = "a7a5cc890ee088e71ff6dc13628e6e7fe74a1481",
     remote = "https://github.com/AOMediaCodec/oar",
 )
 
 # OBR is a module OAR.
 git_override(
     module_name = "obr",
-    commit = "dfe4c571d96f38e4005bab16df11f7a745ab27e9",
+    commit = "a7a5cc890ee088e71ff6dc13628e6e7fe74a1481",
     remote = "https://github.com/AOMediaCodec/oar",
     strip_prefix = "src/renderer/obr/obr_capi/obr",
 )

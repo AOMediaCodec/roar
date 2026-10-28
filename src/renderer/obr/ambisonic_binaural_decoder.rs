@@ -20,6 +20,7 @@ pub mod dsp_utils;
 pub mod fft_manager;
 pub mod partitioned_fft_filter;
 pub mod resampler;
+pub mod rice_block_decoder;
 pub mod rice_coding;
 pub mod sh_hrir_creator;
 

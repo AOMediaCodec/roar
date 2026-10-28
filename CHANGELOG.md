@@ -36,6 +36,7 @@ Changes in the repo not yet in a release will appear here.
 
 ### [Fixed]
 
+-   Fixed building and running tests with Bazelisk and Cargo.
 -   Fixed rendering when input and output layouts are both binaural. Previously,
     OBR just returned an error.
 -   Fixed improper routing of channels when rendering ambisonics to Sound System

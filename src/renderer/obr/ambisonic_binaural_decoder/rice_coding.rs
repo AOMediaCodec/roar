@@ -18,10 +18,9 @@
 //! samples and begins with a 1-byte Rice parameter `k` (where the divisor is `M = 1 << k`),
 //! followed by the bit-packed Rice-encoded samples padded with zero bits to the next byte boundary.
 
+use super::rice_block_decoder::{RiceBlockDecoder, BLOCK_SIZE};
 use crate::common::audio_buffer::simd_utils::float_from_int16;
 use crate::common::audio_buffer::AudioBuffer;
-
-pub use rice_block_decoder::{RiceBlockDecoder, BLOCK_SIZE};
 
 /// Size in bytes of the stream header (`[num_channels, blocks_per_channel]`).
 pub const HEADER_SIZE: usize = 2;
