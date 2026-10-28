@@ -259,6 +259,120 @@ mod test {
         expect_that!(rms(output_buffer.channel_mut(1)), gt(NON_SILENT_RMS_THRESHOLD));
     }
 
+    /// Verifies that removing the first of two binaural elements updates element counts and channel
+    /// lookups and leaves the remaining element able to render non-silent output.
+    #[gtest]
+    fn binaural_removing_first_element_preserves_remaining_element_rendering() {
+        let frame_size: usize = 128;
+        let sample_rate: u32 = 48000;
+        let output_channels: usize = 2;
+        let config = Config::new(
+            OutputLayout::Binaural,
+            Samples::new(frame_size as u32).unwrap(),
+            SampleRate::new(sample_rate).unwrap(),
+        )
+        .unwrap();
+        let mut renderer = RoarRenderer::create(&config).unwrap();
+        let group_id = renderer.add_audio_group().unwrap();
+        let stereo_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
+            layout: InputLayout::Stereo,
+            downmix_info: None,
+            rendering_config: None,
+        });
+        let mono_cfg = AudioElementConfig::ChannelBased(ChannelBasedConfig {
+            layout: InputLayout::Mono,
+            downmix_info: None,
+            rendering_config: None,
+        });
+        renderer.add_element(group_id, 1, &stereo_cfg).unwrap();
+        renderer.add_element(group_id, 2, &mono_cfg).unwrap();
+        assert_eq!(renderer.number_of_audio_elements(), 2);
+
+        let remove_result = renderer.remove_element(1);
+        let mono_input = [vec![0.4f32; frame_size]];
+        let mono_refs: Vec<&[f32]> = mono_input.iter().map(|v| v.as_slice()).collect();
+        let mono_view = create_planar_buffer_ref(&mono_refs, frame_size);
+        let mut output = vec![0.0f32; output_channels * frame_size];
+        let mut output_slices: Vec<&mut [f32]> =
+            (0..output_channels).map(|_| &mut [] as &mut [f32]).collect();
+        let mut output_buffer =
+            create_planar_buffer_mut(&mut output, output_channels, frame_size, &mut output_slices);
+        let render_result = renderer.render(&[(2, mono_view)], &mut output_buffer);
+
+        expect_ok!(remove_result);
+        expect_eq!(renderer.number_of_audio_elements(), 1);
+        expect_eq!(renderer.element_channels(1), None);
+        expect_eq!(renderer.element_channels(2).map(|c| c.get()), Some(1));
+        expect_ok!(render_result);
+        expect_that!(rms(output_buffer.channel_mut(0)), gt(NON_SILENT_RMS_THRESHOLD));
+        expect_that!(rms(output_buffer.channel_mut(1)), gt(NON_SILENT_RMS_THRESHOLD));
+    }
+
+    /// Verifies that removing all binaural elements from a group and re-adding an element preserves
+    /// the previously configured head rotation state.
+    #[gtest]
+    fn binaural_removing_all_elements_and_re_adding_preserves_head_rotation() {
+        let frame_size: usize = 256;
+        let sample_rate: u32 = 48000;
+        let output_channels: usize = 2;
+        let config = Config::new(
+            OutputLayout::Binaural,
+            Samples::new(frame_size as u32).unwrap(),
+            SampleRate::new(sample_rate).unwrap(),
+        )
+        .unwrap();
+        let mut renderer = RoarRenderer::create(&config).unwrap();
+        let group_id = renderer.add_audio_group().unwrap();
+        renderer.enable_head_tracking(true).unwrap();
+        let obj_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig {
+            num_objects: ChannelCount::new(1).unwrap(),
+            rendering_config: None,
+        });
+        let pos =
+            ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(45.0, 0.0, 1.0).unwrap()]);
+        let rotation_90_yaw = Quaternion::new(
+            std::f32::consts::FRAC_1_SQRT_2,
+            0.0,
+            std::f32::consts::FRAC_1_SQRT_2,
+            0.0,
+        )
+        .unwrap();
+        renderer.add_element(group_id, 1, &obj_cfg).unwrap();
+        renderer.set_head_rotation(rotation_90_yaw).unwrap();
+        renderer
+            .update_element_positions(1, &pos, Samples::new(frame_size as u32).unwrap())
+            .unwrap();
+        let stimulus: Vec<f32> = (0..frame_size).map(|i| ((i as f32) * 0.1).sin() * 0.5).collect();
+        let input_refs: [&[f32]; 1] = [stimulus.as_slice()];
+
+        let in_view_a = create_planar_buffer_ref(&input_refs, frame_size);
+        let mut out_a = vec![0.0f32; output_channels * frame_size];
+        let mut slices_a: Vec<&mut [f32]> =
+            (0..output_channels).map(|_| &mut [] as &mut [f32]).collect();
+        let mut buf_a =
+            create_planar_buffer_mut(&mut out_a, output_channels, frame_size, &mut slices_a);
+        renderer.render(&[(1, in_view_a)], &mut buf_a).unwrap();
+
+        renderer.remove_element(1).unwrap();
+        assert_eq!(renderer.number_of_audio_elements(), 0);
+        renderer.add_element(group_id, 2, &obj_cfg).unwrap();
+        renderer
+            .update_element_positions(2, &pos, Samples::new(frame_size as u32).unwrap())
+            .unwrap();
+        let in_view_b = create_planar_buffer_ref(&input_refs, frame_size);
+        let mut out_b = vec![0.0f32; output_channels * frame_size];
+        let mut slices_b: Vec<&mut [f32]> =
+            (0..output_channels).map(|_| &mut [] as &mut [f32]).collect();
+        let mut buf_b =
+            create_planar_buffer_mut(&mut out_b, output_channels, frame_size, &mut slices_b);
+        renderer.render(&[(2, in_view_b)], &mut buf_b).unwrap();
+
+        expect_that!(rms(&out_a), gt(NON_SILENT_RMS_THRESHOLD));
+        for (a, b) in out_a.iter().zip(out_b.iter()) {
+            expect_that!(*b, near(*a, 1e-6));
+        }
+    }
+
     /// Verifies that an audio group containing both a world-locked stereo element and a head-locked
     /// object element renders the exact superposition of the rotated world-locked element and the
     /// unrotated head-locked element.

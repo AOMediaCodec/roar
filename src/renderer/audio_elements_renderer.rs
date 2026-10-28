@@ -19,13 +19,12 @@
 
 use crate::common::definitions::ChannelCount;
 use crate::common::definitions::{
-    AudioElementConfig, DownmixMode, GroupId, Interpolate, OarError, ObjectPosition,
-    PlanarBufferMut, PlanarBufferRef, Quaternion, Samples, MAX_OUTPUT_CHANNEL_COUNT,
-    METADATA_QUEUE_CAPACITY,
+    AudioElementConfig, DownmixMode, Gain, Interpolate, OarError, ObjectPosition, PlanarBufferMut,
+    PlanarBufferRef, Quaternion, Samples, MAX_OUTPUT_CHANNEL_COUNT, METADATA_QUEUE_CAPACITY,
 };
 use crate::renderer::audio_renderer_api::AudioRenderer;
 use crate::utility::oar_utils::cartesian_to_polar_sector_float32;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 
 /// An individual item in an audio element's position metadata queue.
 #[derive(Debug, Clone, PartialEq)]
@@ -55,9 +54,7 @@ pub struct ElementPositionsContext {
 /// slicing planar input slices (`&inputs[ch][offset..offset + sub_samples]`) without copying.
 pub struct AudioElementsRenderer {
     active_elements: HashMap<u32, AudioElementConfig>,
-    sorted_ids: Vec<u32>,
-    groups: HashMap<GroupId, Vec<u32>>,
-    positions_queues: HashMap<u32, ElementPositionsContext>,
+    positions_queues: BTreeMap<u32, ElementPositionsContext>,
     sub_frame_samples: Option<Samples>,
     sub_out_buffer: Vec<f32>,
     num_out_channels: ChannelCount,
@@ -70,7 +67,6 @@ impl std::fmt::Debug for AudioElementsRenderer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AudioElementsRenderer")
             .field("active_elements", &self.active_elements)
-            .field("groups", &self.groups)
             .field("positions_queues", &self.positions_queues)
             .field("sub_frame_samples", &self.sub_frame_samples)
             .field(
@@ -85,8 +81,6 @@ impl Clone for AudioElementsRenderer {
     fn clone(&self) -> Self {
         Self {
             active_elements: self.active_elements.clone(),
-            sorted_ids: self.sorted_ids.clone(),
-            groups: self.groups.clone(),
             positions_queues: self.positions_queues.clone(),
             sub_frame_samples: self.sub_frame_samples,
             sub_out_buffer: Vec::new(),
@@ -119,9 +113,7 @@ impl AudioElementsRenderer {
         let req_size = num_out_channels.get() * samples_val;
         Self {
             active_elements: HashMap::new(),
-            sorted_ids: Vec::new(),
-            groups: HashMap::new(),
-            positions_queues: HashMap::new(),
+            positions_queues: BTreeMap::new(),
             sub_frame_samples,
             sub_out_buffer: vec![0.0; req_size],
             num_out_channels,
@@ -156,9 +148,7 @@ impl AudioElementsRenderer {
         let req_size = num_out_channels.get() * samples_val;
         Self {
             active_elements: HashMap::new(),
-            sorted_ids: Vec::new(),
-            groups: HashMap::new(),
-            positions_queues: HashMap::new(),
+            positions_queues: BTreeMap::new(),
             sub_frame_samples,
             sub_out_buffer: vec![0.0; req_size],
             num_out_channels,
@@ -186,10 +176,6 @@ impl AudioElementsRenderer {
             return Err(OarError::InvalidParameter);
         }
         self.active_elements.insert(id, *config);
-        if !self.sorted_ids.contains(&id) {
-            self.sorted_ids.push(id);
-            self.sorted_ids.sort();
-        }
         self.positions_queues.insert(
             id,
             ElementPositionsContext {
@@ -201,6 +187,24 @@ impl AudioElementsRenderer {
         if let Some(ref mut sub) = self.sub_renderer {
             sub.add_element(id, config)?;
         }
+        Ok(())
+    }
+
+    /// Removes an audio element from the router and its underlying sub-renderer.
+    ///
+    /// # Errors
+    ///
+    /// Returns `OarError::InvalidParameter` if `id` is not registered, or propagates any error
+    /// from the underlying sub-renderer.
+    pub fn remove_element(&mut self, id: u32) -> Result<(), OarError> {
+        if !self.active_elements.contains_key(&id) {
+            return Err(OarError::InvalidParameter);
+        }
+        if let Some(ref mut sub) = self.sub_renderer {
+            sub.remove_element(id)?;
+        }
+        self.active_elements.remove(&id);
+        self.positions_queues.remove(&id);
         Ok(())
     }
 
@@ -351,64 +355,58 @@ impl AudioElementsRenderer {
             let current_unit_samples = (total_samples - processed_samples).min(sub_frame_samples);
 
             // 1. Sub-frames coordinate update iteration (_sub_frames_apply_positions)
-            for i in 0..self.sorted_ids.len() {
-                let id = self.sorted_ids[i];
-                if let Some(ctx) = self.positions_queues.get(&id) {
-                    let sample_position = processed_samples as u32 + ctx.start;
-                    let mut accumulated_duration = 0u32;
-                    let mut active_pos_ref: Option<&ObjectPosition> = None;
-                    let mut interpolated_pos: Option<ObjectPosition> = None;
+            for (&id, ctx) in &self.positions_queues {
+                let sample_position = processed_samples as u32 + ctx.start;
+                let mut accumulated_duration = 0u32;
+                let mut active_pos_ref: Option<&ObjectPosition> = None;
+                let mut interpolated_pos: Option<ObjectPosition> = None;
 
-                    for (entry_idx, entry) in ctx.positions.iter().enumerate() {
-                        let dur_u32 = u32::from(entry.duration);
-                        if sample_position >= accumulated_duration
-                            && sample_position < accumulated_duration.saturating_add(dur_u32)
-                        {
-                            let relative_pos = sample_position - accumulated_duration;
-                            let next_entry_pos = if entry_idx + 1 < ctx.positions.len() {
-                                Some(&ctx.positions[entry_idx + 1].positions)
-                            } else {
-                                None
-                            };
-
-                            let needs_eval = match &entry.positions {
-                                ObjectPosition::Polar(_) => next_entry_pos.is_some(),
-                                ObjectPosition::AnimatedPolar(_) => true,
-                                ObjectPosition::AnimatedCartesian(_) => true,
-                                _ => false,
-                            };
-
-                            if needs_eval {
-                                interpolated_pos = Some(Self::create_subframe_positions(
-                                    &entry.positions,
-                                    next_entry_pos,
-                                    relative_pos,
-                                    entry.duration,
-                                    current_unit_samples as u32,
-                                )?);
-                            } else {
-                                active_pos_ref = Some(&entry.positions);
-                            }
-                            break;
-                        }
-                        accumulated_duration = accumulated_duration.saturating_add(dur_u32);
-                    }
-
-                    let final_pos_ref = if let Some(p) = active_pos_ref {
-                        Some(p)
-                    } else {
-                        interpolated_pos.as_ref()
-                    };
-
-                    if let Some(pos) = final_pos_ref
-                        && let Some(ref mut sub) = self.sub_renderer
+                for (entry_idx, entry) in ctx.positions.iter().enumerate() {
+                    let dur_u32 = u32::from(entry.duration);
+                    if sample_position >= accumulated_duration
+                        && sample_position < accumulated_duration.saturating_add(dur_u32)
                     {
-                        let _ = sub.update_element_positions(
-                            id,
-                            pos,
-                            Samples::new(current_unit_samples as u32)?,
-                        );
+                        let relative_pos = sample_position - accumulated_duration;
+                        let next_entry_pos = if entry_idx + 1 < ctx.positions.len() {
+                            Some(&ctx.positions[entry_idx + 1].positions)
+                        } else {
+                            None
+                        };
+
+                        let needs_eval = match &entry.positions {
+                            ObjectPosition::Polar(_) => next_entry_pos.is_some(),
+                            ObjectPosition::AnimatedPolar(_) => true,
+                            ObjectPosition::AnimatedCartesian(_) => true,
+                            _ => false,
+                        };
+
+                        if needs_eval {
+                            interpolated_pos = Some(Self::create_subframe_positions(
+                                &entry.positions,
+                                next_entry_pos,
+                                relative_pos,
+                                entry.duration,
+                                current_unit_samples as u32,
+                            )?);
+                        } else {
+                            active_pos_ref = Some(&entry.positions);
+                        }
+                        break;
                     }
+                    accumulated_duration = accumulated_duration.saturating_add(dur_u32);
+                }
+
+                let final_pos_ref =
+                    if let Some(p) = active_pos_ref { Some(p) } else { interpolated_pos.as_ref() };
+
+                if let Some(pos) = final_pos_ref
+                    && let Some(ref mut sub) = self.sub_renderer
+                {
+                    let _ = sub.update_element_positions(
+                        id,
+                        pos,
+                        Samples::new(current_unit_samples as u32)?,
+                    );
                 }
             }
 
@@ -506,6 +504,24 @@ impl AudioRenderer for AudioElementsRenderer {
         self.add_element(id, config)
     }
 
+    fn remove_element(&mut self, id: u32) -> Result<(), OarError> {
+        self.remove_element(id)
+    }
+
+    fn update_element_gain(
+        &mut self,
+        id: u32,
+        gain_id: u32,
+        gain: &Gain,
+        duration: Samples,
+    ) -> Result<(), OarError> {
+        if let Some(ref mut sub) = self.sub_renderer {
+            sub.update_element_gain(id, gain_id, gain, duration)
+        } else {
+            Err(OarError::NotSupported)
+        }
+    }
+
     fn update_element_positions(
         &mut self,
         id: u32,
@@ -594,6 +610,13 @@ mod test {
     impl AudioRenderer for SharedMockRenderer {
         fn add_element(&mut self, id: u32, _config: &AudioElementConfig) -> Result<(), OarError> {
             self.state.lock().unwrap().elements.push(id);
+            Ok(())
+        }
+        fn remove_element(&mut self, id: u32) -> Result<(), OarError> {
+            let mut state = self.state.lock().unwrap();
+            let pos =
+                state.elements.iter().position(|&x| x == id).ok_or(OarError::InvalidParameter)?;
+            state.elements.remove(pos);
             Ok(())
         }
         fn update_element_positions(
@@ -776,6 +799,56 @@ mod test {
                     distance(): pat!(Distance { value(): near(1.0, 1e-3) }),
                 })])),
                 eq(&samples_12),
+            )]
+        )
+    }
+
+    #[gtest]
+    fn remove_element_stops_removed_element_and_preserves_remaining_positions() -> Result<()> {
+        let state = Arc::new(Mutex::new(MockState::default()));
+        let mock = Box::new(SharedMockRenderer::new(state.clone()));
+        let samples_4 = Samples::new(4).unwrap();
+        let mut router = AudioElementsRenderer::with_backend(
+            mock,
+            ChannelCount::new(1).unwrap(),
+            Some(samples_4),
+        );
+        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
+            num_objects: ChannelCount::new(1).unwrap(),
+            rendering_config: None,
+        });
+        router.add_element(10, &config).unwrap();
+        router.add_element(20, &config).unwrap();
+        let pos10 =
+            ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(30.0, 0.0, 1.0).unwrap()]);
+        let pos20 =
+            ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(-45.0, 0.0, 1.0).unwrap()]);
+        router.update_element_positions(10, &pos10, samples_4).unwrap();
+        router.update_element_positions(20, &pos20, samples_4).unwrap();
+        let input_data = [0.0; 4];
+        let inputs = [&input_data[..]];
+        let mut output = [0.0; 4];
+        let mut out_slices = [&mut output[..]];
+        let mut out_buf = PlanarBufferMut::new(&mut out_slices, 1, samples_4).unwrap();
+        let validated_inputs = PlanarBufferRef::new(&inputs, 1, samples_4).unwrap();
+
+        router.remove_element(10).unwrap();
+        let duplicate_remove = router.remove_element(10);
+        router.render(validated_inputs, &mut out_buf).unwrap();
+
+        expect_that!(duplicate_remove, err(eq(OarError::InvalidParameter)));
+        let state_lock = state.lock().unwrap();
+        expect_that!(state_lock.elements.as_slice(), eq(&[20u32][..]));
+        verify_that!(
+            state_lock.positions_updates,
+            elements_are![(
+                eq(&20),
+                pat!(ObjectPosition::Polar(elements_are![pat!(PolarCoordinate {
+                    azimuth(): pat!(Degrees { value(): near(-45.0, 1e-5) }),
+                    elevation(): pat!(Degrees { value(): near(0.0, 1e-5) }),
+                    distance(): pat!(Distance { value(): near(1.0, 1e-5) }),
+                })])),
+                eq(&samples_4),
             )]
         )
     }

@@ -40,6 +40,22 @@ pub trait AudioRenderer: Send + Sync {
     /// cannot support the specified layout or if the ID is already configured.
     fn add_element(&mut self, id: u32, config: &AudioElementConfig) -> Result<(), OarError>;
 
+    /// Removes an audio element from a multi-element renderer backend.
+    ///
+    /// Only multi-element backends (`AudioElementsRenderer` and `ObrAudioRendererAdapter`, which
+    /// multiplex all binaural elements in an audio group into a shared OBR instance) implement
+    /// in-place element removal. Single-element loudspeaker backends (`EarRenderer`,
+    /// `DownmixRenderer`, `ObjectRenderer`) are instantiated per element and dropped as a unit when
+    /// their element is removed, so they use the default `Err(OarError::NotSupported)`
+    /// implementation.
+    ///
+    /// # Parameters
+    ///
+    /// * `id`: Unique identifier for the audio element to remove.
+    fn remove_element(&mut self, _id: u32) -> Result<(), OarError> {
+        Err(OarError::NotSupported)
+    }
+
     /// Updates dynamic gain parameters.
     fn update_element_gain(
         &mut self,

@@ -455,18 +455,22 @@ impl RoarRenderer {
             return Err(OarError::InvalidParameter);
         }
         let is_obr_element = self.is_binaural_route(id)?;
-        self.active_elements.remove(&id);
-        self.active_element_ids.retain(|&x| x != id);
-        let group_id = self.element_to_group.remove(&id).ok_or(OarError::InvalidParameter)?;
+        let group_id = self.element_to_group.get(&id).copied().ok_or(OarError::InvalidParameter)?;
 
-        // TODO(b/543004593): Unify the way that audio elements are removed.
         if let Some(renderers) = self.group_renderers.get_mut(&group_id) {
             if is_obr_element {
-                renderers.retain(|r| r.element_id.is_some());
+                if let Some(active_rdr) = renderers.iter_mut().find(|r| r.element_id.is_none()) {
+                    active_rdr.renderer.remove_element(id)?;
+                }
             } else {
                 renderers.retain(|r| r.element_id != Some(id));
             }
         }
+
+        self.active_elements.remove(&id);
+        self.active_element_ids.retain(|&x| x != id);
+        self.element_to_group.remove(&id);
+        self.element_gains.remove(&id);
 
         Ok(())
     }
@@ -485,6 +489,10 @@ impl RoarRenderer {
         let out_channels = self.config.output_layout().channels().get();
 
         if output.num_channels() != out_channels || output.num_samples() != samples {
+            return Err(OarError::InvalidParameter);
+        }
+
+        if self.active_element_ids.is_empty() || inputs.is_empty() {
             return Err(OarError::InvalidParameter);
         }
 
@@ -591,13 +599,15 @@ impl RoarRenderer {
                         }
                     }
 
-                    let active_inputs = &group_inputs[..input_idx];
-                    let validated_inputs = PlanarBufferRef::new(
-                        active_inputs,
-                        input_idx,
-                        self.config.samples_per_channel(),
-                    )?;
-                    active_rdr.renderer.render(validated_inputs, &mut renderer_scratch_buf)?;
+                    if input_idx > 0 {
+                        let active_inputs = &group_inputs[..input_idx];
+                        let validated_inputs = PlanarBufferRef::new(
+                            active_inputs,
+                            input_idx,
+                            self.config.samples_per_channel(),
+                        )?;
+                        active_rdr.renderer.render(validated_inputs, &mut renderer_scratch_buf)?;
+                    }
                 }
 
                 for (dst, src) in self.group_scratch.iter_mut().zip(self.renderer_scratch.iter()) {
@@ -735,26 +745,14 @@ impl RoarRenderer {
         Ok(())
     }
 
-    /// Returns the total number of active audio elements (actually renderers).
+    /// Returns the total number of active audio elements.
     pub fn number_of_audio_elements(&self) -> usize {
-        self.group_renderers.values().map(|v| v.len()).sum()
+        self.active_elements.len()
     }
 
     /// Returns the number of channels for a given element ID.
-    /// Handles Binaural group-sum mapping.
     pub fn element_channels(&self, id: u32) -> Option<ChannelCount> {
-        if self.config.output_layout() == OutputLayout::Binaural {
-            let group_id = self.element_to_group.get(&id)?;
-            let sum: usize = self
-                .element_to_group
-                .iter()
-                .filter(|&(_, &g)| g == *group_id)
-                .map(|(&e_id, _)| self.active_elements.get(&e_id).map_or(0, |c| c.channels().get()))
-                .sum();
-            ChannelCount::new(sum)
-        } else {
-            self.active_elements.get(&id).map(|c| c.channels())
-        }
+        self.active_elements.get(&id).map(|c| c.channels())
     }
 
     fn element_supports_downmix(&self, id: u32) -> bool {

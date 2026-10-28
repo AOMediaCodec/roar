@@ -171,14 +171,20 @@ impl ObrImpl {
         self.initialize_dsp()
     }
 
-    // TODO(b/543004593): Unify the way that audio elements are removed.
-    /// Removes the last added audio element and re-initialises DSP resources.
-    #[allow(dead_code)]
-    pub fn remove_last_audio_element(&mut self) -> Result<(), OarError> {
-        if self.audio_elements.is_empty() {
+    /// Removes the audio element at `index` and re-initialises DSP resources.
+    ///
+    /// # Parameters
+    /// * `index` - Zero-based index of the audio element to remove.
+    pub fn remove_audio_element(&mut self, index: usize) -> Result<(), OarError> {
+        if index >= self.audio_elements.len() {
             return Err(OarError::InvalidParameter);
         }
-        self.audio_elements.pop();
+        self.audio_elements.remove(index);
+        let mut first_idx = 0;
+        for elem in &mut self.audio_elements {
+            elem.set_first_channel_index(first_idx);
+            first_idx += elem.get_number_of_input_channels();
+        }
         if self.audio_elements.is_empty() {
             self.reset_dsp();
             Ok(())
@@ -423,6 +429,23 @@ impl AudioRenderer for ObrAudioRendererAdapter {
         Ok(())
     }
 
+    fn remove_element(&mut self, id: u32) -> Result<(), OarError> {
+        let &removed_idx = self.id_to_element_index.get(&id).ok_or(OarError::InvalidParameter)?;
+        self.obr.remove_audio_element(removed_idx)?;
+        self.id_to_element_index.remove(&id);
+        for idx in self.id_to_element_index.values_mut() {
+            if *idx > removed_idx {
+                *idx -= 1;
+            }
+        }
+        self.element_channels.remove(&id);
+        self.element_gains.remove(&id);
+        let expected_ins = self.obr.get_number_of_input_channels();
+        let frames_usize = self.obr.get_buffer_size_per_channel().value() as usize;
+        self.scratch_input.resize(expected_ins, frames_usize);
+        Ok(())
+    }
+
     fn update_element_gain(
         &mut self,
         id: u32,
@@ -604,7 +627,7 @@ mod test {
         expect_true!(add_result.is_ok());
         expect_that!(renderer.get_number_of_input_channels(), eq(16));
 
-        let remove_result = renderer.remove_last_audio_element();
+        let remove_result = renderer.remove_audio_element(0);
 
         expect_true!(remove_result.is_ok());
         expect_that!(renderer.get_number_of_input_channels(), eq(0));
@@ -630,21 +653,53 @@ mod test {
         expect_that!(renderer.get_number_of_input_channels(), eq(28));
         expect_that!(renderer.audio_elements.len(), eq(2));
 
-        let remove1 = renderer.remove_last_audio_element();
+        let remove1 = renderer.remove_audio_element(1);
 
         expect_true!(remove1.is_ok());
         expect_that!(renderer.get_number_of_input_channels(), eq(16));
         expect_that!(renderer.audio_elements.len(), eq(1));
 
-        let remove2 = renderer.remove_last_audio_element();
+        let remove2 = renderer.remove_audio_element(0);
 
         expect_true!(remove2.is_ok());
         expect_that!(renderer.get_number_of_input_channels(), eq(0));
         expect_that!(renderer.audio_elements.len(), eq(0));
 
-        let remove3 = renderer.remove_last_audio_element();
+        let remove3 = renderer.remove_audio_element(0);
 
         expect_true!(remove3.is_err());
+    }
+
+    #[gtest]
+    fn remove_first_audio_element_updates_remaining_channel_offsets() {
+        let mut renderer = ObrImpl::new(get_buffer_size(), get_sample_rate());
+        expect_true!(renderer
+            .add_audio_element(
+                AudioElementVariant::ambisonics(HighOrderAmbisonics::Order3),
+                BinauralFilterProfile::Direct
+            )
+            .is_ok());
+        expect_true!(renderer
+            .add_audio_element(
+                AudioElementVariant::loudspeaker_layout(InputLayout::Stereo),
+                BinauralFilterProfile::Direct
+            )
+            .is_ok());
+        expect_that!(renderer.get_number_of_input_channels(), eq(18));
+
+        let remove_first = renderer.remove_audio_element(0);
+
+        expect_true!(remove_first.is_ok());
+        expect_that!(renderer.audio_elements.len(), eq(1));
+        expect_that!(renderer.get_number_of_input_channels(), eq(2));
+        expect_that!(renderer.audio_elements[0].get_first_channel_index(), eq(0));
+
+        let mut input_buffer = AudioBuffer::new(2, BUFFER_SIZE);
+        generate_sine(SAMPLING_RATE, input_buffer.channel_mut(0).as_mut_slice());
+        generate_sine(SAMPLING_RATE, input_buffer.channel_mut(1).as_mut_slice());
+        let mut output_buffer = AudioBuffer::new(2, BUFFER_SIZE);
+        renderer.process(&input_buffer, &mut output_buffer);
+        expect_that!(has_non_zero_output(&output_buffer), eq(true));
     }
 
     #[gtest]
@@ -860,5 +915,64 @@ mod test {
             *adapter.obr.audio_elements[0].variant(),
             AudioElementVariant::PassthroughStereo
         );
+    }
+
+    #[gtest]
+    fn remove_first_element_in_adapter_shifts_remaining_element_indices() {
+        let mut adapter = ObrAudioRendererAdapter::new(get_buffer_size(), get_sample_rate());
+        let obj_config =
+            OarAudioElementConfig::ObjectBased(crate::common::definitions::ObjectBasedConfig {
+                num_objects: ChannelCount::new(1).unwrap(),
+                rendering_config: None,
+            });
+        adapter.add_element(10, &obj_config).unwrap();
+        adapter.add_element(20, &obj_config).unwrap();
+        let position = ObjectPosition::Polar(vec![
+            crate::common::definitions::PolarCoordinate::new_from_floats(45.0, 0.0, 1.0).unwrap(),
+        ]);
+
+        let remove_first = adapter.remove_element(10);
+        let update_second = adapter.update_element_positions(20, &position, get_buffer_size());
+        let remove_second = adapter.remove_element(20);
+
+        expect_ok!(remove_first);
+        expect_ok!(update_second);
+        expect_ok!(remove_second);
+        expect_eq!(adapter.obr.get_number_of_audio_elements(), 0);
+    }
+
+    /// Verifies that removing a middle element from `ObrAudioRendererAdapter` shifts only higher
+    /// element indices while leaving lower element indices unchanged.
+    #[gtest]
+    fn remove_middle_element_in_adapter_shifts_only_higher_element_indices() {
+        let mut adapter = ObrAudioRendererAdapter::new(get_buffer_size(), get_sample_rate());
+        let obj_config =
+            OarAudioElementConfig::ObjectBased(crate::common::definitions::ObjectBasedConfig {
+                num_objects: ChannelCount::new(1).unwrap(),
+                rendering_config: None,
+            });
+        adapter.add_element(10, &obj_config).unwrap();
+        adapter.add_element(20, &obj_config).unwrap();
+        adapter.add_element(30, &obj_config).unwrap();
+        let position = ObjectPosition::Polar(vec![
+            crate::common::definitions::PolarCoordinate::new_from_floats(45.0, 0.0, 1.0).unwrap(),
+        ]);
+
+        let remove_middle = adapter.remove_element(20);
+        let first_idx_after_middle = adapter.id_to_element_index.get(&10).copied();
+        let third_idx_after_middle = adapter.id_to_element_index.get(&30).copied();
+        let update_first = adapter.update_element_positions(10, &position, get_buffer_size());
+        let update_third = adapter.update_element_positions(30, &position, get_buffer_size());
+        let remove_third = adapter.remove_element(30);
+        let remove_first = adapter.remove_element(10);
+
+        expect_ok!(remove_middle);
+        expect_eq!(first_idx_after_middle, Some(0));
+        expect_eq!(third_idx_after_middle, Some(1));
+        expect_ok!(update_first);
+        expect_ok!(update_third);
+        expect_ok!(remove_third);
+        expect_ok!(remove_first);
+        expect_eq!(adapter.obr.get_number_of_audio_elements(), 0);
     }
 }
