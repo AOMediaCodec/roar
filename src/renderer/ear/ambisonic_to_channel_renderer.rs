@@ -20,11 +20,12 @@
 //! * Store only the fourth-order matrices and slice out the submatrices for lower Ambisonic orders
 //!   (0 to 3rd order) and scale them by an order-dependent normalization factor.
 //! * The 5 non-BS.2051 layouts (`Mono`, `Layout312`, `Layout712`, `Layout916`, `Layout7154`) are
-//!   derived from their superset BS.2051 `Ambi4O` matrices via compact [`SparseMatrixEntry`]
+//!   derived from their superset BS.2051 `AMBI_ORDER_4` matrices via compact [`SparseMatrixEntry`]
 //!   row-mixing tables and [`CHAN_TO_CHAN_GAIN_LOOKUP`] weights.
 //!
 //! This reduces the 75-matrix static table from 7,810 `f32`s (31,240 bytes) to 10 BS.2051
-//! `Ambi4O` matrices (2,400 `f32`s = 9,600 bytes) plus 78 `SparseMatrixEntry` values (156 bytes).
+//! `AMBI_ORDER_4` matrices (2,400 `f32`s = 9,600 bytes) plus 78 `SparseMatrixEntry` values (156
+//! bytes).
 
 use crate::common::audio_buffer::simd_utils;
 use crate::common::definitions::{
@@ -36,15 +37,16 @@ use crate::renderer::ear::matrix_renderer::{
     matrix_render, s, MatrixData, MatrixView, SparseMatrixEntry,
 };
 
-/// Number of Ambisonic channels per row in a 4th-order (`Ambi4O`) base matrix (`(4 + 1)^2 = 25`).
-pub const Ambi4O_ACN_CHANNELS: usize = 25;
+/// Number of Ambisonic channels per row in a 4th-order base matrix (`(4 + 1)^2 = 25`).
+pub const FOURTH_ORDER_AMBISONIC_CHANNELS: usize = 25;
 
 /// Maximum number of non-LFE speaker rows in any derived layout (`Layout7154` has 16).
 const MAX_DERIVED_NON_LFE_SPEAKERS: usize = 16;
 
 /// Maximum number of `f32` elements in a materialized derived ambisonic-to-channel matrix
 /// (`16 * 25 = 400`).
-const MAX_DERIVED_AMBI_TO_CHAN_ELEMENTS: usize = MAX_DERIVED_NON_LFE_SPEAKERS * Ambi4O_ACN_CHANNELS;
+const MAX_DERIVED_AMBI_TO_CHAN_ELEMENTS: usize =
+    MAX_DERIVED_NON_LFE_SPEAKERS * FOURTH_ORDER_AMBISONIC_CHANNELS;
 
 /// Matrix entry table structure associating input HOA order with target loudspeaker layout
 /// (`h2m_rdr_t`).
@@ -60,7 +62,8 @@ pub struct AmbisonicToChannelRenderer {
     pub lfe1: i32,
     /// Second LFE slot index (`-1` if none).
     pub lfe2: i32,
-    /// Slice reference to base 4th-order (`Ambi4O`) precomputed gain table (`[f32; base_n * 25]`).
+    /// Slice reference to base 4th-order (`AMBI_ORDER_4`) precomputed gain table (`[f32; base_n *
+    /// 25]`).
     pub mat: &'static [f32],
     /// Order-dependent scalar normalization factor applied to `mat`.
     pub scale: f32,
@@ -77,26 +80,26 @@ pub struct AmbisonicToChannelRenderer {
 // The following sparse matrices just indicate how to produce the non-ITU BS2051 layouts from other
 // layouts to avoid storing them.
 
-/// Sparse row-mixing entries deriving `Mono` (1 row) from `Ambi4O_BS020` (2 rows).
+/// Sparse row-mixing entries deriving `Mono` (1 row) from `AMBI_ORDER_4_TO_BS020` (2 rows).
 #[rustfmt::skip]
 pub static AMBI_TO_CHAN_MIX_MONO: [SparseMatrixEntry; 2] = [
     s(0, 0, 1), s(1, 0, 1)
 ];
 
-/// Sparse row-mixing entries deriving `Layout312` (5 non-LFE rows) from `Ambi4O_BS250` (7 rows).
+/// Sparse row-mixing entries deriving `Layout312` (5 non-LFE rows) from `AMBI_ORDER_4_TO_BS250` (7 rows).
 #[rustfmt::skip]
 pub static AMBI_TO_CHAN_MIX_IAMF312: [SparseMatrixEntry; 7] = [
     s(0, 0, 0), s(1, 1, 0), s(2, 2, 0), s(3, 0, 2), s(4, 1, 2), s(5, 3, 0), s(6, 4, 0)
 ];
 
-/// Sparse row-mixing entries deriving `Layout712` (9 non-LFE rows) from `Ambi4O_BS470` (11 rows).
+/// Sparse row-mixing entries deriving `Layout712` (9 non-LFE rows) from `AMBI_ORDER_4_TO_BS470` (11 rows).
 #[rustfmt::skip]
 pub static AMBI_TO_CHAN_MIX_IAMF712: [SparseMatrixEntry; 11] = [
     s(0, 0, 0), s(1, 1, 0), s(2, 2, 0), s(3, 3, 0), s(4, 4, 0), s(5, 5, 0), s(6, 6, 0), s(7, 7, 0),
     s(8, 8, 0), s(9, 7, 2), s(10, 8, 2)
 ];
 
-/// Sparse row-mixing entries deriving `Layout916` (15 non-LFE rows) from `Ambi4O_BS9A3` (22 rows).
+/// Sparse row-mixing entries deriving `Layout916` (15 non-LFE rows) from `AMBI_ORDER_4_TO_BS9A3` (22 rows).
 #[rustfmt::skip]
 pub static AMBI_TO_CHAN_MIX_IAMF916: [SparseMatrixEntry; 28] = [
     s(0, 0, 0), s(1, 1, 0), s(2, 2, 0), s(3, 3, 0), s(4, 4, 0), s(5, 5, 0), s(6, 6, 0), s(7, 3, 2),
@@ -105,7 +108,7 @@ pub static AMBI_TO_CHAN_MIX_IAMF916: [SparseMatrixEntry; 28] = [
     s(18, 12, 2), s(19, 2, 0), s(20, 5, 0), s(21, 6, 0)
 ];
 
-/// Sparse row-mixing entries deriving `Layout7154` (16 non-LFE rows) from `Ambi4O_BS9A3` (22 rows).
+/// Sparse row-mixing entries deriving `Layout7154` (16 non-LFE rows) from `AMBI_ORDER_4_TO_BS9A3` (22 rows).
 #[rustfmt::skip]
 pub static AMBI_TO_CHAN_MIX_IAMF7154: [SparseMatrixEntry; 30] = [
     s(0, 0, 2), s(0, 3, 2), s(1, 1, 2), s(1, 4, 2), s(2, 2, 0), s(3, 5, 0), s(4, 6, 0), s(5, 0, 0),
@@ -115,7 +118,7 @@ pub static AMBI_TO_CHAN_MIX_IAMF7154: [SparseMatrixEntry; 30] = [
 ];
 
 #[rustfmt::skip]
-pub static Ambi4O_BS020: [f32; 50] = [
+pub static AMBI_ORDER_4_TO_BS020: [f32; 50] = [
      6.09325985e-01f32,  5.58871486e-01f32, -8.38470782e-07f32,  7.23022635e-02f32,  2.45481463e-01f32,  2.34091397e-06f32,  9.20215087e-02f32, -1.43550945e-07f32,
      1.57872691e-01f32,  1.05701896e-01f32, -9.19418432e-06f32,  1.44171841e-02f32,  6.20096026e-06f32,  3.95665379e-02f32, -1.74919389e-05f32,  4.94241687e-02f32,
      1.17564010e-01f32,  1.01196642e-05f32,  3.84279075e-02f32,  1.21175563e-05f32,  3.07369788e-02f32,  1.37835928e-05f32,  1.16515529e-02f32, -2.01716844e-05f32,
@@ -125,7 +128,7 @@ pub static Ambi4O_BS020: [f32; 50] = [
      3.02902829e-07f32,  3.18534408e-02f32
 ];
 #[rustfmt::skip]
-pub static Ambi4O_BS050: [f32; 125] = [
+pub static AMBI_ORDER_4_TO_BS050: [f32; 125] = [
      2.32067077e-01f32,  2.87681712e-01f32,  1.58252973e-05f32,  2.84783073e-01f32,  3.67406853e-01f32,  4.53634344e-06f32,  1.20886421e-01f32,  2.54987474e-05f32,
     -3.72336666e-02f32,  1.71252208e-01f32,  5.73626235e-06f32,  2.44396028e-02f32,  2.46211959e-05f32,  9.91967937e-02f32, -1.01021170e-05f32, -1.77776441e-01f32,
      3.77615229e-02f32,  8.37226581e-06f32,  1.01177294e-01f32,  3.12880916e-05f32,  6.77780104e-02f32,  7.20085369e-05f32, -4.28514137e-02f32,  4.63126089e-06f32,
@@ -144,7 +147,7 @@ pub static Ambi4O_BS050: [f32; 125] = [
      1.22709568e-02f32,  1.30189591e-05f32, -3.38713969e-03f32, -8.88736414e-06f32,  9.31982588e-03f32
 ];
 #[rustfmt::skip]
-pub static Ambi4O_BS250: [f32; 175] = [
+pub static AMBI_ORDER_4_TO_BS250: [f32; 175] = [
      1.46201810e-01f32,  2.07605260e-01f32, -1.77458016e-01f32,  1.93406206e-01f32,  2.73008780e-01f32, -1.26266127e-01f32, -2.53585845e-03f32, -1.48656023e-01f32,
     -3.66585070e-02f32,  1.24969859e-01f32, -1.51352272e-01f32, -5.34008667e-02f32, -1.85137374e-02f32, -5.78766897e-03f32,  1.13449271e-02f32, -1.52560894e-01f32,
      1.41232385e-02f32, -7.38524283e-02f32, -1.62813327e-02f32,  1.26649462e-02f32,  8.86331125e-02f32, -1.43446464e-02f32, -1.39598476e-02f32,  5.06447242e-02f32,
@@ -169,7 +172,7 @@ pub static Ambi4O_BS250: [f32; 175] = [
     -1.01861627e-01f32,  3.54313251e-02f32, -2.96121365e-02f32, -1.39825296e-02f32,  7.53781267e-03f32, -9.44686457e-03f32,  2.83843409e-03f32
 ];
 #[rustfmt::skip]
-pub static Ambi4O_BS450: [f32; 225] = [
+pub static AMBI_ORDER_4_TO_BS450: [f32; 225] = [
      1.48800342e-01f32,  2.13877118e-01f32, -1.76508211e-01f32,  1.95668955e-01f32,  2.77709622e-01f32, -1.22682186e-01f32, -6.47488220e-03f32, -1.48031709e-01f32,
     -4.28631082e-02f32,  1.20479620e-01f32, -1.48926097e-01f32, -5.84254642e-02f32, -2.31851906e-02f32, -7.14077979e-03f32,  6.63474024e-03f32, -1.58376753e-01f32,
      8.63700349e-03f32, -7.82420887e-02f32, -1.82759651e-02f32,  5.15471735e-03f32,  9.12104459e-02f32, -1.65613617e-02f32, -1.06711416e-02f32,  4.62729755e-02f32,
@@ -201,7 +204,7 @@ pub static Ambi4O_BS450: [f32; 225] = [
      6.29964039e-03f32
 ];
 #[rustfmt::skip]
-pub static Ambi4O_BS451: [f32; 250] = [
+pub static AMBI_ORDER_4_TO_BS451: [f32; 250] = [
      7.94007126e-02f32,  1.62080177e-01f32, -1.74034937e-02f32,  1.33241312e-01f32,  2.19146117e-01f32, -2.80142505e-02f32, -1.52155593e-01f32, -2.87921870e-02f32,
     -3.88525700e-02f32,  9.18147556e-02f32, -3.98975770e-02f32, -1.42791374e-01f32,  3.95081378e-02f32, -1.23991662e-01f32, -3.81676695e-03f32, -1.38329627e-01f32,
     -1.70099181e-03f32, -2.44909296e-02f32, -1.30554695e-01f32,  3.31858577e-02f32,  1.02033320e-01f32,  3.95135078e-02f32,  9.71421024e-03f32,  9.94761153e-03f32,
@@ -236,7 +239,7 @@ pub static Ambi4O_BS451: [f32; 250] = [
     -4.31725697e-02f32,  2.58636545e-02f32
 ];
 #[rustfmt::skip]
-pub static Ambi4O_BS370: [f32; 250] = [
+pub static AMBI_ORDER_4_TO_BS370: [f32; 250] = [
      1.12360411e-01f32,  4.89838014e-06f32, -1.31341651e-01f32,  1.96958280e-01f32,  7.33945819e-06f32, -2.06655897e-05f32,  3.06749169e-02f32, -7.18533402e-02f32,
      2.29735913e-01f32,  4.89623936e-06f32, -3.80573296e-05f32,  2.51662794e-05f32, -8.32564153e-02f32, -5.97168913e-02f32, -6.57389910e-02f32,  2.34898698e-01f32,
      1.16223714e-05f32, -4.01365298e-05f32,  4.14857075e-05f32, -1.65239025e-05f32,  6.43131764e-02f32, -3.97819672e-02f32, -3.11369902e-02f32, -7.90727904e-02f32,
@@ -271,7 +274,7 @@ pub static Ambi4O_BS370: [f32; 250] = [
      4.15736981e-02f32,  2.75118289e-03f32
 ];
 #[rustfmt::skip]
-pub static Ambi4O_BS490: [f32; 325] = [
+pub static AMBI_ORDER_4_TO_BS490: [f32; 325] = [
      1.06743649e-01f32,  1.30910581e-01f32, -1.57755248e-01f32,  1.29947270e-01f32,  2.11365131e-01f32, -1.01469927e-01f32,  3.90939527e-02f32, -1.04663624e-01f32,
     -6.75369804e-03f32,  1.42482507e-01f32, -1.48952242e-01f32, -2.89975817e-02f32, -1.37196411e-02f32, -2.08215353e-02f32,  7.29046643e-03f32, -1.44043729e-01f32,
      5.18392117e-03f32, -9.10560528e-02f32, -8.02199043e-03f32,  3.18963743e-02f32,  5.72676085e-02f32,  2.62124185e-02f32, -4.84361254e-03f32,  8.64102934e-02f32,
@@ -315,7 +318,7 @@ pub static Ambi4O_BS490: [f32; 325] = [
      4.68222198e-02f32,  1.48815468e-02f32, -6.31082426e-03f32, -6.51257924e-02f32,  4.35694991e-02f32
 ];
 #[rustfmt::skip]
-pub static Ambi4O_BS9A3: [f32; 550] = [
+pub static AMBI_ORDER_4_TO_BS9A3: [f32; 550] = [
      3.82321028e-02f32,  9.66507715e-02f32,  2.98905726e-04f32,  5.06237055e-02f32,  1.17973115e-01f32,  8.21751547e-04f32, -8.02650713e-02f32,  1.47043388e-04f32,
     -8.14257793e-02f32, -1.88160790e-02f32,  4.34297719e-04f32, -1.01749217e-01f32, -9.50512105e-04f32, -5.48496241e-02f32, -1.17663297e-03f32, -1.57998227e-01f32,
     -1.47199965e-01f32, -1.43526017e-03f32, -9.11501540e-02f32, -1.76945522e-03f32,  6.93101449e-02f32, -3.24381488e-04f32,  5.80536065e-02f32, -8.37557917e-04f32,
@@ -387,7 +390,7 @@ pub static Ambi4O_BS9A3: [f32; 550] = [
     -2.94674475e-02f32, -2.88180803e-02f32,  2.94891113e-02f32,  1.20546481e-05f32,  1.02916662e-01f32, -7.98576607e-02f32
 ];
 #[rustfmt::skip]
-pub static Ambi4O_BS070: [f32; 175] = [
+pub static AMBI_ORDER_4_TO_BS070: [f32; 175] = [
      2.10236756e-01f32,  2.11273734e-01f32,  2.89839970e-05f32,  2.51965609e-01f32,  3.39957783e-01f32,  1.88412934e-06f32,  1.50726225e-01f32,  1.82729267e-05f32,
      5.06015345e-02f32,  2.51397091e-01f32,  1.27281572e-05f32,  1.40548374e-02f32,  8.41984307e-05f32,  3.04224356e-02f32,  1.55806461e-05f32, -1.37642479e-01f32,
      8.22125750e-02f32,  2.31739334e-05f32,  9.00750827e-02f32,  4.24182200e-05f32,  4.65059985e-02f32,  5.54143147e-05f32,  1.19632242e-03f32, -8.87199534e-06f32,
@@ -412,7 +415,7 @@ pub static Ambi4O_BS070: [f32; 175] = [
      8.96519572e-02f32,  2.46833052e-05f32,  2.10032112e-02f32, -1.56377078e-05f32,  5.80609348e-02f32, -4.39551986e-06f32, -6.15645518e-02f32
 ];
 #[rustfmt::skip]
-pub static Ambi4O_BS470: [f32; 275] = [
+pub static AMBI_ORDER_4_TO_BS470: [f32; 275] = [
      1.22739252e-01f32,  1.38684558e-01f32, -1.77701244e-01f32,  1.63117293e-01f32,  2.32809588e-01f32, -1.05437280e-01f32,  3.64507083e-02f32, -1.29816545e-01f32,
      3.28686711e-02f32,  1.80373847e-01f32, -1.60296824e-01f32, -3.26494425e-02f32, -9.85109660e-03f32, -2.95588545e-02f32, -2.26850859e-02f32, -1.05791055e-01f32,
      5.73726477e-02f32, -1.12404684e-01f32, -1.18516035e-02f32,  3.29088924e-02f32,  6.57779291e-02f32,  3.56008882e-02f32, -6.77852779e-03f32,  5.38567750e-02f32,
@@ -463,32 +466,33 @@ struct AmbiToChanLayoutEntry {
     lfe2: i8,
     /// Number of non-LFE output speaker rows.
     n: u8,
-    /// Base 4th-order (`Ambi4O`) BS.2051 matrix (`[f32; base_n * 25]`).
-    base_Ambi4O: &'static [f32],
+    /// Base 4th-order (`AMBI_ORDER_4`) BS.2051 matrix (`[f32; base_n * 25]`).
+    base_matrix: &'static [f32],
     /// Order normalization scales for `[Zoa, Order1, Order2, Order3]` (`Order4` uses `1.0`).
     scales: [f32; 4],
-    /// Optional sparse row-mixing table mapping `base_Ambi4O` rows into `n` derived speaker rows.
+    /// Optional sparse row-mixing table mapping `base_ambi_order_4` rows into `n` derived speaker
+    /// rows.
     row_mix: Option<&'static [SparseMatrixEntry]>,
 }
 
 #[rustfmt::skip]
 static AMBI_TO_CHAN_LAYOUT_TAB: [AmbiToChanLayoutEntry; 16] = [
-    AmbiToChanLayoutEntry { out_system: OutputLayout::Stereo,          channels: 2,  lfe1: -1, lfe2: -1, n: 2,  base_Ambi4O: &Ambi4O_BS020, scales: [1.16046393f32, 1.02367651f32, 1.00415647f32, 1.00193787f32], row_mix: None },
-    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout51,        channels: 6,  lfe1: 3,  lfe2: -1, n: 5,  base_Ambi4O: &Ambi4O_BS050, scales: [1.40621221f32, 1.07995307f32, 1.02893221f32, 1.00750113f32], row_mix: None },
-    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout512,       channels: 8,  lfe1: 3,  lfe2: -1, n: 7,  base_Ambi4O: &Ambi4O_BS250, scales: [1.47365749f32, 1.10013175f32, 1.03690958f32, 1.00917506f32], row_mix: None },
-    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout514,       channels: 10, lfe1: 3,  lfe2: -1, n: 9,  base_Ambi4O: &Ambi4O_BS450, scales: [1.74000466f32, 1.15345562f32, 1.04766476f32, 1.01314366f32], row_mix: None },
-    AmbiToChanLayoutEntry { out_system: OutputLayout::SoundSystemE451, channels: 11, lfe1: 3,  lfe2: -1, n: 10, base_Ambi4O: &Ambi4O_BS451, scales: [1.73184955f32, 1.15719926f32, 1.04841185f32, 1.01298285f32], row_mix: None },
-    AmbiToChanLayoutEntry { out_system: OutputLayout::SoundSystemF370, channels: 12, lfe1: 10, lfe2: 11, n: 10, base_Ambi4O: &Ambi4O_BS370, scales: [1.97569215f32, 1.23002756f32, 1.06441259f32, 1.01485574f32], row_mix: None },
-    AmbiToChanLayoutEntry { out_system: OutputLayout::SoundSystemG490, channels: 14, lfe1: 3,  lfe2: -1, n: 13, base_Ambi4O: &Ambi4O_BS490, scales: [2.05852604f32, 1.25481117f32, 1.07356739f32, 1.01918423f32], row_mix: None },
-    AmbiToChanLayoutEntry { out_system: OutputLayout::LayoutA293,      channels: 24, lfe1: 3,  lfe2: 9,  n: 22, base_Ambi4O: &Ambi4O_BS9A3, scales: [2.51632571f32, 1.47376490f32, 1.18413997f32, 1.05821097f32], row_mix: None },
-    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout71,        channels: 8,  lfe1: 3,  lfe2: -1, n: 7,  base_Ambi4O: &Ambi4O_BS070, scales: [1.61080241f32, 1.19137752f32, 1.05089438f32, 1.01491344f32], row_mix: None },
-    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout714,       channels: 12, lfe1: 3,  lfe2: -1, n: 11, base_Ambi4O: &Ambi4O_BS470, scales: [2.04284525f32, 1.24858141f32, 1.07040739f32, 1.01714110f32], row_mix: None },
-    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout312,       channels: 6,  lfe1: 3,  lfe2: -1, n: 5,  base_Ambi4O: &Ambi4O_BS250, scales: [1.47365749f32, 1.10013175f32, 1.03690958f32, 1.00917506f32], row_mix: Some(&AMBI_TO_CHAN_MIX_IAMF312) },
-    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout712,       channels: 10, lfe1: 3,  lfe2: -1, n: 9,  base_Ambi4O: &Ambi4O_BS470, scales: [2.04284525f32, 1.24858141f32, 1.07040739f32, 1.01714110f32], row_mix: Some(&AMBI_TO_CHAN_MIX_IAMF712) },
-    AmbiToChanLayoutEntry { out_system: OutputLayout::Binaural,        channels: 2,  lfe1: -1, lfe2: -1, n: 2,  base_Ambi4O: &Ambi4O_BS020, scales: [1.16046393f32, 1.02367651f32, 1.00415647f32, 1.00193787f32], row_mix: None },
-    AmbiToChanLayoutEntry { out_system: OutputLayout::Mono,            channels: 1,  lfe1: -1, lfe2: -1, n: 1,  base_Ambi4O: &Ambi4O_BS020, scales: [1.64114380f32, 1.02367651f32, 1.00415647f32, 1.00193787f32], row_mix: Some(&AMBI_TO_CHAN_MIX_MONO) },
-    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout916,       channels: 16, lfe1: 3,  lfe2: -1, n: 15, base_Ambi4O: &Ambi4O_BS9A3, scales: [2.51632571f32, 1.47376490f32, 1.18413997f32, 1.05821097f32], row_mix: Some(&AMBI_TO_CHAN_MIX_IAMF916) },
-    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout7154,      channels: 17, lfe1: 3,  lfe2: -1, n: 16, base_Ambi4O: &Ambi4O_BS9A3, scales: [2.51632571f32, 1.47376490f32, 1.18413997f32, 1.05821097f32], row_mix: Some(&AMBI_TO_CHAN_MIX_IAMF7154) },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::Stereo,          channels: 2,  lfe1: -1, lfe2: -1, n: 2,  base_matrix: &AMBI_ORDER_4_TO_BS020, scales: [1.16046393f32, 1.02367651f32, 1.00415647f32, 1.00193787f32], row_mix: None },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout51,        channels: 6,  lfe1: 3,  lfe2: -1, n: 5,  base_matrix: &AMBI_ORDER_4_TO_BS050, scales: [1.40621221f32, 1.07995307f32, 1.02893221f32, 1.00750113f32], row_mix: None },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout512,       channels: 8,  lfe1: 3,  lfe2: -1, n: 7,  base_matrix: &AMBI_ORDER_4_TO_BS250, scales: [1.47365749f32, 1.10013175f32, 1.03690958f32, 1.00917506f32], row_mix: None },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout514,       channels: 10, lfe1: 3,  lfe2: -1, n: 9,  base_matrix: &AMBI_ORDER_4_TO_BS450, scales: [1.74000466f32, 1.15345562f32, 1.04766476f32, 1.01314366f32], row_mix: None },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::SoundSystemE451, channels: 11, lfe1: 3,  lfe2: -1, n: 10, base_matrix: &AMBI_ORDER_4_TO_BS451, scales: [1.73184955f32, 1.15719926f32, 1.04841185f32, 1.01298285f32], row_mix: None },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::SoundSystemF370, channels: 12, lfe1: 10, lfe2: 11, n: 10, base_matrix: &AMBI_ORDER_4_TO_BS370, scales: [1.97569215f32, 1.23002756f32, 1.06441259f32, 1.01485574f32], row_mix: None },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::SoundSystemG490, channels: 14, lfe1: 3,  lfe2: -1, n: 13, base_matrix: &AMBI_ORDER_4_TO_BS490, scales: [2.05852604f32, 1.25481117f32, 1.07356739f32, 1.01918423f32], row_mix: None },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::LayoutA293,      channels: 24, lfe1: 3,  lfe2: 9,  n: 22, base_matrix: &AMBI_ORDER_4_TO_BS9A3, scales: [2.51632571f32, 1.47376490f32, 1.18413997f32, 1.05821097f32], row_mix: None },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout71,        channels: 8,  lfe1: 3,  lfe2: -1, n: 7,  base_matrix: &AMBI_ORDER_4_TO_BS070, scales: [1.61080241f32, 1.19137752f32, 1.05089438f32, 1.01491344f32], row_mix: None },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout714,       channels: 12, lfe1: 3,  lfe2: -1, n: 11, base_matrix: &AMBI_ORDER_4_TO_BS470, scales: [2.04284525f32, 1.24858141f32, 1.07040739f32, 1.01714110f32], row_mix: None },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout312,       channels: 6,  lfe1: 3,  lfe2: -1, n: 5,  base_matrix: &AMBI_ORDER_4_TO_BS250, scales: [1.47365749f32, 1.10013175f32, 1.03690958f32, 1.00917506f32], row_mix: Some(&AMBI_TO_CHAN_MIX_IAMF312) },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout712,       channels: 10, lfe1: 3,  lfe2: -1, n: 9,  base_matrix: &AMBI_ORDER_4_TO_BS470, scales: [2.04284525f32, 1.24858141f32, 1.07040739f32, 1.01714110f32], row_mix: Some(&AMBI_TO_CHAN_MIX_IAMF712) },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::Binaural,        channels: 2,  lfe1: -1, lfe2: -1, n: 2,  base_matrix: &AMBI_ORDER_4_TO_BS020, scales: [1.16046393f32, 1.02367651f32, 1.00415647f32, 1.00193787f32], row_mix: None },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::Mono,            channels: 1,  lfe1: -1, lfe2: -1, n: 1,  base_matrix: &AMBI_ORDER_4_TO_BS020, scales: [1.64114380f32, 1.02367651f32, 1.00415647f32, 1.00193787f32], row_mix: Some(&AMBI_TO_CHAN_MIX_MONO) },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout916,       channels: 16, lfe1: 3,  lfe2: -1, n: 15, base_matrix: &AMBI_ORDER_4_TO_BS9A3, scales: [2.51632571f32, 1.47376490f32, 1.18413997f32, 1.05821097f32], row_mix: Some(&AMBI_TO_CHAN_MIX_IAMF916) },
+    AmbiToChanLayoutEntry { out_system: OutputLayout::Layout7154,      channels: 17, lfe1: 3,  lfe2: -1, n: 16, base_matrix: &AMBI_ORDER_4_TO_BS9A3, scales: [2.51632571f32, 1.47376490f32, 1.18413997f32, 1.05821097f32], row_mix: Some(&AMBI_TO_CHAN_MIX_IAMF7154) },
 ];
 
 /// Returns the number of active Ambisonic channels `(order + 1)^2` and the order normalization
@@ -508,18 +512,19 @@ fn order_channels_and_scale(in_order: HighOrderAmbisonics, scales: &[f32; 4]) ->
     (in_order.channels().get() as usize, scale)
 }
 
-/// Mixes the first `m` columns of `base_Ambi4O` speaker rows into `out_mat[..n * m]` according to
-/// sparse `row_mix` entries and [`CHAN_TO_CHAN_GAIN_LOOKUP`] weights.
+/// Mixes the first `m` columns of `base_ambi_order_4` speaker rows into `out_mat[..n * m]`
+/// according to sparse `row_mix` entries and [`CHAN_TO_CHAN_GAIN_LOOKUP`] weights.
 ///
 /// # Parameters
-/// * `base_Ambi4O`: Base 4th-order (`Ambi4O`) matrix with row stride [`Ambi4O_ACN_CHANNELS`].
+/// * `base_ambi_order_4`: Base 4th-order (`AMBI_ORDER_4`) matrix with row stride
+///   [`AMBI_ORDER_4_ACN_CHANNELS`].
 /// * `row_mix`: Sparse `(base_row, out_row, lookup_idx)` entries indexing into
 ///   [`CHAN_TO_CHAN_GAIN_LOOKUP`].
 /// * `m`: Number of active input Ambisonic channels (`1..=25`).
 /// * `n`: Number of target non-LFE output speaker rows (`1..=16`).
 /// * `out_mat`: Destination slice of length at least `n * m`, zero-initialized before accumulation.
 fn mix_derived_ambi_to_chan_rows(
-    base_Ambi4O: &[f32],
+    base_ambi_order_4: &[f32],
     row_mix: &[SparseMatrixEntry],
     m: usize,
     n: usize,
@@ -532,11 +537,11 @@ fn mix_derived_ambi_to_chan_rows(
     for &entry in row_mix {
         let base_row = entry.in_ch();
         let out_row = entry.out_ch();
-        let src_start = base_row * Ambi4O_ACN_CHANNELS;
+        let src_start = base_row * FOURTH_ORDER_AMBISONIC_CHANNELS;
         let dst_start = out_row * m;
         if out_row < n
             && let Some(&weight) = CHAN_TO_CHAN_GAIN_LOOKUP.get(entry.lookup_idx())
-            && let Some(src_row) = base_Ambi4O.get(src_start..src_start + m)
+            && let Some(src_row) = base_ambi_order_4.get(src_start..src_start + m)
             && let Some(dst_row) = out_slice.get_mut(dst_start..dst_start + m)
         {
             simd_utils::scalar_multiply_and_accumulate(weight, src_row, dst_row);
@@ -562,7 +567,7 @@ pub fn element_renderer_get_ambi_to_chan_matrix(
             let n = entry.n as usize;
             let mut derived_mat = [0.0f32; MAX_DERIVED_AMBI_TO_CHAN_ELEMENTS];
             let has_derived_mat = if let Some(row_mix) = entry.row_mix {
-                mix_derived_ambi_to_chan_rows(entry.base_Ambi4O, row_mix, m, n, &mut derived_mat);
+                mix_derived_ambi_to_chan_rows(entry.base_matrix, row_mix, m, n, &mut derived_mat);
                 true
             } else {
                 false
@@ -573,7 +578,7 @@ pub fn element_renderer_get_ambi_to_chan_matrix(
                 channels: entry.channels as usize,
                 lfe1: entry.lfe1 as i32,
                 lfe2: entry.lfe2 as i32,
-                mat: entry.base_Ambi4O,
+                mat: entry.base_matrix,
                 scale,
                 derived_mat,
                 has_derived_mat,
@@ -603,7 +608,7 @@ pub fn element_renderer_render_ambi_to_chan(
     if inputs.num_channels() != ambi_to_chan_matrix.m
         || outputs.num_channels() != ambi_to_chan_matrix.channels
         || outputs.num_samples() != inputs.num_samples()
-        || ambi_to_chan_matrix.m > Ambi4O_ACN_CHANNELS
+        || ambi_to_chan_matrix.m > FOURTH_ORDER_AMBISONIC_CHANNELS
     {
         return Err(OarError::InvalidParameter);
     }
@@ -619,7 +624,7 @@ pub fn element_renderer_render_ambi_to_chan(
         };
         (derived, ambi_to_chan_matrix.m)
     } else {
-        (ambi_to_chan_matrix.mat, Ambi4O_ACN_CHANNELS)
+        (ambi_to_chan_matrix.mat, FOURTH_ORDER_AMBISONIC_CHANNELS)
     };
     let mv = MatrixView {
         data: MatrixData::Dense { weights, scale: ambi_to_chan_matrix.scale },
@@ -820,9 +825,9 @@ mod tests {
         };
 
         assert_ok!(result);
-        // With a 1.0 ZOA input, the 22 non-LFE speaker rows (column 0 of `Ambi4O_BS9A3` scaled by
-        // the ZOA normalization factor) are shifted to skip the zeroed LFE slots (`lfe1 =
-        // 3`, `lfe2 = 9`):
+        // With a 1.0 ZOA input, the 22 non-LFE speaker rows (column 0 of `AMBI_ORDER_4_TO_BS9A3`
+        // scaled by the ZOA normalization factor) are shifted to skip the zeroed LFE slots
+        // (`lfe1 = 3`, `lfe2 = 9`):
         // - Physical outputs 0..=2 map to matrix rows 0..=2 (unshifted before `lfe1`).
         expect_that!(out_bufs[0][0], near(0.09620442f32, EPSILON));
         expect_that!(out_bufs[2][0], near(0.05768647f32, EPSILON));
@@ -842,7 +847,7 @@ mod tests {
     }
 
     #[gtest]
-    fn render_ambi_to_chan_derived_layouts_mixes_base_Ambi4O_rows_accurately() {
+    fn render_ambi_to_chan_derived_layouts_mixes_base_fourth_order_rows_accurately() {
         let ambi_to_chan_matrix = element_renderer_get_ambi_to_chan_matrix(
             HighOrderAmbisonics::Order2,
             OutputLayout::Layout712,
@@ -872,11 +877,11 @@ mod tests {
 
     #[gtest]
     fn mix_derived_ambi_to_chan_rows_accumulates_weighted_rows_from_base_matrix() {
-        let mut base = [0.0f32; Ambi4O_ACN_CHANNELS * 2];
+        let mut base = [0.0f32; FOURTH_ORDER_AMBISONIC_CHANNELS * 2];
         base[0] = 1.0;
         base[1] = 2.0;
-        base[Ambi4O_ACN_CHANNELS] = 4.0;
-        base[Ambi4O_ACN_CHANNELS + 1] = 6.0;
+        base[FOURTH_ORDER_AMBISONIC_CHANNELS] = 4.0;
+        base[FOURTH_ORDER_AMBISONIC_CHANNELS + 1] = 6.0;
         let mix = [s(0, 0, 0), s(1, 0, 1)];
         let mut out = [0.0f32; 2];
 
