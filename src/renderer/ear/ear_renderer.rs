@@ -18,7 +18,7 @@
 //! and scene-based audio elements according to target loudspeaker layouts.
 
 use crate::common::definitions::{
-    AudioElementConfig, InputLayout, OarError, OutputLayout, PlanarBufferMut, PlanarBufferRef,
+    AudioElementConfig, OarError, OutputLayout, PlanarBufferMut, PlanarBufferRef,
     MAX_OUTPUT_CHANNEL_COUNT,
 };
 use crate::renderer::audio_renderer_api::AudioRenderer;
@@ -29,7 +29,7 @@ use crate::renderer::ear::ambisonic_to_channel_renderer::{
 use crate::renderer::ear::channel_to_channel_renderer::{
     element_renderer_get_chan_to_chan_custom_matrix, element_renderer_get_chan_to_chan_matrix,
     element_renderer_render_chan_to_chan, element_renderer_render_chan_to_chan_custom,
-    is_predefined_input_layout, layout_to_subset_custom, ChannelToChannelRenderer,
+    ChannelToChannelRenderer,
 };
 
 /// A spatially-oriented headphone/binaural renderer.
@@ -51,9 +51,9 @@ pub enum EarRenderingMode {
     ChannelPredefined(ChannelToChannelRenderer),
     /// Custom subset layout channel matrix (`sp_type == 1`).
     ChannelCustom {
-        /// Matrix structure containing matching strides.
+        /// Superset-layout matrix structure with `m` set to the subset channel count.
         matrix: ChannelToChannelRenderer,
-        /// Physical channel mapping index slice.
+        /// Channel indices of the subset layout within its superset layout.
         channels_map: Vec<usize>,
     },
     /// High-Order Ambisonics to multichannel matrix.
@@ -86,55 +86,16 @@ impl AudioRenderer for EarRenderer {
 
         match *config {
             AudioElementConfig::ChannelBased(cb) => {
-                // Determine if this is a full predefined input layout or custom subset
-                if is_predefined_input_layout(cb.layout) {
-                    let mut chan_to_chan = ChannelToChannelRenderer {
-                        in_system: InputLayout::Mono,
-                        out_system: OutputLayout::Mono,
-                        mat: &[],
-                        m: 0,
-                        n: 0,
-                    };
-                    if element_renderer_get_chan_to_chan_matrix(
-                        cb.layout,
-                        out_system,
-                        &mut chan_to_chan,
-                    )
-                    .is_ok()
-                    {
-                        self.active_mode = Some(EarRenderingMode::ChannelPredefined(chan_to_chan));
-                        return Ok(());
-                    }
+                if cb.layout.superset_layout().is_some() {
+                    let (matrix, channels_map) =
+                        element_renderer_get_chan_to_chan_custom_matrix(cb.layout, out_system)?;
+                    self.active_mode =
+                        Some(EarRenderingMode::ChannelCustom { matrix, channels_map });
+                } else {
+                    let matrix = element_renderer_get_chan_to_chan_matrix(cb.layout, out_system)?;
+                    self.active_mode = Some(EarRenderingMode::ChannelPredefined(matrix));
                 }
-
-                // Try subset custom layout check (`_rid_sp_labels_map`)
-                if let Some((base_system, flags)) = layout_to_subset_custom(cb.layout) {
-                    let mut chan_to_chan = ChannelToChannelRenderer {
-                        in_system: InputLayout::Mono,
-                        out_system: OutputLayout::Mono,
-                        mat: &[],
-                        m: 0,
-                        n: 0,
-                    };
-                    let mut chmap_buf = [0usize; MAX_OUTPUT_CHANNEL_COUNT];
-                    if element_renderer_get_chan_to_chan_custom_matrix(
-                        base_system,
-                        flags,
-                        out_system,
-                        &mut chan_to_chan,
-                        &mut chmap_buf,
-                    )
-                    .is_ok()
-                    {
-                        self.active_mode = Some(EarRenderingMode::ChannelCustom {
-                            matrix: chan_to_chan,
-                            channels_map: chmap_buf[..chan_to_chan.m].to_vec(),
-                        });
-                        return Ok(());
-                    }
-                }
-
-                Err(OarError::NotSupported)
+                Ok(())
             }
             AudioElementConfig::SceneBased(sb) => {
                 let ambi_to_chan = element_renderer_get_ambi_to_chan_matrix(sb.order, out_system)?;
@@ -194,7 +155,8 @@ impl AudioRenderer for EarRenderer {
 mod tests {
     use super::*;
     use crate::common::definitions::{
-        ChannelBasedConfig, HighOrderAmbisonics, ObjectBasedConfig, Samples, SceneBasedConfig,
+        ChannelBasedConfig, HighOrderAmbisonics, InputLayout, ObjectBasedConfig, Samples,
+        SceneBasedConfig,
     };
     use googletest::prelude::*;
 

@@ -23,41 +23,6 @@ use crate::renderer::ear::matrix_renderer::{
 };
 use std::f32::consts::FRAC_1_SQRT_2;
 
-pub const SP_MP000: u64 = 0x00000001;
-pub const SP_MP030: u64 = 0x00000002;
-pub const SP_MM030: u64 = 0x00000004;
-pub const SP_MP045: u64 = 0x00000008; // Unused.
-pub const SP_MM045: u64 = 0x00000010; // Unused.
-pub const SP_MP060: u64 = 0x00000020;
-pub const SP_MM060: u64 = 0x00000040;
-pub const SP_MP090: u64 = 0x00000080;
-pub const SP_MM090: u64 = 0x00000100;
-pub const SP_MP110: u64 = 0x00000200;
-pub const SP_MM110: u64 = 0x00000400;
-pub const SP_MP135: u64 = 0x00000800;
-pub const SP_MM135: u64 = 0x00001000;
-pub const SP_MP180: u64 = 0x00002000;
-pub const SP_TP000: u64 = 0x00004000;
-pub const SP_UP000: u64 = 0x00008000;
-pub const SP_UP030: u64 = 0x00010000;
-pub const SP_UM030: u64 = 0x00020000;
-pub const SP_UP045: u64 = 0x00040000;
-pub const SP_UM045: u64 = 0x00080000;
-pub const SP_UP090: u64 = 0x00100000;
-pub const SP_UM090: u64 = 0x00200000;
-pub const SP_UP110: u64 = 0x00400000;
-pub const SP_UM110: u64 = 0x00800000;
-pub const SP_UP135: u64 = 0x01000000;
-pub const SP_UM135: u64 = 0x02000000;
-pub const SP_UP180: u64 = 0x04000000;
-pub const SP_BP000: u64 = 0x08000000;
-pub const SP_BP045: u64 = 0x10000000;
-pub const SP_BM045: u64 = 0x20000000;
-pub const SP_LFE1: u64 = 0x40000000;
-pub const SP_LFE2: u64 = 0x80000000;
-pub const SP_BP135: u64 = 0x100000000;
-pub const SP_BM135: u64 = 0x200000000;
-
 /// Channel-to-channel matrix entry defining input/output systems and sparse non-zero gain
 /// routing (`m2m_rdr_t`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,68 +35,6 @@ pub struct ChannelToChannelRenderer {
     pub m: usize,
     /// Number of output channels.
     pub n: usize,
-}
-
-/// Speaker representation structure mapping sound systems to individual channel labels
-/// (`IAMF_SPLABEL_PER_LAYOUT`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct IamfSplabelPerLayout {
-    pub system: InputLayout,
-    pub channels: usize,
-    pub sp_labels: &'static [u64],
-}
-
-/// Checks if the layout is a valid predefined input sound system.
-pub fn is_predefined_input_layout(layout: InputLayout) -> bool {
-    matches!(
-        layout,
-        InputLayout::Mono
-            | InputLayout::Stereo
-            | InputLayout::Layout51
-            | InputLayout::Layout512
-            | InputLayout::Layout514
-            | InputLayout::Layout71
-            | InputLayout::Layout712
-            | InputLayout::Layout714
-            | InputLayout::Layout312
-            | InputLayout::Layout916
-            | InputLayout::Binaural
-            | InputLayout::Layout7154
-            | InputLayout::LayoutA293
-    )
-}
-
-/// Helper mapping subset [`InputLayout`] to base [`InputLayout`] and flags (`_rid_sp_labels_map`).
-pub fn layout_to_subset_custom(layout: InputLayout) -> Option<(InputLayout, u64)> {
-    match layout {
-        InputLayout::Lfe => Some((InputLayout::Layout714, SP_LFE1)),
-        InputLayout::StereoS => Some((InputLayout::Layout514, SP_MP110 | SP_MM110)),
-        InputLayout::StereoSs => Some((InputLayout::Layout714, SP_MP090 | SP_MM090)),
-        InputLayout::StereoRs => Some((InputLayout::Layout714, SP_MP135 | SP_MM135)),
-        InputLayout::StereoTf => Some((InputLayout::Layout714, SP_UP045 | SP_UM045)),
-        InputLayout::StereoTb => Some((InputLayout::Layout714, SP_UP135 | SP_UM135)),
-        InputLayout::Top4ch => {
-            Some((InputLayout::Layout714, SP_UP045 | SP_UM045 | SP_UP135 | SP_UM135))
-        }
-        InputLayout::ThreeCh => Some((InputLayout::Layout51, SP_MP030 | SP_MP000 | SP_MM030)),
-        InputLayout::StereoF => Some((InputLayout::Layout916, SP_MP060 | SP_MM060)),
-        InputLayout::StereoSi => Some((InputLayout::Layout916, SP_MP090 | SP_MM090)),
-        InputLayout::StereoTpsi => Some((InputLayout::Layout916, SP_UP090 | SP_UM090)),
-        InputLayout::Top6ch => Some((
-            InputLayout::Layout916,
-            SP_UP045 | SP_UM045 | SP_UP090 | SP_UM090 | SP_UP135 | SP_UM135,
-        )),
-        InputLayout::LfePair => Some((InputLayout::LayoutA293, SP_LFE1 | SP_LFE2)),
-        InputLayout::Bottom3ch => Some((InputLayout::LayoutA293, SP_BP000 | SP_BP045 | SP_BM045)),
-        InputLayout::Bottom4ch => {
-            Some((InputLayout::Layout7154, SP_BP045 | SP_BM045 | SP_BP135 | SP_BM135))
-        }
-        InputLayout::Top1ch => Some((InputLayout::Layout7154, SP_TP000)),
-        InputLayout::Top5ch => {
-            Some((InputLayout::Layout7154, SP_TP000 | SP_UP045 | SP_UM045 | SP_UP135 | SP_UM135))
-        }
-        _ => None,
-    }
 }
 
 // The gain matrices below are generated to comply with EAR Direct Speakers
@@ -1306,113 +1209,44 @@ pub static CHAN_TO_CHAN_RDR_TAB: [ChannelToChannelRenderer; 208] = [
     ChannelToChannelRenderer { in_system: InputLayout::LayoutA293, out_system: OutputLayout::Layout7154, mat: &IAMF10293_IAMF7154, m: 24, n: 17 },
 ];
 
-#[rustfmt::skip]
-pub static IAMF_STEREO_SPL: [u64; 2] = [SP_MP030, SP_MM030];
-#[rustfmt::skip]
-pub static IAMF_51_SPL: [u64; 6] = [SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP110, SP_MM110];
-#[rustfmt::skip]
-pub static IAMF_512_SPL: [u64; 8] = [SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP110, SP_MM110, SP_UP030, SP_UM030];
-#[rustfmt::skip]
-pub static IAMF_514_SPL: [u64; 10] = [SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP110, SP_MM110, SP_UP030, SP_UM030, SP_UP110, SP_UM110];
-#[rustfmt::skip]
-pub static IAMF_71_SPL: [u64; 8] = [SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP090, SP_MM090, SP_MP135, SP_MM135];
-#[rustfmt::skip]
-pub static IAMF_714_SPL: [u64; 12] = [SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP090, SP_MM090, SP_MP135, SP_MM135, SP_UP045, SP_UM045, SP_UP135, SP_UM135];
-#[rustfmt::skip]
-pub static IAMF_MONO_SPL: [u64; 1] = [SP_MP000];
-#[rustfmt::skip]
-pub static IAMF_712_SPL: [u64; 10] = [SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP090, SP_MM090, SP_MP135, SP_MM135, SP_UP045, SP_UM045];
-#[rustfmt::skip]
-pub static IAMF_312_SPL: [u64; 6] = [SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_UP030, SP_UM030];
-#[rustfmt::skip]
-pub static IAMF_916_SPL: [u64; 16] = [SP_MP060, SP_MM060, SP_MP000, SP_LFE1, SP_MP135, SP_MM135, SP_MP030, SP_MM030, SP_MP090, SP_MM090, SP_UP045, SP_UM045, SP_UP135, SP_UM135, SP_UP090, SP_UM090];
-#[rustfmt::skip]
-pub static IAMF_7154_SPL: [u64; 17] = [SP_MP030, SP_MM030, SP_MP000, SP_LFE1, SP_MP090, SP_MM090, SP_MP135, SP_MM135, SP_UP045, SP_UM045, SP_TP000, SP_UP135, SP_UM135, SP_BP045, SP_BM045, SP_BP135, SP_BM135];
-#[rustfmt::skip]
-pub static IAMF_A293_SPL: [u64; 24] = [SP_MP060, SP_MM060, SP_MP000, SP_LFE1, SP_MP135, SP_MM135, SP_MP030, SP_MM030, SP_MP180, SP_LFE2, SP_MP090, SP_MM090, SP_UP045, SP_UM045, SP_UP000, SP_TP000, SP_UP135, SP_UM135, SP_UP090, SP_UM090, SP_UP180, SP_BP000, SP_BP045, SP_BM045];
-
-#[rustfmt::skip]
-pub static IAMF_SPLABEL_PER_LAYOUT: [IamfSplabelPerLayout; 13] = [
-    IamfSplabelPerLayout { system: InputLayout::Stereo, channels: 2, sp_labels: &IAMF_STEREO_SPL },
-    IamfSplabelPerLayout { system: InputLayout::Layout51, channels: 6, sp_labels: &IAMF_51_SPL },
-    IamfSplabelPerLayout { system: InputLayout::Layout512, channels: 8, sp_labels: &IAMF_512_SPL },
-    IamfSplabelPerLayout { system: InputLayout::Layout514, channels: 10, sp_labels: &IAMF_514_SPL },
-    IamfSplabelPerLayout { system: InputLayout::Layout71, channels: 8, sp_labels: &IAMF_71_SPL },
-    IamfSplabelPerLayout { system: InputLayout::Layout714, channels: 12, sp_labels: &IAMF_714_SPL },
-    IamfSplabelPerLayout { system: InputLayout::Mono, channels: 1, sp_labels: &IAMF_MONO_SPL },
-    IamfSplabelPerLayout { system: InputLayout::Layout712, channels: 10, sp_labels: &IAMF_712_SPL },
-    IamfSplabelPerLayout { system: InputLayout::Layout312, channels: 6, sp_labels: &IAMF_312_SPL },
-    IamfSplabelPerLayout { system: InputLayout::Binaural, channels: 2, sp_labels: &IAMF_STEREO_SPL },
-    IamfSplabelPerLayout { system: InputLayout::Layout916, channels: 16, sp_labels: &IAMF_916_SPL },
-    IamfSplabelPerLayout { system: InputLayout::Layout7154, channels: 17, sp_labels: &IAMF_7154_SPL },
-    IamfSplabelPerLayout { system: InputLayout::LayoutA293, channels: 24, sp_labels: &IAMF_A293_SPL },
-];
-
-/// Retrieves the multichannel-to-multichannel conversion matrix for predefined input and output
-/// layouts.
-///
-/// Port of `IAMF_element_renderer_get_M2M_matrix`.
+/// Retrieves the multichannel-to-multichannel conversion matrix for a full (non-subset) input
+/// layout and target output layout.
 ///
 /// # Parameters
-/// * `in_system`: Predefined input layout.
+/// * `in_system`: Full (non-subset) input layout.
 /// * `out_system`: Target output layout.
-/// * `out_matrix`: Target [`ChannelToChannelRenderer`] structure to populate on match.
 pub fn element_renderer_get_chan_to_chan_matrix(
     in_system: InputLayout,
     out_system: OutputLayout,
-    out_matrix: &mut ChannelToChannelRenderer,
-) -> Result<(), OarError> {
-    for entry in CHAN_TO_CHAN_RDR_TAB.iter() {
-        if entry.in_system == in_system && entry.out_system == out_system {
-            *out_matrix = *entry;
-            return Ok(());
-        }
-    }
-    Err(OarError::NotSupported)
+) -> Result<ChannelToChannelRenderer, OarError> {
+    CHAN_TO_CHAN_RDR_TAB
+        .iter()
+        .copied()
+        .find(|entry| entry.in_system == in_system && entry.out_system == out_system)
+        .ok_or(OarError::NotSupported)
 }
 
-/// Retrieves the conversion matrix for a custom subset input layout and target output layout.
+/// Retrieves the conversion matrix and superset-layout channel index map for an IAMF
+/// channel-subset input layout and target output layout.
 ///
-/// Port of `IAMF_element_renderer_get_M2M_custom_matrix`. Populates the `chmap` slice
-/// with the physical channel index mappings and updates `out_matrix.m` with active channels.
+/// Resolves `subset_layout` to its superset [`InputLayout`] and channel indices via
+/// [`InputLayout::superset_and_subset_channels`], and sets `matrix.m` to the active subset channel
+/// count.
 ///
 /// # Parameters
-/// * `base_system`: Base input layout containing the subset channels.
-/// * `sp_flags`: Speaker bitmask flags for the active subset channels.
+/// * `subset_layout`: IAMF channel-subset input layout (returns `Err(OarError::NotSupported)` for
+///   full layouts).
 /// * `out_system`: Target output layout.
-/// * `out_matrix`: Target [`ChannelToChannelRenderer`] structure to populate on match.
-/// * `chmap`: Mutable slice to receive channel mappings.
 pub fn element_renderer_get_chan_to_chan_custom_matrix(
-    base_system: InputLayout,
-    sp_flags: u64,
+    subset_layout: InputLayout,
     out_system: OutputLayout,
-    out_matrix: &mut ChannelToChannelRenderer,
-    chmap: &mut [usize],
-) -> Result<(), OarError> {
-    let mut m = 0;
-    for entry in CHAN_TO_CHAN_RDR_TAB.iter() {
-        if entry.in_system == base_system && entry.out_system == out_system {
-            *out_matrix = *entry;
-
-            for layout_info in IAMF_SPLABEL_PER_LAYOUT.iter() {
-                if base_system == layout_info.system {
-                    for k in 0..layout_info.channels {
-                        if k < layout_info.sp_labels.len()
-                            && (sp_flags & layout_info.sp_labels[k]) != 0
-                        {
-                            if m < chmap.len() {
-                                chmap[m] = k;
-                            }
-                            m += 1;
-                        }
-                    }
-                    out_matrix.m = m;
-                    return Ok(());
-                }
-            }
-        }
-    }
-    Err(OarError::NotSupported)
+) -> Result<(ChannelToChannelRenderer, Vec<usize>), OarError> {
+    let (superset_system, channel_indices) =
+        subset_layout.superset_and_subset_channels().ok_or(OarError::NotSupported)?;
+    let mut matrix = element_renderer_get_chan_to_chan_matrix(superset_system, out_system)?;
+    let channels_map: Vec<usize> = channel_indices.collect();
+    matrix.m = channels_map.len();
+    Ok((matrix, channels_map))
 }
 
 /// Renders predefined multichannel input signals into multichannel output signals.
@@ -1503,22 +1337,11 @@ mod tests {
     const EPSILON: f32 = 1e-6;
 
     #[gtest]
-    fn get_chan_to_chan_matrix_predefined_mono_to_stereo_populates_matching_matrix() {
-        let mut out_matrix = ChannelToChannelRenderer {
-            in_system: InputLayout::Mono,
-            out_system: OutputLayout::Mono,
-            mat: &[],
-            m: 0,
-            n: 0,
-        };
+    fn get_chan_to_chan_matrix_predefined_mono_to_stereo_returns_matching_matrix() {
+        let result =
+            element_renderer_get_chan_to_chan_matrix(InputLayout::Mono, OutputLayout::Stereo);
 
-        let result = element_renderer_get_chan_to_chan_matrix(
-            InputLayout::Mono,
-            OutputLayout::Stereo,
-            &mut out_matrix,
-        );
-
-        assert_ok!(result);
+        let out_matrix = result.unwrap();
         expect_that!(out_matrix.in_system, eq(InputLayout::Mono));
         expect_that!(out_matrix.out_system, eq(OutputLayout::Stereo));
         expect_that!(out_matrix.m, eq(1));
@@ -1526,31 +1349,17 @@ mod tests {
     }
 
     #[gtest]
-    fn get_chan_to_chan_custom_matrix_custom_layout_with_two_channels_populates_channel_map_and_channel_count(
-    ) {
-        let mut out_matrix = ChannelToChannelRenderer {
-            in_system: InputLayout::Mono,
-            out_system: OutputLayout::Mono,
-            mat: &[],
-            m: 0,
-            n: 0,
-        };
-        let mut chmap = [0usize; 6];
-
+    fn get_chan_to_chan_custom_matrix_subset_layout_returns_superset_matrix_and_channel_map() {
         let result = element_renderer_get_chan_to_chan_custom_matrix(
-            InputLayout::Layout51,
-            SP_MP030 | SP_MM030,
+            InputLayout::ThreeCh,
             OutputLayout::Stereo,
-            &mut out_matrix,
-            &mut chmap,
         );
 
-        assert_ok!(result);
-        expect_that!(out_matrix.in_system, eq(InputLayout::Layout51));
+        let (out_matrix, chmap) = result.unwrap();
+        expect_that!(out_matrix.in_system, eq(InputLayout::Layout714));
         expect_that!(out_matrix.out_system, eq(OutputLayout::Stereo));
-        expect_that!(out_matrix.m, eq(2));
-        expect_that!(chmap[0], eq(0));
-        expect_that!(chmap[1], eq(1));
+        expect_that!(out_matrix.m, eq(3));
+        expect_eq!(chmap.as_slice(), &[0, 1, 2]);
     }
 
     #[gtest]
@@ -1619,45 +1428,21 @@ mod tests {
     }
 
     #[gtest]
-    fn get_chan_to_chan_matrix_unsupported_predefined_combination_returns_error() {
-        let mut out_matrix = ChannelToChannelRenderer {
-            in_system: InputLayout::StereoS,
-            out_system: OutputLayout::Stereo,
-            mat: &[],
-            m: 0,
-            n: 0,
-        };
-
-        let result = element_renderer_get_chan_to_chan_matrix(
-            InputLayout::StereoS,
-            OutputLayout::Stereo,
-            &mut out_matrix,
-        );
+    fn get_chan_to_chan_matrix_subset_layout_returns_not_supported() {
+        let result =
+            element_renderer_get_chan_to_chan_matrix(InputLayout::StereoS, OutputLayout::Stereo);
 
         expect_that!(result, err(eq(OarError::NotSupported)));
     }
 
     #[gtest]
-    fn get_chan_to_chan_custom_matrix_no_matching_speaker_flags_returns_zero_active_channels() {
-        let mut out_matrix = ChannelToChannelRenderer {
-            in_system: InputLayout::Mono,
-            out_system: OutputLayout::Mono,
-            mat: &[],
-            m: 0,
-            n: 0,
-        };
-        let mut chmap = [0usize; 6];
-
+    fn get_chan_to_chan_custom_matrix_full_layout_returns_not_supported() {
         let result = element_renderer_get_chan_to_chan_custom_matrix(
             InputLayout::Layout51,
-            0,
             OutputLayout::Stereo,
-            &mut out_matrix,
-            &mut chmap,
         );
 
-        assert_ok!(result);
-        expect_that!(out_matrix.m, eq(0));
+        expect_that!(result, err(eq(&OarError::NotSupported)));
     }
 
     #[gtest]

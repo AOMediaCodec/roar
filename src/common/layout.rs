@@ -489,6 +489,58 @@ impl InputLayout {
             SpeakerPosition { elevation, ..sp }
         }))
     }
+
+    /// Returns the canonical IAMF superset [`InputLayout`] for a channel-subset layout, or `None`
+    /// for full layouts.
+    pub(crate) const fn superset_layout(self) -> Option<Self> {
+        match self {
+            Self::Mono
+            | Self::Stereo
+            | Self::Layout51
+            | Self::Layout512
+            | Self::Layout514
+            | Self::Layout71
+            | Self::Layout712
+            | Self::Layout714
+            | Self::Layout312
+            | Self::Layout916
+            | Self::LayoutA293
+            | Self::Layout7154
+            | Self::Binaural => None,
+            Self::StereoS => Some(Self::Layout514),
+            Self::Lfe
+            | Self::StereoSs
+            | Self::StereoRs
+            | Self::StereoTf
+            | Self::StereoTb
+            | Self::Top4ch
+            | Self::ThreeCh => Some(Self::Layout714),
+            Self::StereoF | Self::StereoSi | Self::StereoTpsi | Self::Top6ch => {
+                Some(Self::Layout916)
+            }
+            Self::LfePair | Self::Bottom3ch => Some(Self::LayoutA293),
+            Self::Bottom4ch | Self::Top1ch | Self::Top5ch => Some(Self::Layout7154),
+        }
+    }
+
+    /// For a layout defines as the subset of another layout, returns its superset [`InputLayout`]
+    /// and an iterator yielding each subset channel's index within that superset layout.
+    ///
+    /// Returns `None` for full (non-subset) layouts.
+    pub(crate) fn superset_and_subset_channels(
+        self,
+    ) -> Option<(Self, impl ExactSizeIterator<Item = usize> + use<>)> {
+        let superset = self.superset_layout()?;
+        let superset_speakers = superset.speakers()?;
+        let subset_speakers = self.speakers()?;
+        let indices = subset_speakers.iter().map(move |sp| {
+            superset_speakers
+                .iter()
+                .position(|superset_sp| superset_sp == sp)
+                .expect("subset speaker must exist in its superset layout")
+        });
+        Some((superset, indices))
+    }
 }
 
 impl TryFrom<OutputLayout> for InputLayout {
@@ -662,5 +714,61 @@ mod test {
         expect_that!(obr_bottom3.len(), eq(3));
         expect_that!(obr_bottom3[0].elevation, eq(Degrees::from_const(-30.0)));
         expect_true!(obr_binaural.is_none());
+    }
+
+    #[gtest]
+    fn superset_and_subset_channels_returns_none_for_full_input_layouts() {
+        let full_layouts = [
+            InputLayout::Mono,
+            InputLayout::Stereo,
+            InputLayout::Layout51,
+            InputLayout::Layout512,
+            InputLayout::Layout514,
+            InputLayout::Layout71,
+            InputLayout::Layout712,
+            InputLayout::Layout714,
+            InputLayout::Layout312,
+            InputLayout::Layout916,
+            InputLayout::LayoutA293,
+            InputLayout::Layout7154,
+            InputLayout::Binaural,
+        ];
+
+        for layout in full_layouts {
+            let result = layout.superset_and_subset_channels();
+
+            expect_true!(result.is_none());
+        }
+    }
+
+    #[gtest]
+    fn superset_and_subset_channels_maps_all_subset_layouts_to_expected_superset_indices() {
+        let cases: &[(InputLayout, InputLayout, &[usize])] = &[
+            (InputLayout::Lfe, InputLayout::Layout714, &[3]),
+            (InputLayout::StereoS, InputLayout::Layout514, &[4, 5]),
+            (InputLayout::StereoSs, InputLayout::Layout714, &[4, 5]),
+            (InputLayout::StereoRs, InputLayout::Layout714, &[6, 7]),
+            (InputLayout::StereoTf, InputLayout::Layout714, &[8, 9]),
+            (InputLayout::StereoTb, InputLayout::Layout714, &[10, 11]),
+            (InputLayout::Top4ch, InputLayout::Layout714, &[8, 9, 10, 11]),
+            (InputLayout::ThreeCh, InputLayout::Layout714, &[0, 1, 2]),
+            (InputLayout::StereoF, InputLayout::Layout916, &[0, 1]),
+            (InputLayout::StereoSi, InputLayout::Layout916, &[8, 9]),
+            (InputLayout::StereoTpsi, InputLayout::Layout916, &[14, 15]),
+            (InputLayout::Top6ch, InputLayout::Layout916, &[10, 11, 12, 13, 14, 15]),
+            (InputLayout::LfePair, InputLayout::LayoutA293, &[3, 9]),
+            (InputLayout::Bottom3ch, InputLayout::LayoutA293, &[21, 22, 23]),
+            (InputLayout::Bottom4ch, InputLayout::Layout7154, &[13, 14, 15, 16]),
+            (InputLayout::Top1ch, InputLayout::Layout7154, &[10]),
+            (InputLayout::Top5ch, InputLayout::Layout7154, &[8, 9, 10, 11, 12]),
+        ];
+
+        for &(subset, expected_superset, expected_indices) in cases {
+            let (superset, indices) = subset.superset_and_subset_channels().unwrap();
+            let collected: Vec<usize> = indices.collect();
+
+            expect_eq!(superset, expected_superset);
+            expect_eq!(collected.as_slice(), expected_indices);
+        }
     }
 }
