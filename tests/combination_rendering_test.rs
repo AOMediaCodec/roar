@@ -26,7 +26,7 @@ mod test {
     };
     use aom_roar::ffi::*;
     use aom_roar::{
-        AudioElementConfig, BinauralFilterProfile, ChannelBasedConfig, ChannelCount, Config,
+        AudioElementConfig, BinauralFilterProfile, ChannelBasedConfig, Config,
         ElementRenderingConfig, HeadphonesRenderingMode, HighOrderAmbisonics, InputLayout,
         ObjectBasedConfig, ObjectPosition, OutputLayout, PolarCoordinate, Quaternion, RoarRenderer,
         SampleRate, Samples, SceneBasedConfig,
@@ -207,10 +207,8 @@ mod test {
 
         // 3. Object-Based Element (1 object)
         let obj_based_element_id: u32 = 30;
-        let obj_based_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(1).unwrap(),
-            rendering_config: None,
-        });
+        let obj_based_cfg =
+            AudioElementConfig::ObjectBased(ObjectBasedConfig::new(1, None).unwrap());
         renderer.add_element(group_id, obj_based_element_id, &obj_based_cfg).unwrap();
 
         // Set position for Object
@@ -324,10 +322,7 @@ mod test {
         let mut renderer = RoarRenderer::create(&config).unwrap();
         let group_id = renderer.add_audio_group().unwrap();
         renderer.enable_head_tracking(true).unwrap();
-        let obj_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(1).unwrap(),
-            rendering_config: None,
-        });
+        let obj_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig::new(1, None).unwrap());
         let pos =
             ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(45.0, 0.0, 1.0).unwrap()]);
         let rotation_90_yaw = Quaternion::new(
@@ -393,13 +388,17 @@ mod test {
                 binaural_filter_profile: BinauralFilterProfile::Direct,
             }),
         });
-        let head_locked_obj_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(1).unwrap(),
-            rendering_config: Some(ElementRenderingConfig {
-                headphones_rendering_mode: HeadphonesRenderingMode::HeadLocked,
-                binaural_filter_profile: BinauralFilterProfile::Direct,
-            }),
-        });
+        let head_locked_obj_cfg = AudioElementConfig::ObjectBased(
+            ObjectBasedConfig::new(
+                1,
+                Some(ElementRenderingConfig {
+                    headphones_rendering_mode: HeadphonesRenderingMode::HeadLocked,
+                    binaural_filter_profile: BinauralFilterProfile::Direct,
+                }),
+            )
+            .unwrap(),
+        );
+
         let obj_pos =
             ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(-90.0, 0.0, 1.0).unwrap()]);
         let rotation_90_yaw = Quaternion::new(

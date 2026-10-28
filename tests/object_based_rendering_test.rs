@@ -22,8 +22,8 @@ mod test {
     use aom_roar::c_types::{oar_audio_block_t, oar_layout_t, oar_metadata_type_t};
     use aom_roar::ffi::*;
     use aom_roar::{
-        AudioElementConfig, ChannelCount, Config, OarError, ObjectBasedConfig, OutputLayout,
-        RoarRenderer, SampleRate, Samples,
+        AudioElementConfig, Config, OarError, ObjectBasedConfig, OutputLayout, RoarRenderer,
+        SampleRate, Samples,
     };
     use googletest::prelude::*;
 
@@ -64,10 +64,8 @@ mod test {
         let config = Config::new(layout, samples_per_channel, sample_rate)?;
         let mut renderer = RoarRenderer::create(&config)?;
         let group_id = renderer.add_audio_group()?;
-        let element_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(num_objects).unwrap(),
-            rendering_config: None,
-        });
+        let element_cfg =
+            AudioElementConfig::ObjectBased(ObjectBasedConfig::new(num_objects, None)?);
         renderer.add_element(group_id, element_id, &element_cfg)?;
         Ok(renderer)
     }

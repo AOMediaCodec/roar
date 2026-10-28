@@ -650,10 +650,7 @@ mod test {
             ChannelCount::new(1).unwrap(),
             Some(Samples::new(4).unwrap()),
         );
-        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(1).unwrap(),
-            rendering_config: None,
-        });
+        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig::new(1, None).unwrap());
         router.add_element(10, &config).unwrap();
         let input_data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0];
         let inputs = [&input_data[..]];
@@ -685,10 +682,7 @@ mod test {
             ChannelCount::new(1).unwrap(),
             Some(samples_4),
         );
-        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(1).unwrap(),
-            rendering_config: None,
-        });
+        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig::new(1, None).unwrap());
         router.add_element(10, &config).unwrap();
         // Queue positions 1: azimuth 0.0, duration 8
         let pos1 =
@@ -771,10 +765,7 @@ mod test {
             ChannelCount::new(1).unwrap(),
             Some(samples_12),
         );
-        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(1).unwrap(),
-            rendering_config: None,
-        });
+        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig::new(1, None).unwrap());
         router.add_element(10, &config).unwrap();
 
         let pos = ObjectPosition::Cartesian(vec![CartesianCoordinate::new(0.0, 1.0, 0.0).unwrap()]);
@@ -813,10 +804,7 @@ mod test {
             ChannelCount::new(1).unwrap(),
             Some(samples_4),
         );
-        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(1).unwrap(),
-            rendering_config: None,
-        });
+        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig::new(1, None).unwrap());
         router.add_element(10, &config).unwrap();
         router.add_element(20, &config).unwrap();
         let pos10 =

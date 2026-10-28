@@ -749,10 +749,7 @@ let mut rdr = RoarRenderer::create(&config)?;
 let group_id = rdr.add_audio_group()?;
 
 // 2. Add object-based audio element (1 object)
-let elem_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-    num_objects: 1,
-    rendering_config: None,
-});
+let elem_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig::new(1, None)?);
 let element_id = 100;
 rdr.add_element(group_id, element_id, &elem_cfg)?;
 

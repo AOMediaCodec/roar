@@ -124,10 +124,28 @@ pub struct SceneBasedConfig {
 /// Configuration for object-based audio element.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ObjectBasedConfig {
-    /// The number of objects.
-    pub num_objects: ChannelCount,
-    ///Optional binaural rendering config.
+    /// The number of objects (1 or 2).
+    num_objects: ChannelCount,
+    /// Optional binaural rendering config.
     pub rendering_config: Option<ElementRenderingConfig>,
+}
+
+impl ObjectBasedConfig {
+    /// Creates a new `ObjectBasedConfig` if `num_objects` is 1 or 2.
+    pub fn new(
+        num_objects: usize,
+        rendering_config: Option<ElementRenderingConfig>,
+    ) -> Result<Self, OarError> {
+        if !(1..=2).contains(&num_objects) {
+            return Err(OarError::InvalidParameter);
+        }
+        Ok(Self { num_objects: ChannelCount::new(num_objects).unwrap(), rendering_config })
+    }
+
+    /// Returns the number of objects (1 or 2).
+    pub fn num_objects(&self) -> ChannelCount {
+        self.num_objects
+    }
 }
 
 /// Configuration for an audio element, equivalent of C API `oar_audio_element_config_t`.
@@ -209,10 +227,7 @@ mod test {
         };
         let sc_config =
             SceneBasedConfig { order: HighOrderAmbisonics::Order1, rendering_config: None };
-        let obj_config = ObjectBasedConfig {
-            num_objects: ChannelCount::new(8).unwrap(),
-            rendering_config: None,
-        };
+        let obj_config = ObjectBasedConfig::new(2, None).unwrap();
 
         let el_ch = AudioElementConfig::ChannelBased(ch_config);
         let el_sc = AudioElementConfig::SceneBased(sc_config);
@@ -223,6 +238,14 @@ mod test {
 
         let el_ch_clone = el_ch;
         expect_that!(el_ch, eq(el_ch_clone));
+    }
+
+    #[gtest]
+    fn test_object_based_config_validation() {
+        expect_eq!(ObjectBasedConfig::new(0, None), Err(OarError::InvalidParameter));
+        expect_ok!(ObjectBasedConfig::new(1, None));
+        expect_ok!(ObjectBasedConfig::new(2, None));
+        expect_eq!(ObjectBasedConfig::new(3, None), Err(OarError::InvalidParameter));
     }
 
     #[gtest]

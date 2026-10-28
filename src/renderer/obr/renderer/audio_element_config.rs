@@ -47,11 +47,6 @@ impl ObrAudioElement {
     /// Returns [`OarError::InvalidParameter`] if `config` is object-based with more than 2
     /// objects.
     pub fn new(config: AudioElementConfig) -> Result<Self, OarError> {
-        if let AudioElementConfig::ObjectBased(obc) = config
-            && obc.num_objects.get() > MAX_OBJECT_CHANNELS
-        {
-            return Err(OarError::InvalidParameter);
-        }
         Ok(Self {
             config,
             first_channel_index: 0,
@@ -119,7 +114,9 @@ impl ObrAudioElement {
     /// empty slice otherwise.
     pub fn object_positions(&self) -> &[PolarCoordinate] {
         match self.config {
-            AudioElementConfig::ObjectBased(obc) => &self.object_positions[..obc.num_objects.get()],
+            AudioElementConfig::ObjectBased(obc) => {
+                &self.object_positions[..obc.num_objects().get()]
+            }
             _ => &[],
         }
     }
@@ -129,7 +126,7 @@ impl ObrAudioElement {
     pub fn object_positions_mut(&mut self) -> &mut [PolarCoordinate] {
         match self.config {
             AudioElementConfig::ObjectBased(obc) => {
-                &mut self.object_positions[..obc.num_objects.get()]
+                &mut self.object_positions[..obc.num_objects().get()]
             }
             _ => &mut [],
         }
@@ -179,8 +176,8 @@ mod test {
 
     use super::*;
     use crate::common::definitions::{
-        ChannelBasedConfig, ChannelCount, ElementRenderingConfig, HeadphonesRenderingMode,
-        ObjectBasedConfig, SceneBasedConfig,
+        ChannelBasedConfig, ElementRenderingConfig, HeadphonesRenderingMode, ObjectBasedConfig,
+        SceneBasedConfig,
     };
     use googletest::prelude::*;
 
@@ -207,10 +204,7 @@ mod test {
 
     #[gtest]
     fn obr_audio_element_object_initializes_front_positions_and_third_order() {
-        let obj_config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(2).unwrap(),
-            rendering_config: None,
-        });
+        let obj_config = AudioElementConfig::ObjectBased(ObjectBasedConfig::new(2, None).unwrap());
 
         let elem = ObrAudioElement::new(obj_config).unwrap();
 
@@ -220,18 +214,6 @@ mod test {
         expect_eq!(elem.object_positions(), &[PolarCoordinate::FRONT, PolarCoordinate::FRONT]);
         expect_eq!(elem.get_binaural_filters_ambisonic_order(), 3);
         expect_eq!(elem.get_binaural_filter_profile(), BinauralFilterProfile::Ambient);
-    }
-
-    #[gtest]
-    fn obr_audio_element_new_rejects_more_than_two_objects() {
-        let three_objects = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(3).unwrap(),
-            rendering_config: None,
-        });
-
-        let result = ObrAudioElement::new(three_objects);
-
-        expect_eq!(result, Err(OarError::InvalidParameter));
     }
 
     #[gtest]

@@ -564,13 +564,13 @@ mod test {
         binaural_filter_profile: BinauralFilterProfile,
         headphones_rendering_mode: HeadphonesRenderingMode,
     ) -> AudioElementConfig {
-        AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(1).unwrap(),
-            rendering_config: Some(ElementRenderingConfig {
-                headphones_rendering_mode,
-                binaural_filter_profile,
-            }),
-        })
+        AudioElementConfig::ObjectBased(
+            ObjectBasedConfig::new(
+                1,
+                Some(ElementRenderingConfig { headphones_rendering_mode, binaural_filter_profile }),
+            )
+            .unwrap(),
+        )
     }
 
     fn generate_sine(sampling_rate: i32, channel: &mut [f32]) {

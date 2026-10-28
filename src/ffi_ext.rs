@@ -12,7 +12,6 @@
 
 use crate::c_types::oar_audio_block_t;
 use crate::c_types::oar_audio_element_config_t;
-use crate::common::definitions::ChannelCount;
 
 impl oar_audio_block_t {
     /// Views the planar audio block as a collection of safe, immutable float slices.
@@ -174,15 +173,12 @@ impl oar_audio_element_config_t {
                 // `self.type` is 2 (corresponding to ck_object_based), meaning this variant of the
                 // union is active.
                 let obc = unsafe { self.config.obc };
-                if obc.num_objects < 1 || obc.num_objects > 2 {
-                    return Err(OarError::InvalidParameter);
-                }
-                let num_objects = ChannelCount::new(obc.num_objects as usize)
-                    .ok_or(OarError::InvalidParameter)?;
-                Ok(AudioElementConfig::ObjectBased(ObjectBasedConfig {
+                let num_objects =
+                    usize::try_from(obc.num_objects).map_err(|_| OarError::InvalidParameter)?;
+                Ok(AudioElementConfig::ObjectBased(ObjectBasedConfig::new(
                     num_objects,
                     rendering_config,
-                }))
+                )?))
             }
             _ => Err(OarError::InvalidParameter),
         }

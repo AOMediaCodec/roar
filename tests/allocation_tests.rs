@@ -25,9 +25,9 @@ mod test {
 
     use crate::test_helpers::{create_planar_buffer_mut, create_planar_buffer_ref};
     use aom_roar::{
-        AudioElementConfig, ChannelBasedConfig, ChannelCount, Config, Decibels, Gain,
-        HighOrderAmbisonics, InputLayout, ObjectBasedConfig, ObjectPosition, OutputLayout,
-        PolarCoordinate, Quaternion, RoarRenderer, SampleRate, Samples, SceneBasedConfig,
+        AudioElementConfig, ChannelBasedConfig, Config, Decibels, Gain, HighOrderAmbisonics,
+        InputLayout, ObjectBasedConfig, ObjectPosition, OutputLayout, PolarCoordinate, Quaternion,
+        RoarRenderer, SampleRate, Samples, SceneBasedConfig,
     };
 
     /// A tracking allocator to intercept heap allocations and assert that the
@@ -232,10 +232,8 @@ mod test {
         let mut renderer = RoarRenderer::create(&config).unwrap();
         let group_id = renderer.add_audio_group().unwrap();
 
-        let element_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(input_channels).unwrap(),
-            rendering_config: None,
-        });
+        let element_cfg =
+            AudioElementConfig::ObjectBased(ObjectBasedConfig::new(input_channels, None).unwrap());
         renderer.add_element(group_id, element_id, &element_cfg).unwrap();
 
         // Object needs position
@@ -280,10 +278,8 @@ mod test {
         let mut renderer = RoarRenderer::create(&config).unwrap();
         let group_id = renderer.add_audio_group().unwrap();
 
-        let element_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(input_channels).unwrap(),
-            rendering_config: None,
-        });
+        let element_cfg =
+            AudioElementConfig::ObjectBased(ObjectBasedConfig::new(input_channels, None).unwrap());
         renderer.add_element(group_id, element_id, &element_cfg).unwrap();
 
         // Queue initial position
@@ -338,10 +334,8 @@ mod test {
         let mut renderer = RoarRenderer::create(&config).unwrap();
         let group_id = renderer.add_audio_group().unwrap();
 
-        let element_cfg = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(input_channels).unwrap(),
-            rendering_config: None,
-        });
+        let element_cfg =
+            AudioElementConfig::ObjectBased(ObjectBasedConfig::new(input_channels, None).unwrap());
         renderer.add_element(group_id, element_id, &element_cfg).unwrap();
 
         let inputs = vec![vec![0.5f32; frame_size]; input_channels];

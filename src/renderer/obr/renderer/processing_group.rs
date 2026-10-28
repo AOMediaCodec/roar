@@ -378,9 +378,8 @@ mod test {
 
     use super::*;
     use crate::common::definitions::{
-        AudioElementConfig, ChannelBasedConfig, ChannelCount, ElementRenderingConfig,
-        HeadphonesRenderingMode, HighOrderAmbisonics, InputLayout, ObjectBasedConfig,
-        PolarCoordinate, SceneBasedConfig,
+        AudioElementConfig, ChannelBasedConfig, ElementRenderingConfig, HeadphonesRenderingMode,
+        HighOrderAmbisonics, InputLayout, ObjectBasedConfig, PolarCoordinate, SceneBasedConfig,
     };
     use googletest::prelude::*;
     use std::f32::consts::PI;
@@ -431,13 +430,13 @@ mod test {
         binaural_filter_profile: BinauralFilterProfile,
         headphones_rendering_mode: HeadphonesRenderingMode,
     ) -> ObrAudioElement {
-        ObrAudioElement::new(AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(1).unwrap(),
-            rendering_config: Some(ElementRenderingConfig {
-                headphones_rendering_mode,
-                binaural_filter_profile,
-            }),
-        }))
+        ObrAudioElement::new(AudioElementConfig::ObjectBased(
+            ObjectBasedConfig::new(
+                1,
+                Some(ElementRenderingConfig { headphones_rendering_mode, binaural_filter_profile }),
+            )
+            .unwrap(),
+        ))
         .unwrap()
     }
 
@@ -673,7 +672,6 @@ mod test {
         let mut fft_manager = FftManager::new(BUFFER_SIZE);
         let mut resampler = Resampler::default();
         assert!(group.initialize(&mut fft_manager, &mut resampler).is_ok());
-
         let mut audio_elements = vec![mono_object_element(
             BinauralFilterProfile::Direct,
             HeadphonesRenderingMode::WorldLockedRestricted,

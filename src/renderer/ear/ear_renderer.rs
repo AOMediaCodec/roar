@@ -194,7 +194,7 @@ impl AudioRenderer for EarRenderer {
 mod tests {
     use super::*;
     use crate::common::definitions::{
-        ChannelBasedConfig, ChannelCount, HighOrderAmbisonics, Samples, SceneBasedConfig,
+        ChannelBasedConfig, HighOrderAmbisonics, ObjectBasedConfig, Samples, SceneBasedConfig,
     };
     use googletest::prelude::*;
 
@@ -283,11 +283,7 @@ mod tests {
     #[gtest]
     fn ear_renderer_add_element_unsupported_layout_returns_not_supported() {
         let mut rdr = EarRenderer::new();
-        let config =
-            AudioElementConfig::ObjectBased(crate::common::definitions::ObjectBasedConfig {
-                num_objects: ChannelCount::new(1).unwrap(),
-                rendering_config: None,
-            });
+        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig::new(1, None).unwrap());
 
         let result = rdr.add_element(30, &config);
 

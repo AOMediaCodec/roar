@@ -82,7 +82,7 @@ impl AudioRenderer for ObjectRenderer {
         match config {
             AudioElementConfig::ObjectBased(cfg) => {
                 let mut channels = Vec::new();
-                for _ in 0..cfg.num_objects.get() {
+                for _ in 0..cfg.num_objects().get() {
                     channels.push(BlockProcessingChannel::new(Arc::clone(&self.gain_calculator)));
                 }
                 if !self.elements.contains_key(&id) {
@@ -187,7 +187,6 @@ impl AudioRenderer for ObjectRenderer {
 mod test {
 
     use super::*;
-    use crate::common::definitions::ChannelCount;
     use crate::common::definitions::{ObjectBasedConfig, PolarCoordinate};
     use googletest::prelude::*;
 
@@ -201,10 +200,7 @@ mod test {
             Samples::new(8).unwrap(),
         )
         .unwrap();
-        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(1).unwrap(),
-            rendering_config: None,
-        });
+        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig::new(1, None).unwrap());
 
         assert_ok!(rdr.add_element(10, &config));
     }
@@ -235,10 +231,7 @@ mod test {
             Samples::new(8).unwrap(),
         )
         .unwrap();
-        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(1).unwrap(),
-            rendering_config: None,
-        });
+        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig::new(1, None).unwrap());
         rdr.add_element(10, &config).unwrap();
         let positions =
             ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(0.0, 0.0, 1.0).unwrap()]);
@@ -270,10 +263,7 @@ mod test {
             Samples::new(8).unwrap(),
         )
         .unwrap();
-        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig {
-            num_objects: ChannelCount::new(1).unwrap(),
-            rendering_config: None,
-        });
+        let config = AudioElementConfig::ObjectBased(ObjectBasedConfig::new(1, None).unwrap());
         rdr.add_element(10, &config).unwrap();
         let positions =
             ObjectPosition::Polar(vec![PolarCoordinate::new_from_floats(0.0, 0.0, 1.0).unwrap()]);
