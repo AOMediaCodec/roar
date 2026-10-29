@@ -2,13 +2,23 @@ load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
 
 cc_test(
+    name = "abi_equivalence_test",
+    srcs = ["abi_equivalence_test.cc"],
+    deps = [
+        "@aom-roar//include:roar",
+        "@googletest//:gtest_main",
+        "@oar",
+    ],
+)
+
+cc_test(
     name = "animated_object_tests",
     srcs = ["animated_object_tests.cc"],
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
+        "@aom-roar//include:roar",
         "@googletest//:gtest_main",
-        "@oar",
     ],
 )
 
@@ -19,8 +29,8 @@ cc_test(
         ":test_helpers",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
+        "@aom-roar//include:roar",
         "@googletest//:gtest_main",
-        "@oar",
     ],
 )
 
@@ -29,8 +39,8 @@ cc_test(
     srcs = ["element_gains_tests.cc"],
     deps = [
         ":test_helpers",
+        "@aom-roar//include:roar",
         "@googletest//:gtest_main",
-        "@oar",
     ],
 )
 
@@ -39,8 +49,8 @@ cc_test(
     srcs = ["error_conditions_tests.cc"],
     deps = [
         ":test_helpers",
+        "@aom-roar//include:roar",
         "@googletest//:gtest_main",
-        "@oar",
     ],
 )
 
@@ -49,8 +59,8 @@ cc_test(
     srcs = ["group_gains_tests.cc"],
     deps = [
         ":test_helpers",
+        "@aom-roar//include:roar",
         "@googletest//:gtest_main",
-        "@oar",
     ],
 )
 
@@ -60,8 +70,8 @@ cc_test(
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
+        "@aom-roar//include:roar",
         "@googletest//:gtest_main",
-        "@oar",
     ],
 )
 
@@ -70,8 +80,8 @@ cc_test(
     srcs = ["loudness_tests.cc"],
     deps = [
         ":test_helpers",
+        "@aom-roar//include:roar",
         "@googletest//:gtest_main",
-        "@oar",
     ],
 )
 
@@ -81,8 +91,8 @@ cc_test(
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
+        "@aom-roar//include:roar",
         "@googletest//:gtest_main",
-        "@oar",
     ],
 )
 
@@ -92,8 +102,8 @@ cc_test(
     deps = [
         ":test_helpers",
         "@abseil-cpp//absl/strings:str_format",
+        "@aom-roar//include:roar",
         "@googletest//:gtest_main",
-        "@oar",
     ],
 )
 
@@ -107,7 +117,7 @@ cc_library(
     visibility = ["@aom-roar//equivalence_testing:__subpackages__"],
     deps = [
         "@abseil-cpp//absl/strings:str_format",
-        "@aom-roar//src:aom_roar",  # buildcleaner: keep
-        "@oar",
+        "@aom-roar//include:roar",
+        "@oar",  # buildcleaner: keep
     ],
 )

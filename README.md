@@ -16,7 +16,7 @@ loudspeaker or binaural output.
 ### Build
 
 ```shell
-bazelisk build src:aom_roar
+bazelisk build include:roar
 ```
 
 ### Run tests
@@ -41,7 +41,8 @@ bazelisk run -c opt equivalence_testing/benchmarks:benchmarks  # benchmarks
     )
     ```
 
-2.  Depend on `@aom-roar//src:aom_roar` in your C++ target's `BUILD` file (or
+2.  Depend on `@aom-roar//include:roar` in your C/C++ target's `BUILD` file and
+    `#include "include/roar.h"` in your source code (or depend on
     `@aom-roar//src:aom_roar_rlib` for a Bazel `rust_library` / `rust_binary`
     target):
 
@@ -50,7 +51,7 @@ bazelisk run -c opt equivalence_testing/benchmarks:benchmarks  # benchmarks
         name = "my_app",
         srcs = ["main.cc"],
         deps = [
-            "@aom-roar//src:aom_roar",
+            "@aom-roar//include:roar",
         ],
     )
     ```
@@ -94,29 +95,30 @@ aom-roar = { git = "https://github.com/AOMediaCodec/roar", rev = "<commit_sha>" 
 
 ### Output configuration
 
-Output is configured by `Config` (or `oar_config_t` for C) when the renderer
+Output is configured by `Config` (or `roar_config_t` for C) when the renderer
 instance is created and contains the following:
 
 -   `target_layout`: Output layout. Details below.
--   `samples_per_channel`: Buffer chunk size in samples (per channel).
+-   `samples_per_channel`: Buffer chunk size in samples (per channel). In the
+    range of [32, 16384].
 -   `sampling_rate`: Sampling rate in Hz (e.g., 48000).
 
 #### Valid output types
 
-Output layouts are defined in `oar_layout_t` in `c_types.rs` for C++ or in the
-`OutputLayout` enum.
+Output layouts are defined in `roar_layout_t` in `include/roar.h` for C/C++ or
+in the `OutputLayout` enum.
 
--   **Loudspeaker layouts**: From `ck_oar_layout_mono` to
-    `ck_oar_layout_sound_system_g_490`.
--   **Binaural**: `ck_oar_layout_binaural`
+-   **Loudspeaker layouts**: From `ck_roar_layout_mono` to
+    `ck_roar_layout_sound_system_g_490`.
+-   **Binaural**: `ck_roar_layout_binaural`
 
 #### Example
 
 C++
 
 ```cpp
-oar_config_t config;
-config.target_layout = ck_oar_layout_514;
+roar_config_t config;
+config.target_layout = ck_roar_layout_514;
 config.samples_per_channel = 1024;
 config.sampling_rate = 48000;
 ```
@@ -148,9 +150,9 @@ C++
 
 ```cpp
 // Add an audio group and get the ID (0 or 1)
-int group_id = roar_add_audio_group(oar);
+int group_id = roar_add_audio_group(roar);
 if (group_id < 0) {
-  // Handle error (e.g. ck_oar_error_nomem or ck_oar_error_busy if max groups reached)
+  // Handle error (e.g. ck_roar_error_nomem or ck_roar_error_busy if max groups reached)
 }
 ```
 
@@ -167,11 +169,11 @@ Groups can be configured by updating metadata.
 
 Group metadata contains *one* of the following:
 
-*   **Gain** (`oar_metadata_gain_t`): Dynamic output gain applied to the mixed
+*   **Gain** (`roar_metadata_gain_t`): Dynamic output gain applied to the mixed
     group output. Can be constant, per-sample, or animated (in dB). Has an ID to
     identify the gain parameter.
-*   **Head Rotation** (`quaternion_t`): Listener head orientation for binaural
-    rendering (w, x, y, z).
+*   **Head Rotation** (`roar_quaternion_t`): Listener head orientation for
+    binaural rendering (w, x, y, z).
     *   Expected to be a unit quaternion (sum of squares is 1.0).
     *   Uses the ADM coordinate system (positive X = right, positive Y = front,
         positive Z = up).
@@ -193,22 +195,22 @@ C++
 
 ```cpp
 // 1. Update group gain (constant gain of -3.0 dB for 1024 samples)
-oar_metadata_t gain_meta = {};
-gain_meta.type = ck_metadata_gain;
+roar_metadata_t gain_meta = {};
+gain_meta.type = ck_roar_metadata_gain;
 gain_meta.duration = 1024;
 gain_meta.gain.id = 1; // Unique ID for this gain parameter
-gain_meta.gain.param_type = ck_param_constant;
+gain_meta.gain.param_type = ck_roar_param_constant;
 gain_meta.gain.constant_gain = -3.0f;
-roar_update_metadata(oar, group_id, &gain_meta);
+roar_update_metadata(roar, group_id, &gain_meta);
 
 // 2. Update head rotation (quaternion for 1024 samples)
-oar_metadata_t rot_meta = {};
-rot_meta.type = ck_metadata_head_rotation;
+roar_metadata_t rot_meta = {};
+rot_meta.type = ck_roar_metadata_head_rotation;
 rot_meta.head_rotation.w = 1.0f;
 rot_meta.head_rotation.x = 0.0f;
 rot_meta.head_rotation.y = 0.0f;
 rot_meta.head_rotation.z = 0.0f;
-roar_update_metadata(oar, group_id, &rot_meta);
+roar_update_metadata(roar, group_id, &rot_meta);
 ```
 
 In the Rust API, there are separate APIs for updating the group gain and head
@@ -231,8 +233,8 @@ Group loudness can also be modified:
 C++
 
 ```cpp
-roar_enable_loudness_processor(oar, 1); // Enable. It is default off.
-roar_set_loudness(oar, group_id, current_loudness_db, target_loudness_db);
+roar_enable_loudness_processor(roar, 1); // Enable. It is default off.
+roar_set_loudness(roar, group_id, current_loudness_db, target_loudness_db);
 ```
 
 Rust
@@ -260,7 +262,7 @@ The Audio Element has the following configuration when created:
 Input Type    | Type-specific Config
 :------------ | :--------------------------------------
 Channel-based | `layout`: the layout of the input audio
-Scene-based   | `order`: oar_hoa_t, 0 to 4
+Scene-based   | `order`: roar_hoa_t, 0 to 4
 Object-based  | `num_objects`: 1 or 2
 
 **Available Parameters**
@@ -279,33 +281,33 @@ Object-based  | `num_objects`: 1 or 2
 [IAMF spec]: https://aomediacodec.github.io/iamf/#dmixp_mode
 [mapping table]: https://aomediacodec.github.io/iamf/#widx-k
 
-Note: Using `ck_world_locked_restricted` (C API) or `WorldLockedRestricted`
+Note: Using `ck_roar_world_locked_restricted` (C API) or `WorldLockedRestricted`
 (Rust API) means that element is rendered to stereo, not binaural.
 
 C++
 
 ```cpp
-oar_audio_element_config_t elem_cfg = {};
+roar_audio_element_config_t elem_cfg = {};
 
 // Example 1: Channel-based element (Stereo) with headphones rendering config
-elem_cfg.type = ck_channel_based;
-elem_cfg.cbc.layout = ck_oar_layout_stereo;
-elem_cfg.parameters.flags = def_parameter_set_flag_iamf_element_rendering_config;
-elem_cfg.parameters.element_rendering_config.headphones_rendering_mode = ck_world_locked; // or ck_head_locked
-elem_cfg.parameters.element_rendering_config.binaural_filter_profile = ck_binaural_filter_profile_default;
+elem_cfg.type = ck_roar_channel_based;
+elem_cfg.cbc.layout = ck_roar_layout_stereo;
+elem_cfg.parameters.flags = ROAR_PARAMETER_SET_FLAG_IAMF_ELEMENT_RENDERING_CONFIG;
+elem_cfg.parameters.element_rendering_config.headphones_rendering_mode = ck_roar_world_locked; // or ck_roar_head_locked
+elem_cfg.parameters.element_rendering_config.binaural_filter_profile = ck_roar_binaural_filter_profile_default;
 
 uint32_t element_id = 42;
-roar_add_audio_element(oar, group_id, element_id, &elem_cfg);
+roar_add_audio_element(roar, group_id, element_id, &elem_cfg);
 
 // Example 2: Channel-based element (5.1) with Downmix Info
-oar_audio_element_config_t downmix_elem_cfg = {};
-downmix_elem_cfg.type = ck_channel_based;
-downmix_elem_cfg.cbc.layout = ck_oar_layout_51;
-downmix_elem_cfg.parameters.flags = def_parameter_set_flag_iamf_downmix_info;
+roar_audio_element_config_t downmix_elem_cfg = {};
+downmix_elem_cfg.type = ck_roar_channel_based;
+downmix_elem_cfg.cbc.layout = ck_roar_layout_51;
+downmix_elem_cfg.parameters.flags = ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
 downmix_elem_cfg.parameters.downmix_info.mode = 0; // IAMF downmix mode 0
 downmix_elem_cfg.parameters.downmix_info.weight_index = 0;
 
-roar_add_audio_element(oar, group_id, element_id + 1, &downmix_elem_cfg);
+roar_add_audio_element(roar, group_id, element_id + 1, &downmix_elem_cfg);
 ```
 
 Rust
@@ -328,23 +330,23 @@ rdr.add_element(group_id, element_id, &elem_cfg)?;
 *   Audio elements can be removed by ID.
 *   Input audio data is provided by ID.
 *   Elements can be updated with dynamic metadata:
-    *   **Gain** (`oar_metadata_gain_t`): Dynamic element volume control
+    *   **Gain** (`roar_metadata_gain_t`): Dynamic element volume control
         (supported on all element types).
-    *   **Object Positions** (`oar_metadata_object_positions_t`): Polar or
+    *   **Object Positions** (`roar_metadata_object_positions_t`): Polar or
         Cartesian coordinates, both static and animated (supported on
         object-based elements only; returns `ck_oar_error_notsup` (`-95`) /
         `OarError::NotSupported` on non-object elements). See below for details.
-    *   **Downmix Mode** (`oar_metadata_iamf_downmix_mode_t`): Advisory dynamic
+    *   **Downmix Mode** (`roar_metadata_iamf_downmix_mode_t`): Advisory dynamic
         IAMF downmix mode hint (valid IAMF mode values: `0, 1, 2, 4, 5, 6`).
         Takes effect when the element's active rendering path uses the
         **Downmix** renderer, and is accepted and ignored as a no-op (`0` /
         `Ok(())`) when the element's rendering path has no downmix consumer
         (such as EAR fallback, OLR, or binaural OBR). Passing a non-existent
-        element ID still returns `ck_oar_error_inval` (`-22`) /
+        element ID still returns `ck_roar_error_inval` (`-22`) /
         `OarError::InvalidParameter`. In the C API, an invalid mode value
-        (outside `{0, 1, 2, 4, 5, 6}`) returns `ck_oar_error_inval` (`-22`) when
-        the element's rendering path has a downmix consumer, or `0` when ignored
-        on a path without a downmix consumer.
+        (outside `{0, 1, 2, 4, 5, 6}`) returns `ck_roar_error_inval` (`-22`)
+        when the element's rendering path has a downmix consumer, or `0` when
+        ignored on a path without a downmix consumer.
 
 **Duration**: Downmix Mode supports optional duration. `0` (or negative, in C)
 or `None` (in Rust) indicates the update should persist indefinitely until
@@ -395,42 +397,42 @@ C++
 
 ```cpp
 // 1. Update element gain (constant gain of -1.5 dB for 1024 samples)
-oar_metadata_t gain_meta = {};
-gain_meta.type = ck_metadata_gain;
+roar_metadata_t gain_meta = {};
+gain_meta.type = ck_roar_metadata_gain;
 gain_meta.duration = 1024;
 gain_meta.gain.id = 1;
-gain_meta.gain.param_type = ck_param_constant;
+gain_meta.gain.param_type = ck_roar_param_constant;
 gain_meta.gain.constant_gain = -1.5f;
-roar_update_audio_element_metadata(oar, element_id, &gain_meta);
+roar_update_audio_element_metadata(roar, element_id, &gain_meta);
 
 // 2. Update object positions (if element is object-based)
-oar_metadata_t pos_meta = {};
-pos_meta.type = ck_metadata_object_positions;
+roar_metadata_t pos_meta = {};
+pos_meta.type = ck_roar_metadata_object_positions;
 pos_meta.duration = 1024;
-pos_meta.object_positions.param_type = ck_param_constant;
-pos_meta.object_positions.position_type = ck_polar;
+pos_meta.object_positions.param_type = ck_roar_param_constant;
+pos_meta.object_positions.position_type = ck_roar_polar;
 pos_meta.object_positions.num_objects = 1;
 pos_meta.object_positions.polar_positions[0].azimuth = 30.0f;
 pos_meta.object_positions.polar_positions[0].elevation = 0.0f;
 pos_meta.object_positions.polar_positions[0].distance = 1.0f;
-roar_update_audio_element_metadata(oar, object_element_id, &pos_meta);
+roar_update_audio_element_metadata(roar, object_element_id, &pos_meta);
 
 // 3. Update downmix mode (advisory: takes effect when Downmix is active; no-op on other paths)
-oar_metadata_t dmix_meta = {};
-dmix_meta.type = ck_metadata_iamf_downmix_mode;
+roar_metadata_t dmix_meta = {};
+dmix_meta.type = ck_roar_metadata_iamf_downmix_mode;
 dmix_meta.duration = 1024;
 dmix_meta.iamf_downmix_mode.mode = 1; // Switch to downmix mode 1
-roar_update_audio_element_metadata(oar, channel_element_id, &dmix_meta);
+roar_update_audio_element_metadata(roar, channel_element_id, &dmix_meta);
 
 // 4. Provide audio data block
-oar_audio_block_t input_block;
+roar_audio_block_t input_block;
 input_block.channels = 2;
 input_block.samples_per_channel = 1024;
 input_block.data = planar_input_floats; // Pointer to (channels * samples) floats
-roar_update_audio_element_data(oar, element_id, &input_block);
+roar_update_audio_element_data(roar, element_id, &input_block);
 
 // 5. Remove the element
-roar_remove_audio_element(oar, element_id);
+roar_remove_audio_element(roar, element_id);
 ```
 
 Rust
@@ -467,7 +469,7 @@ These settings are supported in both C/C++ and Rust APIs.
 C++
 
 ```cpp
-roar_enable_limiter(oar, 1); // Enable
+roar_enable_limiter(roar, 1); // Enable
 ```
 
 Rust
@@ -484,7 +486,7 @@ rotation information for the user's head to enable world-locked binaural audio.
 C++
 
 ```cpp
-roar_enable_head_tracking(oar, 1); // Enable
+roar_enable_head_tracking(roar, 1); // Enable
 ```
 
 Rust
@@ -500,53 +502,55 @@ rdr.enable_head_tracking(true)?;
 C/C++
 
 ```cpp
+#include "include/roar.h"
+
 // Example config for 5.1 output.
-oar_config_t config;
-config.target_layout = ck_oar_layout_51;
+roar_config_t config;
+config.target_layout = ck_roar_layout_51;
 config.samples_per_channel = 1024;
 config.sampling_rate = 48000;
 
-// Create an instance of OAR.
-oar_t* oar = roar_create(&config);
-if (!oar) {
+// Create an instance of ROAR.
+roar_t* roar = roar_create(&config);
+if (!roar) {
   // Handle failure
 }
 
 // Add an audio group
-int group_id = roar_add_audio_group(oar);
+int group_id = roar_add_audio_group(roar);
 if (group_id < 0) {
   // Handle failure
 }
 
 // Configure a 7.1.4 channel-based audio element (12 channels)
-oar_audio_element_config_t element_config = {};
-element_config.type = ck_channel_based;
-element_config.cbc.layout = ck_oar_layout_714;
+roar_audio_element_config_t element_config = {};
+element_config.type = ck_roar_channel_based;
+element_config.cbc.layout = ck_roar_layout_714;
 // Configure with downmix parameters to enable downmix renderer
-element_config.parameters.flags = def_parameter_set_flag_iamf_downmix_info;
+element_config.parameters.flags = ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
 element_config.parameters.downmix_info.mode = 0;
 element_config.parameters.downmix_info.weight_index = 0;
 
 uint32_t element_id = 42;
-int return_code = roar_add_audio_element(oar, group_id, element_id, &element_config);
+int return_code = roar_add_audio_element(roar, group_id, element_id, &element_config);
 if (return_code != 0) {
   // Handle failure
 }
 
 // Fill the input data (12 channels * 1024 samples planar).
 // The input data should not be destroyed before render is called.
-oar_audio_block_t input_block;
+roar_audio_block_t input_block;
 input_block.channels = 12;
 input_block.samples_per_channel = 1024;
 input_block.data = input_buffer_ptr; // float*
 
-return_code = roar_update_audio_element_data(oar, element_id, &input_block);
+return_code = roar_update_audio_element_data(roar, element_id, &input_block);
 if (return_code != 0) {
   // Handle failure
 }
 
 // Create output struct with space for 5.1 output (6 channels * 1024 samples planar)
-oar_audio_block_t output_block;
+roar_audio_block_t output_block;
 output_block.channels = 6;
 output_block.samples_per_channel = 1024;
 output_block.data = output_buffer_ptr; // float*
@@ -555,13 +559,13 @@ output_block.data = output_buffer_ptr; // float*
 // This example only has one render call (and one set of inputs/outputs), but
 // a real application would repeatedly call `roar_update_audio_element_data` and
 // `roar_render`.
-return_code = roar_render(oar, &output_block);
+return_code = roar_render(roar, &output_block);
 if (return_code != 0) {
   // Handle failure
 }
 
 // Clean up
-roar_destroy(oar);
+roar_destroy(roar);
 ```
 
 Rust
@@ -621,37 +625,39 @@ fn render_audio() -> Result<(), OarError> {
 C++
 
 ```cpp
-// 1. Create OAR config for Stereo loudspeaker output
-oar_config_t config;
-config.target_layout = ck_oar_layout_stereo;
+#include "include/roar.h"
+
+// 1. Create ROAR config for Stereo loudspeaker output
+roar_config_t config;
+config.target_layout = ck_roar_layout_stereo;
 config.samples_per_channel = 1024;
 config.sampling_rate = 48000;
-oar_t* oar = roar_create(&config);
-int group_id = roar_add_audio_group(oar);
+roar_t* roar = roar_create(&config);
+int group_id = roar_add_audio_group(roar);
 
 // 2. Add scene-based (1OA) audio element (4 channels)
-oar_audio_element_config_t elem_cfg = {};
-elem_cfg.type = ck_scene_based;
-elem_cfg.sbc.order = ck_oar_1oa;
+roar_audio_element_config_t elem_cfg = {};
+elem_cfg.type = ck_roar_scene_based;
+elem_cfg.sbc.order = ck_roar_1oa;
 
 uint32_t element_id = 200;
-roar_add_audio_element(oar, group_id, element_id, &elem_cfg);
+roar_add_audio_element(roar, group_id, element_id, &elem_cfg);
 
 // 3. Provide 4-channel input data block (planar)
-oar_audio_block_t input_block;
+roar_audio_block_t input_block;
 input_block.channels = 4;
 input_block.samples_per_channel = 1024;
 input_block.data = ambisonic_audio_ptr; // float*
-roar_update_audio_element_data(oar, element_id, &input_block);
+roar_update_audio_element_data(roar, element_id, &input_block);
 
 // 4. Render to Stereo output (2 channels)
-oar_audio_block_t output_block;
+roar_audio_block_t output_block;
 output_block.channels = 2;
 output_block.samples_per_channel = 1024;
 output_block.data = output_buffer_ptr; // float*
-roar_render(oar, &output_block);
+roar_render(roar, &output_block);
 
-roar_destroy(oar);
+roar_destroy(roar);
 ```
 
 Rust
@@ -694,56 +700,58 @@ rdr.render(&inputs, &mut output)?;
 C++
 
 ```cpp
-// 1. Create OAR config for 5.1 loudspeaker output
-oar_config_t config;
-config.target_layout = ck_oar_layout_51;
+#include "include/roar.h"
+
+// 1. Create ROAR config for 5.1 loudspeaker output
+roar_config_t config;
+config.target_layout = ck_roar_layout_51;
 config.samples_per_channel = 1024;
 config.sampling_rate = 48000;
-oar_t* oar = roar_create(&config);
-int group_id = roar_add_audio_group(oar);
+roar_t* roar = roar_create(&config);
+int group_id = roar_add_audio_group(roar);
 
 // 2. Add object-based audio element (1 object)
-oar_audio_element_config_t elem_cfg = {};
-elem_cfg.type = ck_object_based;
+roar_audio_element_config_t elem_cfg = {};
+elem_cfg.type = ck_roar_object_based;
 elem_cfg.obc.num_objects = 1;
 
 uint32_t element_id = 100;
-roar_add_audio_element(oar, group_id, element_id, &elem_cfg);
+roar_add_audio_element(roar, group_id, element_id, &elem_cfg);
 
 // 3. Render loop with dynamic position updates
 float current_azimuth = -90.0f;
 while (rendering) {
   // Update object position (panning from left to right)
-  oar_metadata_t pos_meta = {};
-  pos_meta.type = ck_metadata_object_positions;
+  roar_metadata_t pos_meta = {};
+  pos_meta.type = ck_roar_metadata_object_positions;
   pos_meta.duration = 1024;
-  pos_meta.object_positions.param_type = ck_param_constant;
-  pos_meta.object_positions.position_type = ck_polar;
+  pos_meta.object_positions.param_type = ck_roar_param_constant;
+  pos_meta.object_positions.position_type = ck_roar_polar;
   pos_meta.object_positions.num_objects = 1;
   pos_meta.object_positions.polar_positions[0].azimuth = current_azimuth;
   pos_meta.object_positions.polar_positions[0].elevation = 0.0f;
   pos_meta.object_positions.polar_positions[0].distance = 1.0f;
-  roar_update_audio_element_metadata(oar, element_id, &pos_meta);
+  roar_update_audio_element_metadata(roar, element_id, &pos_meta);
 
   // Provide mono input block for the object
-  oar_audio_block_t input_block;
+  roar_audio_block_t input_block;
   input_block.channels = 1;
   input_block.samples_per_channel = 1024;
   input_block.data = object_audio_ptr; // float*
-  roar_update_audio_element_data(oar, element_id, &input_block);
+  roar_update_audio_element_data(roar, element_id, &input_block);
 
   // Render to 5.1 output (6 channels)
-  oar_audio_block_t output_block;
+  roar_audio_block_t output_block;
   output_block.channels = 6;
   output_block.samples_per_channel = 1024;
   output_block.data = output_buffer_ptr; // float*
-  roar_render(oar, &output_block);
+  roar_render(roar, &output_block);
 
   current_azimuth += 1.0f;
   if (current_azimuth > 90.0f) current_azimuth = -90.0f;
 }
 
-roar_destroy(oar);
+roar_destroy(roar);
 ```
 
 Rust
@@ -797,57 +805,59 @@ while rendering {
 C++
 
 ```cpp
-// 1. Create OAR config for Binaural output
-oar_config_t config;
-config.target_layout = ck_oar_layout_binaural;
+#include "include/roar.h"
+
+// 1. Create ROAR config for Binaural output
+roar_config_t config;
+config.target_layout = ck_roar_layout_binaural;
 config.samples_per_channel = 1024;
 config.sampling_rate = 48000;
-oar_t* oar = roar_create(&config);
-int group_id = roar_add_audio_group(oar);
+roar_t* roar = roar_create(&config);
+int group_id = roar_add_audio_group(roar);
 
 // 2. Add 5.1.4 channel-based audio element (10 channels) configured for world-locked rendering
-oar_audio_element_config_t elem_cfg = {};
-elem_cfg.type = ck_channel_based;
-elem_cfg.cbc.layout = ck_oar_layout_514;
-elem_cfg.parameters.flags = def_parameter_set_flag_iamf_element_rendering_config;
-elem_cfg.parameters.element_rendering_config.headphones_rendering_mode = ck_world_locked;
-elem_cfg.parameters.element_rendering_config.binaural_filter_profile = ck_binaural_filter_profile_default;
+roar_audio_element_config_t elem_cfg = {};
+elem_cfg.type = ck_roar_channel_based;
+elem_cfg.cbc.layout = ck_roar_layout_514;
+elem_cfg.parameters.flags = ROAR_PARAMETER_SET_FLAG_IAMF_ELEMENT_RENDERING_CONFIG;
+elem_cfg.parameters.element_rendering_config.headphones_rendering_mode = ck_roar_world_locked;
+elem_cfg.parameters.element_rendering_config.binaural_filter_profile = ck_roar_binaural_filter_profile_default;
 
 uint32_t element_id = 101;
-roar_add_audio_element(oar, group_id, element_id, &elem_cfg);
+roar_add_audio_element(roar, group_id, element_id, &elem_cfg);
 
 // 3. Enable head tracking
-roar_enable_head_tracking(oar, 1);
+roar_enable_head_tracking(roar, 1);
 
 // 4. Render loop with head rotation updates
 while (rendering) {
   // Update head rotation from sensor data
-  oar_metadata_t rot_meta = {};
-  rot_meta.type = ck_metadata_head_rotation;
+  roar_metadata_t rot_meta = {};
+  rot_meta.type = ck_roar_metadata_head_rotation;
   rot_meta.duration = 1024;
   rot_meta.head_rotation.w = sensor_q.w;
   rot_meta.head_rotation.x = sensor_q.x;
   rot_meta.head_rotation.y = sensor_q.y;
   rot_meta.head_rotation.z = sensor_q.z;
   // Head rotation is updated via the group API
-  roar_update_metadata(oar, group_id, &rot_meta);
+  roar_update_metadata(roar, group_id, &rot_meta);
 
   // Provide 5.1.4 input data block
-  oar_audio_block_t input_block;
+  roar_audio_block_t input_block;
   input_block.channels = 10;
   input_block.samples_per_channel = 1024;
   input_block.data = input_audio_ptr; // float*
-  roar_update_audio_element_data(oar, element_id, &input_block);
+  roar_update_audio_element_data(roar, element_id, &input_block);
 
   // Render to Binaural (2 channels)
-  oar_audio_block_t output_block;
+  roar_audio_block_t output_block;
   output_block.channels = 2;
   output_block.samples_per_channel = 1024;
   output_block.data = output_buffer_ptr; // float*
-  roar_render(oar, &output_block);
+  roar_render(roar, &output_block);
 }
 
-roar_destroy(oar);
+roar_destroy(roar);
 ```
 
 Rust
@@ -913,9 +923,10 @@ while rendering {
 
 Via the C or Rust API, ROAR is structured into five main layers.
 
-1.  **C API Entrypoint (`ffi.rs`)**: Exposes `#[unsafe(no_mangle)] extern "C"`
-    functions matching the original OAR C specification. It catches Rust panics
-    and translates errors to integer status codes.
+1.  **C API Entrypoint (`include/roar.h` / `ffi.rs`)**: Exposes
+    `#[unsafe(no_mangle)] extern "C"` functions and `roar_*` C types matching
+    the original OAR C specification. It catches Rust panics and translates
+    errors to integer status codes.
 2.  **Safe State & Type Translation (`c_types.rs` / `ffi_ext.rs`)**: Conversions
     validate C inputs and instantiate safe Rust types.
 3.  **Rust Orchestrator (`roar_renderer.rs`)**: Uses a runtime state machine
@@ -1011,8 +1022,8 @@ graph TD
 The active internal renderer is selected when an element is added based on the
 target output layout and the configuration of the audio element:
 
--   Binaural output (`ck_oar_layout_binaural` / `OutputLayout::Binaural`)
-    -   Channel-based input configured with `ck_world_locked_restricted` /
+-   Binaural output (`ck_roar_layout_binaural` / `OutputLayout::Binaural`)
+    -   Channel-based input configured with `ck_roar_world_locked_restricted` /
         `HeadphonesRenderingMode::WorldLockedRestricted`: Rendered to stereo
         using the loudspeaker selection rules below (**Downmix** when
         `downmix_info` is present and the input layout downmixes to stereo,
@@ -1025,7 +1036,7 @@ target output layout and the configuration of the audio element:
     -   Channel-based input: Selection depends on the downmix configuration:
         -   **Downmix renderer** is selected if:
             1.  Downmix information is provided in the element parameters
-                (`def_parameter_set_flag_iamf_downmix_info` is set /
+                (`ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO` is set /
                 `downmix_info` is `Some`).
             2.  The input layout and effective target layout form a supported
                 IAMF downmix combination (excluding `in == out` and unsupported
@@ -1035,17 +1046,17 @@ target output layout and the configuration of the audio element:
 
 Because renderer selection is internal while an IAMF stream may carry a demixing
 parameter stream regardless of the active rendering path, dynamic downmix mode
-updates (`ck_metadata_iamf_downmix_mode` /
+updates (`ck_roar_metadata_iamf_downmix_mode` /
 `RoarRenderer::update_element_downmix_mode`) are treated as **advisory**:
 
 -   When **Downmix** is selected for the element, updates are consumed and
     applied (valid IAMF mode values are `{0, 1, 2, 4, 5, 6}`; in the C API,
-    invalid mode values are rejected with `ck_oar_error_inval` (`-22`)).
+    invalid mode values are rejected with `ck_roar_error_inval` (`-22`)).
 -   When **EAR**, **OLR**, or **OBR** is selected for the element, updates have
     no consumer on the active rendering path and are accepted and ignored as a
     no-op (`0` / `Ok(())`).
 -   Updates targeting a non-existent element ID always return
-    `ck_oar_error_inval` (`-22`) / `Err(OarError::InvalidParameter)`.
+    `ck_roar_error_inval` (`-22`) / `Err(OarError::InvalidParameter)`.
 
 ### FFT usage
 

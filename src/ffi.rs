@@ -16,8 +16,8 @@
 //! All functions wrap their execution inside `std::panic::catch_unwind`.
 
 use crate::c_types::{
-    oar_audio_block_t, oar_audio_element_config_t, oar_config_t, oar_metadata_t,
-    oar_metadata_type_t, oar_t, FfiWrapper,
+    roar_audio_block_t, roar_audio_element_config_t, roar_config_t, roar_metadata_t,
+    roar_metadata_type_t, roar_t, FfiWrapper,
 };
 use crate::common::definitions::{
     Decibels, GroupId, OarError, PlanarBufferMut, PlanarBufferRef, Samples,
@@ -25,7 +25,7 @@ use crate::common::definitions::{
 };
 use std::os::raw::c_int;
 
-/// Converts an `oar_audio_block_t` into a validated `PlanarBufferMut`.
+/// Converts a `roar_audio_block_t` into a validated `PlanarBufferMut`.
 ///
 /// # Safety
 /// `output_block.data` must be non-null and the caller must guarantee that it is properly aligned,
@@ -33,7 +33,7 @@ use std::os::raw::c_int;
 /// `(output_block.channels as usize) * samples.value()` `f32` elements (which may be
 /// uninitialized on entry).
 unsafe fn block_to_planar_buffer_mut<'a, 'b>(
-    output_block: &'a mut oar_audio_block_t,
+    output_block: &'a mut roar_audio_block_t,
     slices_array: &'b mut [&'a mut [f32]; MAX_OUTPUT_CHANNEL_COUNT],
     samples: Samples,
 ) -> Result<PlanarBufferMut<'a, 'b>, OarError> {
@@ -64,23 +64,23 @@ unsafe fn block_to_planar_buffer_mut<'a, 'b>(
     PlanarBufferMut::new(&mut slices_array[..out_channels], out_channels, samples)
 }
 
-/// Creates a new OAR renderer object.
+/// Creates a new ROAR renderer object.
 ///
-/// Returns a pointer to the created `oar_t` object on success, or `null_mut()` on failure.
+/// Returns a pointer to the created `roar_t` object on success, or `null_mut()` on failure.
 ///
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `config` points to a valid, initialized `oar_config_t` structure.
+/// - `config` points to a valid, initialized `roar_config_t` structure.
 /// - The pointer is safe to read for the duration of this function.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn roar_create(config: *const oar_config_t) -> *mut oar_t {
+pub unsafe extern "C" fn roar_create(config: *const roar_config_t) -> *mut roar_t {
     std::panic::catch_unwind(|| {
         if config.is_null() {
             return std::ptr::null_mut();
         }
         // SAFETY: We checked that `config` is not null. The caller guarantees that `config`
-        // points to a valid, initialized `oar_config_t` structure.
+        // points to a valid, initialized `roar_config_t` structure.
         let config_ref = unsafe { &*config };
         let oar_config = match crate::common::definitions::Config::try_from(*config_ref) {
             Ok(c) => c,
@@ -91,30 +91,31 @@ pub unsafe extern "C" fn roar_create(config: *const oar_config_t) -> *mut oar_t 
             Err(_) => return std::ptr::null_mut(),
         };
         let wrapper = FfiWrapper { renderer, inputs: std::collections::HashMap::new() };
-        // Box the wrapper and return it as an `oar_t` pointer.
-        Box::into_raw(Box::new(wrapper)) as *mut oar_t
+        // Box the wrapper and return it as a `roar_t` pointer.
+        Box::into_raw(Box::new(wrapper)) as *mut roar_t
     })
     .unwrap_or(std::ptr::null_mut())
 }
 
-/// Destroys an OAR renderer object.
+/// Destroys a ROAR renderer object.
 ///
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid OAR object returned by `oar_create`.
+/// - `roar` points to a valid ROAR object returned by `roar_create`, or is null.
 /// - The object has not been destroyed already and is not accessed concurrently.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn roar_destroy(oar: *mut oar_t) {
+pub unsafe extern "C" fn roar_destroy(roar: *mut roar_t) {
     let _ = std::panic::catch_unwind(|| {
-        if oar.is_null() {
+        if roar.is_null() {
             return;
         }
-        // SAFETY: The caller guarantees `oar` is a valid pointer returned by `roar_create`
+        // SAFETY: The caller guarantees `roar` is a valid pointer returned by `roar_create`
         // and has not been destroyed yet.
         unsafe {
-            // Cast the oar_t to its real type, FfiWrapper, and reconstruct the Box for deallocation
-            let _ = Box::from_raw(oar as *mut FfiWrapper);
+            // Cast `roar_t` to its real type, `FfiWrapper`, and reconstruct the Box for
+            // deallocation.
+            let _ = Box::from_raw(roar as *mut FfiWrapper);
         }
     });
 }
@@ -127,15 +128,15 @@ pub unsafe extern "C" fn roar_destroy(oar: *mut oar_t) {
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
+/// - `roar` points to a valid, initialized ROAR object.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn roar_add_audio_group(oar: *mut oar_t) -> c_int {
+pub unsafe extern "C" fn roar_add_audio_group(roar: *mut roar_t) -> c_int {
     std::panic::catch_unwind(|| {
-        if oar.is_null() {
+        if roar.is_null() {
             return OarError::InvalidParameter.into();
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &mut *(roar as *mut FfiWrapper) };
         match wrapper.renderer.add_audio_group() {
             Ok(new_id) => new_id as c_int,
             Err(e) => e.into(),
@@ -152,25 +153,26 @@ pub unsafe extern "C" fn roar_add_audio_group(oar: *mut oar_t) -> c_int {
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
-/// - `config` points to a valid, initialized `oar_audio_element_config_t` structure.
+/// - `roar` points to a valid, initialized ROAR object.
+/// - `config` points to a readable, aligned `roar_audio_element_config_t` structure whose `r#type`,
+///   `parameters.flags`, active `config` union variant, and any `parameters` sub-structs enabled in
+///   `parameters.flags` are initialized.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn roar_add_audio_element(
-    oar: *mut oar_t,
+    roar: *mut roar_t,
     gid: u32,
     id: u32,
-    config: *const oar_audio_element_config_t,
+    config: *const roar_audio_element_config_t,
 ) -> c_int {
     std::panic::catch_unwind(|| {
-        if oar.is_null() || config.is_null() {
+        if roar.is_null() || config.is_null() {
             return OarError::InvalidParameter.into();
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
-        // SAFETY: We checked that `config` is not null. The caller guarantees that `config`
-        // points to a valid, initialized `oar_audio_element_config_t` structure.
-        let config_ref = unsafe { &*config };
-        let safe_config = match config_ref.to_safe() {
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &mut *(roar as *mut FfiWrapper) };
+        // SAFETY: We checked that `config` is not null. The caller guarantees that `config` points
+        // to an aligned `roar_audio_element_config_t` whose active fields are initialized.
+        let safe_config = match unsafe { roar_audio_element_config_t::from_raw(config) } {
             Ok(c) => c,
             Err(e) => return e.into(),
         };
@@ -196,15 +198,15 @@ pub unsafe extern "C" fn roar_add_audio_element(
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
+/// - `roar` points to a valid, initialized ROAR object.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn roar_remove_audio_element(oar: *mut oar_t, id: u32) -> c_int {
+pub unsafe extern "C" fn roar_remove_audio_element(roar: *mut roar_t, id: u32) -> c_int {
     std::panic::catch_unwind(|| {
-        if oar.is_null() {
+        if roar.is_null() {
             return OarError::InvalidParameter.into();
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &mut *(roar as *mut FfiWrapper) };
         match wrapper.renderer.remove_element(id) {
             Ok(()) => {
                 wrapper.inputs.remove(&id);
@@ -219,13 +221,13 @@ pub unsafe extern "C" fn roar_remove_audio_element(oar: *mut oar_t, id: u32) -> 
 /// Updates metadata parameters for an audio element.
 ///
 /// Supported metadata types:
-/// - **Object positions** (`oar_metadata_object_positions_t`): 3D spatial coordinates supported
+/// - **Object positions** (`roar_metadata_object_positions_t`): 3D spatial coordinates supported
 ///   only on object-based audio elements.
 ///   - Duration must be specified. A value `<= 0` means the update will be silently dropped.
-/// - **Gain** (`oar_metadata_gain_t`): Dynamic gain adjustment supported on all audio element
+/// - **Gain** (`roar_metadata_gain_t`): Dynamic gain adjustment supported on all audio element
 ///   types.
 ///   - Duration must be specified. A value `<= 0` means the update will be silently dropped.
-/// - **IAMF downmix mode** (`oar_metadata_iamf_downmix_mode_t`): Advisory metadata hint that takes
+/// - **IAMF downmix mode** (`roar_metadata_iamf_downmix_mode_t`): Advisory metadata hint that takes
 ///   effect only when the element's current rendering path has a downmix consumer
 ///   (`DownmixRenderer`). When the element's current rendering path has no downmix consumer (such
 ///   as EAR fallback, OLR, or binaural OBR), the update is accepted and ignored (`ROAR_STATUS_OK`).
@@ -235,14 +237,14 @@ pub unsafe extern "C" fn roar_remove_audio_element(oar: *mut oar_t, id: u32) -> 
 /// To update head rotation (which is always applied globally), use `roar_update_metadata` instead.
 ///
 /// # Arguments
-/// * `oar` - Pointer to the ROAR object.
+/// * `roar` - Pointer to the ROAR object.
 /// * `id` - Unique element identifier (searched across all audio groups).
 /// * `metadata` - Metadata payload to apply to the element.
 ///
 /// # Returns
-/// - `ROAR_STATUS_OK` (`0`) on success. For advisory metadata (`ck_metadata_iamf_downmix_mode`),
-///   `0` means "accepted" and also covers updates ignored because the element's current rendering
-///   path has no downmix consumer.
+/// - `ROAR_STATUS_OK` (`0`) on success. For advisory metadata
+///   (`ck_roar_metadata_iamf_downmix_mode`), `0` means "accepted" and also covers updates ignored
+///   because the element's current rendering path has no downmix consumer.
 /// - `-22` (`OarError::InvalidParameter`) for null pointers, invalid parameters, a non-existent
 ///   element `id`, or an invalid `mode` value (outside `{0, 1, 2, 4, 5, 6}`) when the element's
 ///   current rendering path has a downmix consumer.
@@ -252,29 +254,44 @@ pub unsafe extern "C" fn roar_remove_audio_element(oar: *mut oar_t, id: u32) -> 
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
-/// - `metadata` points to a valid, initialized `oar_metadata_t` structure.
+/// - `roar` points to a valid, initialized ROAR object.
+/// - `metadata` points to a readable, aligned `roar_metadata_t` structure for the duration of this
+///   call whose `r#type`, `duration`, and active `value` union payload (and active nested union
+///   fields) are initialized.
+/// - When `metadata.r#type == ck_roar_metadata_gain`, `metadata.value.gain.param_type ==
+///   ck_roar_param_multiple`, `metadata.duration > 0`, and `metadata.value.gain.value.gain_array`
+///   is non-null and aligned for `f32`, `gain_array` points to a single live allocated object
+///   containing at least `metadata.duration as usize` consecutive, properly initialized `f32`
+///   elements (`(metadata.duration as usize) * size_of::<f32>()` bytes) without address-space
+///   wraparound, valid for reads and not mutated concurrently for the duration of this call.
+/// - When `metadata.r#type == ck_roar_metadata_object_positions`, `metadata.duration > 0`,
+///   `metadata.value.object_positions.num_objects <= ROAR_MAX_NUMBER_OF_OBJECTS`, and `(param_type,
+///   position_type)` selects a supported variant (`ck_roar_param_constant` or
+///   `ck_roar_param_animated` paired with `ck_roar_polar` or `ck_roar_cartesian`), the first
+///   `num_objects` entries of the active `positions` union array are initialized and valid for
+///   reads for the duration of this call.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn roar_update_audio_element_metadata(
-    oar: *mut oar_t,
+    roar: *mut roar_t,
     id: u32,
-    metadata: *const oar_metadata_t,
+    metadata: *const roar_metadata_t,
 ) -> c_int {
     std::panic::catch_unwind(|| {
-        if oar.is_null() || metadata.is_null() {
+        if roar.is_null() || metadata.is_null() {
             return OarError::InvalidParameter.into();
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &mut *(roar as *mut FfiWrapper) };
         if !wrapper.renderer.active_elements().contains_key(&id) {
             return OarError::InvalidParameter.into();
         }
         // SAFETY: We checked that `metadata` is not null. The caller guarantees that `metadata`
-        // points to a valid, initialized `oar_metadata_t` structure.
+        // points to a readable, aligned `roar_metadata_t` structure with initialized active fields
+        // for the duration of this call.
         let meta_ref = unsafe { &*metadata };
         let meta_type = meta_ref.r#type;
 
-        if meta_type == (oar_metadata_type_t::ck_metadata_gain as u32) {
+        if meta_type == (roar_metadata_type_t::ck_roar_metadata_gain as u32) {
             // C liboar ignores gain updates with duration <= 0.
             if meta_ref.duration <= 0 {
                 return ROAR_STATUS_OK;
@@ -283,19 +300,24 @@ pub unsafe extern "C" fn roar_update_audio_element_metadata(
                 Ok(s) => s,
                 Err(e) => return e.into(),
             };
-            let gain = match meta_ref.to_gain() {
+            // SAFETY: `meta_type` was verified to be `ck_roar_metadata_gain` and `duration > 0`.
+            // The caller guarantees that `meta_ref.value.gain` has initialized active union fields
+            // and, when `param_type == ck_roar_param_multiple` and `gain_array` is non-null and
+            // aligned, `gain_array` points to a single live allocation of at least `duration`
+            // consecutive, initialized `f32` elements valid for reads and not mutated concurrently
+            // for the duration of this call.
+            let gain = match unsafe { meta_ref.to_gain() } {
                 Ok(g) => g,
                 Err(e) => return e.into(),
             };
-            // SAFETY: The caller guarantees that metadata is valid the type of metadata indicates
-            // it is a gain.
-            let gain_meta = unsafe { meta_ref.value.gain };
-            let gain_id = gain_meta.id;
+            // SAFETY: `meta_type` was verified to be `ck_roar_metadata_gain`, so `value.gain.id`
+            // is initialized. Reading via pointer projection avoids copying inactive union padding.
+            let gain_id = unsafe { (&raw const meta_ref.value.gain.id).read() };
             match wrapper.renderer.update_element_gain(id, gain_id, &gain, duration) {
                 Ok(()) => ROAR_STATUS_OK,
                 Err(e) => e.into(),
             }
-        } else if meta_type == (oar_metadata_type_t::ck_metadata_object_positions as u32) {
+        } else if meta_type == (roar_metadata_type_t::ck_roar_metadata_object_positions as u32) {
             // C liboar ignores position updates with duration <= 0.
             if meta_ref.duration <= 0 {
                 return ROAR_STATUS_OK;
@@ -304,7 +326,12 @@ pub unsafe extern "C" fn roar_update_audio_element_metadata(
                 Ok(s) => s,
                 Err(e) => return e.into(),
             };
-            let positions = match meta_ref.to_positions() {
+            // SAFETY: `meta_type` was verified to be `ck_roar_metadata_object_positions` and
+            // `duration > 0`. The caller guarantees that `meta_ref.value.object_positions` has
+            // initialized header fields and that the first `num_objects` entries of the active
+            // `positions` union array are initialized and valid for reads for the duration of this
+            // call.
+            let positions = match unsafe { meta_ref.to_positions() } {
                 Ok(p) => p,
                 Err(e) => return e.into(),
             };
@@ -312,7 +339,7 @@ pub unsafe extern "C" fn roar_update_audio_element_metadata(
                 Ok(()) => ROAR_STATUS_OK,
                 Err(e) => e.into(),
             }
-        } else if meta_type == (oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32) {
+        } else if meta_type == (roar_metadata_type_t::ck_roar_metadata_iamf_downmix_mode as u32) {
             // Downmix mode metadata is advisory: when the element's active rendering path has no
             // downmix consumer, accept and ignore the update without validating `mode`.
             match wrapper.renderer.element_has_downmix_consumer(id) {
@@ -353,21 +380,21 @@ pub unsafe extern "C" fn roar_update_audio_element_metadata(
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
-/// - `data` points to a valid `oar_audio_block_t` structure containing active planar f32 input
+/// - `roar` points to a valid, initialized ROAR object.
+/// - `data` points to a valid `roar_audio_block_t` structure containing active planar f32 input
 ///   buffers.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn roar_update_audio_element_data(
-    oar: *mut oar_t,
+    roar: *mut roar_t,
     id: u32,
-    data: *mut oar_audio_block_t,
+    data: *mut roar_audio_block_t,
 ) -> c_int {
     std::panic::catch_unwind(|| {
-        if oar.is_null() || data.is_null() {
+        if roar.is_null() || data.is_null() {
             return OarError::InvalidParameter.into();
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &mut *(roar as *mut FfiWrapper) };
 
         let Some(expected_channels) =
             wrapper.renderer.active_elements().get(&id).map(|c| c.channels())
@@ -376,7 +403,7 @@ pub unsafe extern "C" fn roar_update_audio_element_data(
         };
 
         // SAFETY: We checked that `data` is not null. The caller guarantees that `data`
-        // points to a valid `oar_audio_block_t` structure containing active planar f32 input
+        // points to a valid `roar_audio_block_t` structure containing active planar f32 input
         // buffers, which ensures `as_slices()` can safely dereference the inner data pointers.
         let data_slices = unsafe { (*data).as_slices() };
         if data_slices.len() != expected_channels.get() {
@@ -400,31 +427,37 @@ pub unsafe extern "C" fn roar_update_audio_element_data(
 ///
 /// Matching liboar, only object positions metadata type is supported.
 ///
+/// # Arguments
+/// * `roar` - Pointer to the ROAR object.
+/// * `r#type` - Raw `roar_metadata_type_t` discriminant (`u32`) accepted as an integer across FFI
+///   so out-of-range C enum values return `ck_roar_error_notsup` without undefined behavior.
+/// * `samples` - Sub-block processing unit in samples; must be in `1..=samples_per_channel`.
+///
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a properly aligned, validly aligned object and that no aliasing accesses occur
-///   for the duration of this call.
+/// - `roar` points to a properly aligned, validly initialized object and that no aliasing accesses
+///   occur for the duration of this call.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn roar_set_metadata_unit_to_process(
-    oar: *mut oar_t,
-    r#type: oar_metadata_type_t,
+    roar: *mut roar_t,
+    r#type: u32,
     samples: u32,
 ) -> c_int {
     std::panic::catch_unwind(|| {
-        if oar.is_null() {
+        if roar.is_null() {
             return OarError::InvalidParameter.into();
         }
-        if r#type != oar_metadata_type_t::ck_metadata_object_positions {
+        if r#type != (roar_metadata_type_t::ck_roar_metadata_object_positions as u32) {
             return OarError::NotSupported.into();
         }
         let Ok(samples) = Samples::new(samples) else {
             return OarError::InvalidParameter.into();
         };
-        // SAFETY: `oar` was verified non-null above. The caller guarantees that `oar` points to a
+        // SAFETY: `roar` was verified non-null above. The caller guarantees that `roar` points to a
         // properly aligned, validly initialized `FfiWrapper` and that no aliasing accesses occur
         // for the duration of this call, satisfying `&mut` validity and exclusivity.
-        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        let wrapper = unsafe { &mut *(roar as *mut FfiWrapper) };
         match wrapper.renderer.set_object_position_metadata_unit_to_process(samples) {
             Ok(()) => ROAR_STATUS_OK,
             Err(e) => e.into(),
@@ -436,37 +469,52 @@ pub unsafe extern "C" fn roar_set_metadata_unit_to_process(
 /// Updates metadata parameters for an audio group.
 ///
 /// Supported metadata and value constraints:
-/// - **Head rotation** (`ck_metadata_head_rotation`):
+/// - **Head rotation** (`ck_roar_metadata_head_rotation`):
 ///   - Quaternion `w, x, y, z` representing head orientation.
 ///   - Expected to be a unit quaternion (sum of squares is 1.0).
 ///   - Uses the ADM object coordinate system to orient the listener's head.
 ///   - Note: Duration is not used.
-/// - **Gain** (`ck_metadata_gain`):
+/// - **Gain** (`ck_roar_metadata_gain`):
 ///   - Gain in dB, applied to all channels in the group.
-///   - Duration must be specified.  A value <= 0 means the update will be silently dropped!
+///   - Duration must be specified. A value <= 0 means the update will be silently dropped!
 ///
 /// Returns `ROAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param,
-/// `-16` if renderer not in Rendering state, `-95` for unsupported metadata type) on failure.
+/// `-16` if head tracking is disabled, `-95` for unsupported metadata type) on failure.
 ///
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
-/// - `metadata` points to a valid, initialized `oar_metadata_t` structure.
+/// - `roar` points to a valid, initialized ROAR object.
+/// - `metadata` points to a readable, aligned `roar_metadata_t` structure for the duration of this
+///   call whose `r#type`, `duration`, and active `value` union payload (and active nested union
+///   fields) are initialized.
+/// - When `metadata.r#type == ck_roar_metadata_gain`, `metadata.value.gain.param_type ==
+///   ck_roar_param_multiple`, `metadata.duration > 0`, and `metadata.value.gain.value.gain_array`
+///   is non-null and aligned for `f32`, `gain_array` points to a single live allocated object
+///   containing at least `metadata.duration as usize` consecutive, properly initialized `f32`
+///   elements (`(metadata.duration as usize) * size_of::<f32>()` bytes) without address-space
+///   wraparound, valid for reads and not mutated concurrently for the duration of this call.
+/// - When `metadata.r#type == ck_roar_metadata_object_positions`, `metadata.duration > 0`,
+///   `metadata.value.object_positions.num_objects <= ROAR_MAX_NUMBER_OF_OBJECTS`, and `(param_type,
+///   position_type)` selects a supported variant (`ck_roar_param_constant` or
+///   `ck_roar_param_animated` paired with `ck_roar_polar` or `ck_roar_cartesian`), the first
+///   `num_objects` entries of the active `positions` union array are initialized and valid for
+///   reads for the duration of this call.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn roar_update_metadata(
-    oar: *mut oar_t,
+    roar: *mut roar_t,
     gid: u32,
-    metadata: *const oar_metadata_t,
+    metadata: *const roar_metadata_t,
 ) -> c_int {
     std::panic::catch_unwind(|| {
-        if oar.is_null() || metadata.is_null() {
+        if roar.is_null() || metadata.is_null() {
             return OarError::InvalidParameter.into();
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &mut *(roar as *mut FfiWrapper) };
         // SAFETY: We checked that `metadata` is not null. The caller guarantees that `metadata`
-        // points to a valid, initialized `oar_metadata_t` structure.
+        // points to a readable, aligned `roar_metadata_t` structure with initialized active fields
+        // for the duration of this call.
         let meta_ref = unsafe { &*metadata };
 
         let group_id = match GroupId::try_from(gid) {
@@ -478,12 +526,18 @@ pub unsafe extern "C" fn roar_update_metadata(
             return OarError::InvalidParameter.into();
         }
 
-        if meta_ref.r#type == (oar_metadata_type_t::ck_metadata_gain as u32) {
+        if meta_ref.r#type == (roar_metadata_type_t::ck_roar_metadata_gain as u32) {
             // C liboar ignores group gain updates with duration <= 0.
             if meta_ref.duration <= 0 {
                 return ROAR_STATUS_OK;
             }
-            let gain = match meta_ref.to_gain() {
+            // SAFETY: `meta_ref.r#type` was verified to be `ck_roar_metadata_gain` and
+            // `duration > 0`. The caller guarantees that `meta_ref.value.gain` has initialized
+            // active union fields and, when `param_type == ck_roar_param_multiple` and
+            // `gain_array` is non-null and aligned, `gain_array` points to a single live allocation
+            // of at least `duration` consecutive, initialized `f32` elements valid for reads and
+            // not mutated concurrently for the duration of this call.
+            let gain = match unsafe { meta_ref.to_gain() } {
                 Ok(g) => g,
                 Err(e) => return e.into(),
             };
@@ -495,9 +549,9 @@ pub unsafe extern "C" fn roar_update_metadata(
                 Ok(()) => ROAR_STATUS_OK,
                 Err(e) => e.into(),
             }
-        } else if meta_ref.r#type == (oar_metadata_type_t::ck_metadata_head_rotation as u32) {
+        } else if meta_ref.r#type == (roar_metadata_type_t::ck_roar_metadata_head_rotation as u32) {
             if !wrapper.renderer.head_tracking_enabled {
-                // liboar returns `ck_oar_error_busy` if head tracking is disabled.
+                // Returns `ck_roar_error_busy` if head tracking is disabled.
                 return OarError::Busy.into();
             }
             match meta_ref.to_head_rotation() {
@@ -524,20 +578,20 @@ pub unsafe extern "C" fn roar_update_metadata(
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
-/// - `output` points to a valid `oar_audio_block_t` with correct `channels` and
+/// - `roar` points to a valid, initialized ROAR object.
+/// - `output` points to a valid `roar_audio_block_t` with correct `channels` and
 ///   `samples_per_channel` and allocated planar float memory.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn roar_render(oar: *mut oar_t, output: *mut oar_audio_block_t) -> c_int {
+pub unsafe extern "C" fn roar_render(roar: *mut roar_t, output: *mut roar_audio_block_t) -> c_int {
     std::panic::catch_unwind(|| {
-        if oar.is_null() || output.is_null() {
+        if roar.is_null() || output.is_null() {
             return OarError::InvalidParameter.into();
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &mut *(roar as *mut FfiWrapper) };
 
         // SAFETY: We checked that `output` is not null. The caller guarantees that `output`
-        // points to a valid `oar_audio_block_t` structure.
+        // points to a valid `roar_audio_block_t` structure.
         let output_block = unsafe { &mut *output };
         let expected_samples = wrapper.renderer.config().samples_per_channel().value();
         let expected_channels = wrapper.renderer.config().output_layout().channels().get() as u32;
@@ -549,8 +603,8 @@ pub unsafe extern "C" fn roar_render(oar: *mut oar_t, output: *mut oar_audio_blo
         }
         output_block.samples_per_channel = expected_samples;
 
-        // TODO(b/525080422):  Could we simplify the preparation of memory for rendering (i.e. the
-        // creation the PlanarBufRef), maybe by changing the way we store inside `wrapper.inputs`?
+        // TODO(b/525080422): Could we simplify the preparation of memory for rendering (i.e. the
+        // creation of PlanarBufferRef), maybe by changing the way we store inside `wrapper.inputs`?
         let collected_inputs: Vec<(&u32, &Vec<Vec<f32>>)> = wrapper.inputs.iter().collect();
 
         let mut element_slices: Vec<Vec<&[f32]>> = Vec::new();
@@ -612,15 +666,15 @@ pub unsafe extern "C" fn roar_render(oar: *mut oar_t, output: *mut oar_audio_blo
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
+/// - `roar` points to a valid, initialized ROAR object.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn roar_enable_loudness_processor(oar: *mut oar_t, enable: c_int) -> c_int {
+pub unsafe extern "C" fn roar_enable_loudness_processor(roar: *mut roar_t, enable: c_int) -> c_int {
     std::panic::catch_unwind(|| {
-        if oar.is_null() {
+        if roar.is_null() {
             return OarError::InvalidParameter.into();
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &mut *(roar as *mut FfiWrapper) };
         let enable_bool = enable != 0;
         match wrapper.renderer.enable_loudness_processor(enable_bool) {
             Ok(()) => ROAR_STATUS_OK,
@@ -636,7 +690,7 @@ pub unsafe extern "C" fn roar_enable_loudness_processor(oar: *mut oar_t, enable:
 /// group ID) on failure.
 ///
 /// # Arguments
-/// * `oar` - Pointer to the ROAR object.
+/// * `roar` - Pointer to the ROAR object.
 /// * `gid` - The group ID to configure.
 /// * `loudness` - The current loudness of the group, in dB.
 /// * `target_loudness` - The target loudness for the group, in dB.
@@ -644,20 +698,20 @@ pub unsafe extern "C" fn roar_enable_loudness_processor(oar: *mut oar_t, enable:
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
+/// - `roar` points to a valid, initialized ROAR object.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn roar_set_loudness(
-    oar: *mut oar_t,
+    roar: *mut roar_t,
     gid: u32,
     loudness: f32,
     target_loudness: f32,
 ) -> c_int {
     std::panic::catch_unwind(|| {
-        if oar.is_null() {
+        if roar.is_null() {
             return OarError::InvalidParameter.into();
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &mut *(roar as *mut FfiWrapper) };
         let group_id = match GroupId::try_from(gid) {
             Ok(id) => id,
             Err(e) => return e.into(),
@@ -686,15 +740,15 @@ pub unsafe extern "C" fn roar_set_loudness(
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
+/// - `roar` points to a valid, initialized ROAR object.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn roar_enable_limiter(oar: *mut oar_t, enable: c_int) -> c_int {
+pub unsafe extern "C" fn roar_enable_limiter(roar: *mut roar_t, enable: c_int) -> c_int {
     std::panic::catch_unwind(|| {
-        if oar.is_null() {
+        if roar.is_null() {
             return OarError::InvalidParameter.into();
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &mut *(roar as *mut FfiWrapper) };
         let enable_bool = enable != 0;
         match wrapper.renderer.enable_limiter(enable_bool) {
             Ok(()) => ROAR_STATUS_OK,
@@ -713,34 +767,34 @@ pub unsafe extern "C" fn roar_enable_limiter(oar: *mut oar_t, enable: c_int) -> 
 /// on failure.
 ///
 /// # Arguments
-/// * `oar` - Pointer to the ROAR object.
+/// * `roar` - Pointer to the ROAR object.
 /// * `output` - Output audio block whose `data` buffer must hold at least `output_channels *
-///   roar_get_limiter_delay(oar)` floats when the limiter is enabled.
+///   roar_get_limiter_delay(roar)` floats when the limiter is enabled.
 ///
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` is either null or points to a valid, initialized OAR object created by `roar_create`.
-/// - `output` is either null or points to a valid, initialized `oar_audio_block_t` (`output.data`
+/// - `roar` is either null or points to a valid, initialized ROAR object created by `roar_create`.
+/// - `output` is either null or points to a valid, initialized `roar_audio_block_t` (`output.data`
 ///   may also be null).
-/// - If `oar`, `output`, and `output.data` are non-null and the limiter is enabled with non-zero
-///   delay (`roar_get_limiter_delay(oar) > 0`), `output.data` points to an allocated, properly
+/// - If `roar`, `output`, and `output.data` are non-null and the limiter is enabled with non-zero
+///   delay (`roar_get_limiter_delay(roar) > 0`), `output.data` points to an allocated, properly
 ///   aligned (`f32`), and exclusively accessed buffer of at least `output.channels as usize *
-///   roar_get_limiter_delay(oar) as usize` floats (note that `output.samples_per_channel` is
+///   roar_get_limiter_delay(roar) as usize` floats (note that `output.samples_per_channel` is
 ///   ignored on entry).
-/// - Neither `oar` nor `output` (nor its `data` buffer) is accessed or modified concurrently by any
-///   other thread for the duration of this call.
+/// - Neither `roar` nor `output` (nor its `data` buffer) is accessed or modified concurrently by
+///   any other thread for the duration of this call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn roar_flush(oar: *mut oar_t, output: *mut oar_audio_block_t) -> c_int {
+pub unsafe extern "C" fn roar_flush(roar: *mut roar_t, output: *mut roar_audio_block_t) -> c_int {
     std::panic::catch_unwind(|| {
-        if oar.is_null() || output.is_null() {
+        if roar.is_null() || output.is_null() {
             return OarError::InvalidParameter.into();
         }
-        // SAFETY: We checked that `oar` is not null. The caller guarantees `oar` points to a
-        // valid, initialized OAR object with exclusive access for the duration of this call.
-        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        // SAFETY: We checked that `roar` is not null. The caller guarantees `roar` points to a
+        // valid, initialized ROAR object with exclusive access for the duration of this call.
+        let wrapper = unsafe { &mut *(roar as *mut FfiWrapper) };
         // SAFETY: We checked that `output` is not null. The caller guarantees `output` points to a
-        // valid, initialized `oar_audio_block_t` with exclusive access for the duration of this
+        // valid, initialized `roar_audio_block_t` with exclusive access for the duration of this
         // call.
         let output_block = unsafe { &mut *output };
         let out_channels = wrapper.renderer.config().output_layout().channels().get();
@@ -799,23 +853,23 @@ pub unsafe extern "C" fn roar_flush(oar: *mut oar_t, output: *mut oar_audio_bloc
 /// on failure.
 ///
 /// # Arguments
-/// * `oar` - Pointer to the ROAR object.
+/// * `roar` - Pointer to the ROAR object.
 /// * `threshold_db` - Target threshold in dBFS; must be finite.
 ///
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` is either null or points to a valid, initialized OAR object created by `roar_create`
+/// - `roar` is either null or points to a valid, initialized ROAR object created by `roar_create`
 ///   that is not accessed or modified concurrently for the duration of this call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn roar_set_limiter_threshold(oar: *mut oar_t, threshold_db: f32) -> c_int {
+pub unsafe extern "C" fn roar_set_limiter_threshold(roar: *mut roar_t, threshold_db: f32) -> c_int {
     std::panic::catch_unwind(|| {
-        if oar.is_null() {
+        if roar.is_null() {
             return OarError::InvalidParameter.into();
         }
-        // SAFETY: We checked that `oar` is not null. The caller guarantees `oar` points to a
-        // valid, initialized OAR object with exclusive access for the duration of this call.
-        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        // SAFETY: We checked that `roar` is not null. The caller guarantees `roar` points to a
+        // valid, initialized ROAR object with exclusive access for the duration of this call.
+        let wrapper = unsafe { &mut *(roar as *mut FfiWrapper) };
         let threshold = match Decibels::new(threshold_db) {
             Ok(t) => t,
             Err(e) => return e.into(),
@@ -828,22 +882,22 @@ pub unsafe extern "C" fn roar_set_limiter_threshold(oar: *mut oar_t, threshold_d
     .unwrap_or(OarError::InvalidParameter.into())
 }
 
-/// Returns the limiter look-ahead delay in samples per channel, or `0` if `oar` is null.
+/// Returns the limiter look-ahead delay in samples per channel, or `0` if `roar` is null.
 ///
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` is either null or points to a valid, initialized OAR object created by `roar_create`
+/// - `roar` is either null or points to a valid, initialized ROAR object created by `roar_create`
 ///   that is not modified concurrently for the duration of this call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn roar_get_limiter_delay(oar: *const oar_t) -> c_int {
+pub unsafe extern "C" fn roar_get_limiter_delay(roar: *const roar_t) -> c_int {
     std::panic::catch_unwind(|| {
-        if oar.is_null() {
+        if roar.is_null() {
             return 0;
         }
-        // SAFETY: We checked that `oar` is not null. The caller guarantees `oar` points to a
-        // valid, initialized OAR object not modified concurrently for the duration of this call.
-        let wrapper = unsafe { &*(oar as *const FfiWrapper) };
+        // SAFETY: We checked that `roar` is not null. The caller guarantees `roar` points to a
+        // valid, initialized ROAR object not modified concurrently for the duration of this call.
+        let wrapper = unsafe { &*(roar as *const FfiWrapper) };
         wrapper.renderer.limiter_delay() as c_int
     })
     .unwrap_or(0)
@@ -857,15 +911,15 @@ pub unsafe extern "C" fn roar_get_limiter_delay(oar: *const oar_t) -> c_int {
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
+/// - `roar` points to a valid, initialized ROAR object.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn roar_enable_head_tracking(oar: *mut oar_t, enable: c_int) -> c_int {
+pub unsafe extern "C" fn roar_enable_head_tracking(roar: *mut roar_t, enable: c_int) -> c_int {
     std::panic::catch_unwind(|| {
-        if oar.is_null() {
+        if roar.is_null() {
             return OarError::InvalidParameter.into();
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &mut *(roar as *mut FfiWrapper) };
         let enable_bool = enable != 0;
         match wrapper.renderer.enable_head_tracking(enable_bool) {
             Ok(()) => ROAR_STATUS_OK,
@@ -877,20 +931,20 @@ pub unsafe extern "C" fn roar_enable_head_tracking(oar: *mut oar_t, enable: c_in
 
 /// Returns the samples per channel for the renderer.
 ///
-/// Returns the samples per channel value on success, or 0 if `oar` is invalid/null.
+/// Returns the samples per channel value on success, or 0 if `roar` is invalid/null.
 ///
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
+/// - `roar` points to a valid, initialized ROAR object.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn roar_get_samples_per_channel(oar: *const oar_t) -> u32 {
+pub unsafe extern "C" fn roar_get_samples_per_channel(roar: *const roar_t) -> u32 {
     std::panic::catch_unwind(|| {
-        if oar.is_null() {
+        if roar.is_null() {
             return 0;
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &*(oar as *const FfiWrapper) };
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &*(roar as *const FfiWrapper) };
         wrapper.renderer.config().samples_per_channel().value()
     })
     .unwrap_or(0)
@@ -898,20 +952,20 @@ pub unsafe extern "C" fn roar_get_samples_per_channel(oar: *const oar_t) -> u32 
 
 /// Returns the sampling rate for the renderer.
 ///
-/// Returns the sampling rate value on success, or 0 if `oar` is invalid/null.
+/// Returns the sampling rate value on success, or 0 if `roar` is invalid/null.
 ///
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
+/// - `roar` points to a valid, initialized ROAR object.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn roar_get_sampling_rate(oar: *const oar_t) -> u32 {
+pub unsafe extern "C" fn roar_get_sampling_rate(roar: *const roar_t) -> u32 {
     std::panic::catch_unwind(|| {
-        if oar.is_null() {
+        if roar.is_null() {
             return 0;
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &*(oar as *const FfiWrapper) };
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &*(roar as *const FfiWrapper) };
         wrapper.renderer.config().sample_rate().value()
     })
     .unwrap_or(0)
@@ -919,23 +973,23 @@ pub unsafe extern "C" fn roar_get_sampling_rate(oar: *const oar_t) -> u32 {
 
 /// Returns the channel count for a given audio element ID.
 ///
-/// Returns the channel count on success, or 0 if `oar` is invalid/null or element not found.
+/// Returns the channel count on success, or 0 if `roar` is invalid/null or element not found.
 ///
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
+/// - `roar` points to a valid, initialized ROAR object.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn roar_get_number_of_audio_element_channels(
-    oar: *const oar_t,
+    roar: *const roar_t,
     id: u32,
 ) -> u32 {
     std::panic::catch_unwind(|| {
-        if oar.is_null() {
+        if roar.is_null() {
             return 0;
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &*(oar as *const FfiWrapper) };
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &*(roar as *const FfiWrapper) };
         wrapper.renderer.element_channels(id).map_or(0, |c| c.get() as u32)
     })
     .unwrap_or(0)
@@ -943,20 +997,20 @@ pub unsafe extern "C" fn roar_get_number_of_audio_element_channels(
 
 /// Returns the output channel count for the renderer.
 ///
-/// Returns the output channel count on success, or 0 if `oar` is invalid/null.
+/// Returns the output channel count on success, or 0 if `roar` is invalid/null.
 ///
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
+/// - `roar` points to a valid, initialized ROAR object.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn roar_get_number_of_output_channels(oar: *const oar_t) -> u32 {
+pub unsafe extern "C" fn roar_get_number_of_output_channels(roar: *const roar_t) -> u32 {
     std::panic::catch_unwind(|| {
-        if oar.is_null() {
+        if roar.is_null() {
             return 0;
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &*(oar as *const FfiWrapper) };
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &*(roar as *const FfiWrapper) };
         wrapper.renderer.config().output_layout().channels().get() as u32
     })
     .unwrap_or(0)
@@ -964,20 +1018,20 @@ pub unsafe extern "C" fn roar_get_number_of_output_channels(oar: *const oar_t) -
 
 /// Returns the total count of registered audio elements.
 ///
-/// Returns the total element count on success, or 0 if `oar` is invalid/null.
+/// Returns the total element count on success, or 0 if `roar` is invalid/null.
 ///
 /// # Safety
 ///
 /// The caller must guarantee that:
-/// - `oar` points to a valid, initialized OAR object.
+/// - `roar` points to a valid, initialized ROAR object.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn roar_get_number_of_audio_elements(oar: *const oar_t) -> u32 {
+pub unsafe extern "C" fn roar_get_number_of_audio_elements(roar: *const roar_t) -> u32 {
     std::panic::catch_unwind(|| {
-        if oar.is_null() {
+        if roar.is_null() {
             return 0;
         }
-        // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
-        let wrapper = unsafe { &*(oar as *const FfiWrapper) };
+        // SAFETY: The caller guarantees `roar` points to a valid FfiWrapper.
+        let wrapper = unsafe { &*(roar as *const FfiWrapper) };
         wrapper.renderer.number_of_audio_elements() as u32
     })
     .unwrap_or(0)

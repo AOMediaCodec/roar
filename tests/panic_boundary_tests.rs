@@ -20,7 +20,9 @@ mod test {
     use googletest::prelude::*;
 
     use crate::test_helpers::{create_channel_based_config, TestRoar};
-    use aom_roar::c_types::{oar_audio_block_t, oar_layout_t, oar_metadata_t, oar_metadata_type_t};
+    use aom_roar::c_types::{
+        roar_audio_block_t, roar_layout_t, roar_metadata_t, roar_metadata_type_t,
+    };
     use aom_roar::ffi::*;
     use aom_roar::OarError;
 
@@ -46,11 +48,11 @@ mod test {
 
     #[gtest]
     fn test_roar_add_audio_element_handles_nulls_gracefully() {
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, 128, 48000);
+        let oar = TestRoar::new(roar_layout_t::ck_roar_layout_stereo, 128, 48000);
         // SAFETY: oar.ptr() is valid.
         let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
-        let valid_config = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
+        let valid_config = create_channel_based_config(roar_layout_t::ck_roar_layout_stereo);
 
         // SAFETY: passing null renderer should return invalid status.
         let ret = unsafe {
@@ -73,11 +75,11 @@ mod test {
 
     #[gtest]
     fn test_roar_update_audio_element_metadata_handles_nulls_gracefully() {
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, 128, 48000);
+        let oar = TestRoar::new(roar_layout_t::ck_roar_layout_stereo, 128, 48000);
         // SAFETY: oar.ptr() is valid.
         let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
-        let valid_config = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
+        let valid_config = create_channel_based_config(roar_layout_t::ck_roar_layout_stereo);
         let element_id = 10u32;
         // SAFETY: oar.ptr(), group_id, and valid_config are valid.
         let ret = unsafe {
@@ -85,8 +87,8 @@ mod test {
         };
         assert_eq!(ret, 0);
 
-        let valid_metadata = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_object_positions as u32,
+        let valid_metadata = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_object_positions as u32,
             value: unsafe { std::mem::zeroed() },
             duration: 128,
         };
@@ -105,11 +107,11 @@ mod test {
 
     #[gtest]
     fn test_roar_update_audio_element_data_handles_nulls_gracefully() {
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, 128, 48000);
+        let oar = TestRoar::new(roar_layout_t::ck_roar_layout_stereo, 128, 48000);
         // SAFETY: oar.ptr() is valid.
         let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
-        let valid_config = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
+        let valid_config = create_channel_based_config(roar_layout_t::ck_roar_layout_stereo);
         let element_id = 10u32;
         // SAFETY: oar.ptr(), group_id, and valid_config are valid.
         let ret = unsafe {
@@ -118,7 +120,7 @@ mod test {
         assert_eq!(ret, 0);
 
         let mut input_buffer = vec![0.0f32; 256];
-        let mut valid_block = oar_audio_block_t {
+        let mut valid_block = roar_audio_block_t {
             data: input_buffer.as_mut_ptr(),
             channels: 2,
             samples_per_channel: 128,
@@ -142,7 +144,7 @@ mod test {
         let ret = unsafe {
             roar_set_metadata_unit_to_process(
                 std::ptr::null_mut(),
-                oar_metadata_type_t::ck_metadata_object_positions,
+                roar_metadata_type_t::ck_roar_metadata_object_positions as u32,
                 128,
             )
         };
@@ -151,13 +153,13 @@ mod test {
 
     #[gtest]
     fn test_roar_update_metadata_handles_nulls_gracefully() {
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, 128, 48000);
+        let oar = TestRoar::new(roar_layout_t::ck_roar_layout_stereo, 128, 48000);
         // SAFETY: oar.ptr() is valid.
         let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
 
-        let valid_metadata = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_object_positions as u32,
+        let valid_metadata = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_object_positions as u32,
             value: unsafe { std::mem::zeroed() },
             duration: 128,
         };
@@ -174,9 +176,9 @@ mod test {
 
     #[gtest]
     fn test_roar_render_handles_nulls_gracefully() {
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, 128, 48000);
+        let oar = TestRoar::new(roar_layout_t::ck_roar_layout_stereo, 128, 48000);
         let mut input_buffer = vec![0.0f32; 256];
-        let mut valid_block = oar_audio_block_t {
+        let mut valid_block = roar_audio_block_t {
             data: input_buffer.as_mut_ptr(),
             channels: 2,
             samples_per_channel: 128,
@@ -214,9 +216,9 @@ mod test {
 
     #[gtest]
     fn test_roar_flush_handles_nulls_gracefully() {
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, 128, 48000);
+        let oar = TestRoar::new(roar_layout_t::ck_roar_layout_stereo, 128, 48000);
         let mut output_buffer = vec![0.0f32; 480];
-        let mut valid_block = oar_audio_block_t {
+        let mut valid_block = roar_audio_block_t {
             data: output_buffer.as_mut_ptr(),
             channels: 2,
             samples_per_channel: 240,

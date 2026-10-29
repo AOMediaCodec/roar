@@ -14,7 +14,7 @@
 
 use std::fmt;
 
-/// C-compatible status code indicating successful operations (`EOarStatus::ck_oar_ok`).
+/// C-compatible status code indicating successful operations (`ERoarStatus::ck_roar_ok`).
 pub const ROAR_STATUS_OK: std::os::raw::c_int = 0;
 
 /// Maximum number of samples per channel supported by the renderer.
@@ -24,7 +24,7 @@ pub const MAX_SAMPLES_PER_CHANNEL: u32 = 16384;
 pub const MAX_OUTPUT_CHANNEL_COUNT: usize = 25;
 
 // TODO(b/512062316): Rename to RoarError.
-/// Errors returned by the OAR library, mapping to legacy C error status codes (`EOarStatus`).
+/// Errors returned by the ROAR library, mapping to C error status codes (`ERoarStatus`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum OarError {
@@ -40,7 +40,7 @@ pub enum OarError {
     NotSupported = -95,
 }
 
-/// Returns the raw integer C-compatible status code (`EOarStatus`).
+/// Returns the raw integer C-compatible status code (`ERoarStatus`).
 impl From<OarError> for std::os::raw::c_int {
     fn from(error: OarError) -> Self {
         error as std::os::raw::c_int

@@ -24,12 +24,7 @@
 #include "equivalence_testing/test_helpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-
-extern "C" {
-#include "include/oar.h"
-#include "include/oar_base.h"
-#include "include/oar_metadata.h"
-}
+#include "include/roar.h"
 
 namespace roar_equivalence_testing {
 namespace {
@@ -49,14 +44,13 @@ constexpr uint32_t kSamplingRate = 48000;
 // Executes an equivalence test comparing C OAR and Rust ROAR for a single
 // channel-based element with downmixing.
 void RunDownmixTest(
-    const oar_config_t& config,
-    const oar_audio_element_config_t& element_config,
-    const std::vector<std::optional<oar_metadata_t>>& metadata_sequence) {
-  using OarPtr = std::unique_ptr<oar_t, decltype(&oar_destroy)>;
+    roar_config_t config, const roar_audio_element_config_t& element_config,
+    const std::vector<std::optional<roar_metadata_t>>& metadata_sequence) {
+  using OarPtr = std::unique_ptr<roar_t, decltype(&oar_destroy)>;
   OarPtr oar(oar_create(&config), oar_destroy);
   ASSERT_THAT(oar, NotNull());
 
-  using RoarPtr = std::unique_ptr<oar_t, decltype(&roar_destroy)>;
+  using RoarPtr = std::unique_ptr<roar_t, decltype(&roar_destroy)>;
   RoarPtr roar(roar_create(&config), roar_destroy);
   ASSERT_THAT(roar, NotNull());
 
@@ -79,7 +73,9 @@ void RunDownmixTest(
             0);
 
   const uint32_t input_channels =
-      oar_get_number_of_audio_element_channels(oar.get(), kElementId);
+      roar_get_number_of_audio_element_channels(roar.get(), kElementId);
+  ASSERT_EQ(oar_get_number_of_audio_element_channels(oar.get(), kElementId),
+            input_channels);
   const size_t num_chunks = metadata_sequence.size();
   std::vector<std::vector<float>> input_chunks;
   input_chunks.reserve(num_chunks);
@@ -96,19 +92,19 @@ void RunDownmixTest(
   ASSERT_GT(c_output_channels, 0);
 
   auto c_output = GetOutputBuffer(c_samples_per_channel, c_output_channels);
-  oar_audio_block_t c_output_block = {};
+  roar_audio_block_t c_output_block = {};
   c_output_block.channels = c_output_channels;
   c_output_block.samples_per_channel = c_samples_per_channel;
   c_output_block.data = c_output.data();
 
   auto r_output = GetOutputBuffer(r_samples_per_channel, r_output_channels);
-  oar_audio_block_t r_output_block = {};
+  roar_audio_block_t r_output_block = {};
   r_output_block.channels = r_output_channels;
   r_output_block.samples_per_channel = r_samples_per_channel;
   r_output_block.data = r_output.data();
 
   for (size_t chunk = 0; chunk < num_chunks; ++chunk) {
-    oar_audio_block_t input_block = {};
+    roar_audio_block_t input_block = {};
     input_block.channels = input_channels;
     input_block.samples_per_channel = c_samples_per_channel;
     input_block.data = input_chunks[chunk].data();
@@ -150,15 +146,15 @@ void RunDownmixTest(
 // downmix mode metadata is updated on a target element within a multi-element
 // group.
 void RunMultiElementDownmixTest(
-    const oar_config_t& config,
-    const oar_audio_element_config_t& target_element_config,
-    const oar_audio_element_config_t& secondary_element_config,
-    const std::vector<std::optional<oar_metadata_t>>& metadata_sequence) {
-  using OarPtr = std::unique_ptr<oar_t, decltype(&oar_destroy)>;
+    roar_config_t config,
+    const roar_audio_element_config_t& target_element_config,
+    const roar_audio_element_config_t& secondary_element_config,
+    const std::vector<std::optional<roar_metadata_t>>& metadata_sequence) {
+  using OarPtr = std::unique_ptr<roar_t, decltype(&oar_destroy)>;
   OarPtr oar(oar_create(&config), oar_destroy);
   ASSERT_THAT(oar, NotNull());
 
-  using RoarPtr = std::unique_ptr<oar_t, decltype(&roar_destroy)>;
+  using RoarPtr = std::unique_ptr<roar_t, decltype(&roar_destroy)>;
   RoarPtr roar(roar_create(&config), roar_destroy);
   ASSERT_THAT(roar, NotNull());
 
@@ -189,9 +185,9 @@ void RunMultiElementDownmixTest(
             0);
 
   const uint32_t input_channels_0 =
-      oar_get_number_of_audio_element_channels(oar.get(), kTargetElementId);
-  const uint32_t input_channels_1 =
-      oar_get_number_of_audio_element_channels(oar.get(), kSecondaryElementId);
+      roar_get_number_of_audio_element_channels(roar.get(), kTargetElementId);
+  const uint32_t input_channels_1 = roar_get_number_of_audio_element_channels(
+      roar.get(), kSecondaryElementId);
 
   const size_t num_chunks = metadata_sequence.size();
   std::vector<std::vector<float>> input_0_chunks;
@@ -214,19 +210,19 @@ void RunMultiElementDownmixTest(
   ASSERT_GT(c_output_channels, 0);
 
   auto c_output = GetOutputBuffer(c_samples_per_channel, c_output_channels);
-  oar_audio_block_t c_output_block = {};
+  roar_audio_block_t c_output_block = {};
   c_output_block.channels = c_output_channels;
   c_output_block.samples_per_channel = c_samples_per_channel;
   c_output_block.data = c_output.data();
 
   auto r_output = GetOutputBuffer(r_samples_per_channel, r_output_channels);
-  oar_audio_block_t r_output_block = {};
+  roar_audio_block_t r_output_block = {};
   r_output_block.channels = r_output_channels;
   r_output_block.samples_per_channel = r_samples_per_channel;
   r_output_block.data = r_output.data();
 
   for (size_t chunk = 0; chunk < num_chunks; ++chunk) {
-    oar_audio_block_t input_0_block = {};
+    roar_audio_block_t input_0_block = {};
     input_0_block.channels = input_channels_0;
     input_0_block.samples_per_channel = c_samples_per_channel;
     input_0_block.data = input_0_chunks[chunk].data();
@@ -240,7 +236,7 @@ void RunMultiElementDownmixTest(
               0)
         << "at chunk " << chunk;
 
-    oar_audio_block_t input_1_block = {};
+    roar_audio_block_t input_1_block = {};
     input_1_block.channels = input_channels_1;
     input_1_block.samples_per_channel = c_samples_per_channel;
     input_1_block.data = input_1_chunks[chunk].data();
@@ -282,7 +278,7 @@ void RunMultiElementDownmixTest(
 
 // ===== Downmix information provided with the audio element and unchanged =====
 
-using FixedDownmixParam = std::tuple<std::pair<oar_layout_t, oar_layout_t>,
+using FixedDownmixParam = std::tuple<std::pair<roar_layout_t, roar_layout_t>,
                                      int /* mode */, int /* weight_index */>;
 using FixedDownmixTest = TestWithParam<FixedDownmixParam>;
 
@@ -290,19 +286,19 @@ TEST_P(FixedDownmixTest, DownmixInfoWithElementConfig) {
   const auto& [layouts, mode, weight_index] = GetParam();
   const auto& [in_layout, out_layout] = layouts;
 
-  oar_config_t config = {};
+  roar_config_t config = {};
   config.target_layout = out_layout;
   config.samples_per_channel = kSamplesPerChannel;
   config.sampling_rate = kSamplingRate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
   element_config.cbc.layout = in_layout;
-  element_config.parameters.flags |= def_parameter_set_flag_iamf_downmix_info;
+  element_config.parameters.flags |= ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
   element_config.parameters.downmix_info.mode = mode;
   element_config.parameters.downmix_info.weight_index = weight_index;
 
-  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+  std::vector<std::optional<roar_metadata_t>> metadata_seq = {
       std::nullopt,
       std::nullopt,
   };
@@ -311,15 +307,15 @@ TEST_P(FixedDownmixTest, DownmixInfoWithElementConfig) {
 }
 
 // Get a list of input/output layout pairs to test fixed downmix.
-std::vector<std::pair<oar_layout_t, oar_layout_t>> GetValidDownmixLayouts() {
+std::vector<std::pair<roar_layout_t, roar_layout_t>> GetValidDownmixLayouts() {
   return {
-      {ck_oar_layout_71, ck_oar_layout_51},
-      {ck_oar_layout_51, ck_oar_layout_stereo},
-      {ck_oar_layout_71, ck_oar_layout_stereo},
-      {ck_oar_layout_stereo, ck_oar_layout_mono},
-      {ck_oar_layout_714, ck_oar_layout_512},
-      {ck_oar_layout_514, ck_oar_layout_512},
-      {ck_oar_layout_714, ck_oar_layout_312},
+      {ck_roar_layout_71, ck_roar_layout_51},
+      {ck_roar_layout_51, ck_roar_layout_stereo},
+      {ck_roar_layout_71, ck_roar_layout_stereo},
+      {ck_roar_layout_stereo, ck_roar_layout_mono},
+      {ck_roar_layout_714, ck_roar_layout_512},
+      {ck_roar_layout_514, ck_roar_layout_512},
+      {ck_roar_layout_714, ck_roar_layout_312},
   };
 }
 
@@ -343,26 +339,26 @@ INSTANTIATE_TEST_SUITE_P(
 // ===== Downmix info changes via metadata update during rendering =====
 
 using DynamicDownmixParam =
-    std::tuple<std::pair<oar_layout_t, oar_layout_t>, std::vector<int>>;
+    std::tuple<std::pair<roar_layout_t, roar_layout_t>, std::vector<int>>;
 using DynamicDownmixModeTest = TestWithParam<DynamicDownmixParam>;
 
 TEST_P(DynamicDownmixModeTest, DynamicModeTransitions) {
   const auto& [layouts, mode_seq] = GetParam();
   const auto& [in_layout, out_layout] = layouts;
 
-  oar_config_t config = {};
+  roar_config_t config = {};
   config.target_layout = out_layout;
   config.samples_per_channel = kSamplesPerChannel;
   config.sampling_rate = kSamplingRate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
   element_config.cbc.layout = in_layout;
-  element_config.parameters.flags |= def_parameter_set_flag_iamf_downmix_info;
+  element_config.parameters.flags |= ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
   element_config.parameters.downmix_info.mode = 0;
   element_config.parameters.downmix_info.weight_index = 5;
 
-  std::vector<std::optional<oar_metadata_t>> metadata_seq;
+  std::vector<std::optional<roar_metadata_t>> metadata_seq;
   metadata_seq.reserve(mode_seq.size() + 1);
   metadata_seq.push_back(std::nullopt);
   for (int mode : mode_seq) {
@@ -373,11 +369,11 @@ TEST_P(DynamicDownmixModeTest, DynamicModeTransitions) {
 }
 
 // Get a list of input/output layout pairs to test dynamic downmix.
-std::vector<std::pair<oar_layout_t, oar_layout_t>> GetDynamicLayouts() {
+std::vector<std::pair<roar_layout_t, roar_layout_t>> GetDynamicLayouts() {
   return {
-      {ck_oar_layout_51, ck_oar_layout_stereo},
-      {ck_oar_layout_71, ck_oar_layout_51},
-      {ck_oar_layout_714, ck_oar_layout_512},
+      {ck_roar_layout_51, ck_roar_layout_stereo},
+      {ck_roar_layout_71, ck_roar_layout_51},
+      {ck_roar_layout_714, ck_roar_layout_512},
   };
 }
 
@@ -414,19 +410,19 @@ using DownmixDurationTest = TestWithParam<DownmixDurationParam>;
 TEST_P(DownmixDurationTest, DownmixDurationLogic) {
   const auto& [update_mode, duration] = GetParam();
 
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = kSamplesPerChannel;
   config.sampling_rate = kSamplingRate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_51;
-  element_config.parameters.flags |= def_parameter_set_flag_iamf_downmix_info;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_51;
+  element_config.parameters.flags |= ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
   element_config.parameters.downmix_info.mode = 0;
   element_config.parameters.downmix_info.weight_index = 5;
 
-  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+  std::vector<std::optional<roar_metadata_t>> metadata_seq = {
       std::nullopt,
       CreateDownmixModeMetadata(update_mode, duration),
       std::nullopt,
@@ -456,26 +452,26 @@ using MultiElementDownmixTest = TestWithParam<MultiElementParam>;
 TEST_P(MultiElementDownmixTest, DownmixIsolation) {
   const auto& [mode, duration] = GetParam();
 
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = kSamplesPerChannel;
   config.sampling_rate = kSamplingRate;
 
   // Target element: receives dynamic downmix mode updates.
-  oar_audio_element_config_t target_element_config = {};
-  target_element_config.type = ck_channel_based;
-  target_element_config.cbc.layout = ck_oar_layout_51;
+  roar_audio_element_config_t target_element_config = {};
+  target_element_config.type = ck_roar_channel_based;
+  target_element_config.cbc.layout = ck_roar_layout_51;
   target_element_config.parameters.flags |=
-      def_parameter_set_flag_iamf_downmix_info;
+      ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
   target_element_config.parameters.downmix_info.mode = 0;
   target_element_config.parameters.downmix_info.weight_index = 5;
 
   // Secondary element: static stereo baseline without downmix metadata.
-  oar_audio_element_config_t secondary_element_config = {};
-  secondary_element_config.type = ck_channel_based;
-  secondary_element_config.cbc.layout = ck_oar_layout_stereo;
+  roar_audio_element_config_t secondary_element_config = {};
+  secondary_element_config.type = ck_roar_channel_based;
+  secondary_element_config.cbc.layout = ck_roar_layout_stereo;
 
-  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+  std::vector<std::optional<roar_metadata_t>> metadata_seq = {
       std::nullopt,
       CreateDownmixModeMetadata(mode, duration),
       std::nullopt,
@@ -500,19 +496,19 @@ INSTANTIATE_TEST_SUITE_P(IsolationModes, MultiElementDownmixTest,
 
 TEST(AdvisoryDownmixModeEquivalenceTest,
      EarFallback512ToStereoAcceptsAdvisoryDownmixUpdatesAndMatchesLiboar) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = kSamplesPerChannel;
   config.sampling_rate = kSamplingRate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_512;
-  element_config.parameters.flags |= def_parameter_set_flag_iamf_downmix_info;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_512;
+  element_config.parameters.flags |= ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
   element_config.parameters.downmix_info.mode = 0;
   element_config.parameters.downmix_info.weight_index = 5;
 
-  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+  std::vector<std::optional<roar_metadata_t>> metadata_seq = {
       std::nullopt,
       CreateDownmixModeMetadata(1, kSamplesPerChannel),
       CreateDownmixModeMetadata(2, kSamplesPerChannel),
@@ -525,19 +521,19 @@ TEST(AdvisoryDownmixModeEquivalenceTest,
 
 TEST(AdvisoryDownmixModeEquivalenceTest,
      Matching512To512LayoutAcceptsAdvisoryDownmixUpdatesMatchingOar) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_512;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_512;
   config.samples_per_channel = kSamplesPerChannel;
   config.sampling_rate = kSamplingRate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_512;
-  element_config.parameters.flags |= def_parameter_set_flag_iamf_downmix_info;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_512;
+  element_config.parameters.flags |= ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
   element_config.parameters.downmix_info.mode = 0;
   element_config.parameters.downmix_info.weight_index = 5;
 
-  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+  std::vector<std::optional<roar_metadata_t>> metadata_seq = {
       std::nullopt,
       CreateDownmixModeMetadata(1, kSamplesPerChannel),
       CreateDownmixModeMetadata(3, kSamplesPerChannel),
@@ -548,16 +544,16 @@ TEST(AdvisoryDownmixModeEquivalenceTest,
 
 TEST(AdvisoryDownmixModeEquivalenceTest,
      ChannelElementWithoutDownmixInfoAcceptsAdvisoryDownmixUpdatesMatchingOar) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = kSamplesPerChannel;
   config.sampling_rate = kSamplingRate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_51;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_51;
 
-  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+  std::vector<std::optional<roar_metadata_t>> metadata_seq = {
       std::nullopt,
       CreateDownmixModeMetadata(2, kSamplesPerChannel),
       CreateDownmixModeMetadata(99, kSamplesPerChannel),
@@ -568,25 +564,25 @@ TEST(AdvisoryDownmixModeEquivalenceTest,
 
 TEST(AdvisoryDownmixModeEquivalenceTest,
      BinauralWorldLocked51AcceptsAdvisoryDownmixUpdatesAndMatchesLiboar) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_binaural;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_binaural;
   config.samples_per_channel = kSamplesPerChannel;
   config.sampling_rate = kSamplingRate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_51;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_51;
   element_config.parameters.flags =
-      def_parameter_set_flag_iamf_downmix_info |
-      def_parameter_set_flag_iamf_element_rendering_config;
+      ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO |
+      ROAR_PARAMETER_SET_FLAG_IAMF_ELEMENT_RENDERING_CONFIG;
   element_config.parameters.downmix_info.mode = 0;
   element_config.parameters.downmix_info.weight_index = 5;
   element_config.parameters.element_rendering_config.headphones_rendering_mode =
-      ck_world_locked;
+      ck_roar_world_locked;
   element_config.parameters.element_rendering_config.binaural_filter_profile =
-      ck_ambient;
+      ck_roar_ambient;
 
-  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+  std::vector<std::optional<roar_metadata_t>> metadata_seq = {
       std::nullopt,
       CreateDownmixModeMetadata(2, kSamplesPerChannel),
       CreateDownmixModeMetadata(3, kSamplesPerChannel),
@@ -597,25 +593,25 @@ TEST(AdvisoryDownmixModeEquivalenceTest,
 
 TEST(AdvisoryDownmixModeEquivalenceTest,
      BinauralWorldLockedRestricted51AppliesDownmixUpdatesAndMatchesLiboar) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_binaural;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_binaural;
   config.samples_per_channel = kSamplesPerChannel;
   config.sampling_rate = kSamplingRate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_51;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_51;
   element_config.parameters.flags =
-      def_parameter_set_flag_iamf_downmix_info |
-      def_parameter_set_flag_iamf_element_rendering_config;
+      ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO |
+      ROAR_PARAMETER_SET_FLAG_IAMF_ELEMENT_RENDERING_CONFIG;
   element_config.parameters.downmix_info.mode = 0;
   element_config.parameters.downmix_info.weight_index = 5;
   element_config.parameters.element_rendering_config.headphones_rendering_mode =
-      ck_world_locked_restricted;
+      ck_roar_world_locked_restricted;
   element_config.parameters.element_rendering_config.binaural_filter_profile =
-      ck_ambient;
+      ck_roar_ambient;
 
-  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+  std::vector<std::optional<roar_metadata_t>> metadata_seq = {
       std::nullopt,
       CreateDownmixModeMetadata(1, kSamplesPerChannel),
       CreateDownmixModeMetadata(2, kSamplesPerChannel),

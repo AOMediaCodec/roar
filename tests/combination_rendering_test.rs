@@ -20,9 +20,10 @@ mod test {
         create_planar_buffer_ref, create_scene_based_config, rms, TestRoar,
     };
     use aom_roar::c_types::{
-        coordinate_type_t, def_max_number_of_objects, oar_audio_block_t, oar_hoa_t, oar_layout_t,
-        oar_metadata_object_positions_t, oar_metadata_object_positions_union_t, oar_metadata_t,
-        oar_metadata_type_t, oar_metadata_union_t, oar_param_type_t, polar_t,
+        roar_audio_block_t, roar_coordinate_type_t, roar_hoa_t, roar_layout_t,
+        roar_metadata_object_positions_t, roar_metadata_object_positions_union_t, roar_metadata_t,
+        roar_metadata_type_t, roar_metadata_union_t, roar_param_type_t, roar_polar_t,
+        ROAR_MAX_NUMBER_OF_OBJECTS,
     };
     use aom_roar::ffi::*;
     use aom_roar::{
@@ -50,14 +51,15 @@ mod test {
         let obj_based_element_id: u32 = 30;
 
         // Create test ROAR instance.
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
+        let oar =
+            TestRoar::new(roar_layout_t::ck_roar_layout_stereo, frame_size as u32, sample_rate);
 
         // SAFETY: oar is valid.
         let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert_eq!(group_id, 0);
 
         // 1. Channel-Based Element (Stereo) -> ID 10
-        let chan_based_cfg = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
+        let chan_based_cfg = create_channel_based_config(roar_layout_t::ck_roar_layout_stereo);
         // SAFETY: config and oar are valid.
         let ret = unsafe {
             roar_add_audio_element(
@@ -70,7 +72,7 @@ mod test {
         assert_eq!(ret, 0);
 
         // 2. Scene-Based Element (1OA) -> ID 20
-        let scene_based_cfg = create_scene_based_config(oar_hoa_t::ck_oar_1oa);
+        let scene_based_cfg = create_scene_based_config(roar_hoa_t::ck_roar_1oa);
         // SAFETY: config and oar are valid.
         let ret = unsafe {
             roar_add_audio_element(
@@ -91,17 +93,19 @@ mod test {
         assert_eq!(ret, 0);
 
         // Set position for Object (ID 30)
-        let mut polar_pos =
-            [polar_t { azimuth: 0.0, elevation: 0.0, distance: 0.0 }; def_max_number_of_objects];
-        polar_pos[0] = polar_t { azimuth: 0.0, elevation: 0.0, distance: 1.0 };
-        let pos_meta = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_object_positions as u32,
-            value: oar_metadata_union_t {
-                object_positions: oar_metadata_object_positions_t {
-                    param_type: oar_param_type_t::ck_param_constant,
-                    position_type: coordinate_type_t::ck_polar,
+        let mut polar_pos = [roar_polar_t { azimuth: 0.0, elevation: 0.0, distance: 0.0 };
+            ROAR_MAX_NUMBER_OF_OBJECTS];
+        polar_pos[0] = roar_polar_t { azimuth: 0.0, elevation: 0.0, distance: 1.0 };
+        let pos_meta = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_object_positions as u32,
+            value: roar_metadata_union_t {
+                object_positions: roar_metadata_object_positions_t {
+                    param_type: roar_param_type_t::ck_roar_param_constant as u32,
+                    position_type: roar_coordinate_type_t::ck_roar_polar as u32,
                     num_objects: 1,
-                    positions: oar_metadata_object_positions_union_t { polar_positions: polar_pos },
+                    positions: roar_metadata_object_positions_union_t {
+                        polar_positions: polar_pos,
+                    },
                 },
             },
             duration: frame_size as i32,
@@ -117,24 +121,24 @@ mod test {
         scene_based_input[..frame_size].fill(0.1); // Fill first channel
         let mut obj_based_input = vec![0.3f32; frame_size];
 
-        let mut chan_based_block = oar_audio_block_t {
+        let mut chan_based_block = roar_audio_block_t {
             data: chan_based_input.as_mut_ptr(),
             channels: 2,
             samples_per_channel: frame_size as u32,
         };
-        let mut scene_based_block = oar_audio_block_t {
+        let mut scene_based_block = roar_audio_block_t {
             data: scene_based_input.as_mut_ptr(),
             channels: 4,
             samples_per_channel: frame_size as u32,
         };
-        let mut obj_based_block = oar_audio_block_t {
+        let mut obj_based_block = roar_audio_block_t {
             data: obj_based_input.as_mut_ptr(),
             channels: 1,
             samples_per_channel: frame_size as u32,
         };
 
         let mut output = vec![0.0f32; output_channels * frame_size];
-        let mut out_block = oar_audio_block_t {
+        let mut out_block = roar_audio_block_t {
             data: output.as_mut_ptr(),
             channels: output_channels as u32,
             samples_per_channel: frame_size as u32,

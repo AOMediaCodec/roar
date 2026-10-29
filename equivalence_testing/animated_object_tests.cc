@@ -22,13 +22,7 @@
 #include "equivalence_testing/test_helpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-
-extern "C" {
-#include "include/animation.h"
-#include "include/oar.h"
-#include "include/oar_base.h"
-#include "include/oar_metadata.h"
-}
+#include "include/roar.h"
 
 namespace roar_equivalence_testing {
 namespace {
@@ -48,7 +42,7 @@ constexpr uint32_t kSubframeSize = 32;
 // Holds a named animated motion test case.
 struct ObjectMotionTestCase {
   std::string name;
-  oar_metadata_t metadata;
+  roar_metadata_t metadata;
 };
 
 // Generates the 7 valid motion variations:
@@ -60,20 +54,20 @@ std::vector<ObjectMotionTestCase> GetAllObjectMotionVariations(
       // --- Polar ---
       {"PolarStatic",
        CreateObjectMetadata(
-           std::vector<polar_t>{{/*azimuth=*/45.0f, /*elevation=*/15.0f,
-                                 /*distance=*/0.8f}},
+           std::vector<roar_polar_t>{{/*azimuth=*/45.0f, /*elevation=*/15.0f,
+                                      /*distance=*/0.8f}},
            total_duration)},
       {"PolarStep", CreateAnimatedObjectMetadata(
-                        std::vector<animated_polar_t>{{
-                            .animation_type = ck_animation_type_step,
+                        std::vector<roar_animated_polar_t>{{
+                            .animation_type = ck_roar_animation_type_step,
                             .azimuth = {/*start=*/-90.0f},
                             .elevation = {/*start=*/15.0f},
                             .distance = {/*start=*/0.8f},
                         }},
                         total_duration)},
       {"PolarLinear", CreateAnimatedObjectMetadata(
-                          std::vector<animated_polar_t>{{
-                              .animation_type = ck_animation_type_linear,
+                          std::vector<roar_animated_polar_t>{{
+                              .animation_type = ck_roar_animation_type_linear,
                               .azimuth = {/*start=*/-90.0f, /*end=*/90.0f},
                               .elevation = {/*start=*/0.0f, /*end=*/30.0f},
                               .distance = {/*start=*/0.5f, /*end=*/1.0f},
@@ -83,56 +77,57 @@ std::vector<ObjectMotionTestCase> GetAllObjectMotionVariations(
       // --- Cartesian ---
       {"CartesianStatic",
        CreateObjectMetadata(
-           std::vector<cartesian_t>{{/*x=*/0.0f, /*y=*/0.8f, /*z=*/0.2f}},
+           std::vector<roar_cartesian_t>{{/*x=*/0.0f, /*y=*/0.8f, /*z=*/0.2f}},
            total_duration)},
       {"CartesianStep", CreateAnimatedObjectMetadata(
-                            std::vector<animated_cartesian_t>{{
-                                .animation_type = ck_animation_type_step,
+                            std::vector<roar_animated_cartesian_t>{{
+                                .animation_type = ck_roar_animation_type_step,
                                 .x = {/*start=*/-1.0f},
                                 .y = {/*start=*/0.5f},
                                 .z = {/*start=*/-0.5f},
                             }},
                             total_duration)},
-      {"CartesianLinear", CreateAnimatedObjectMetadata(
-                              std::vector<animated_cartesian_t>{{
-                                  .animation_type = ck_animation_type_linear,
-                                  .x = {/*start=*/-1.0f, /*end=*/1.0f},
-                                  .y = {/*start=*/0.5f, /*end=*/-0.5f},
-                                  .z = {/*start=*/-0.2f, /*end=*/0.4f},
-                              }},
-                              total_duration)},
-      {"CartesianBezier", CreateAnimatedObjectMetadata(
-                              std::vector<animated_cartesian_t>{{
-                                  .animation_type = ck_animation_type_bezier,
-                                  .x = {/*start=*/-1.0f,
-                                        /*end=*/1.0f,
-                                        /*control=*/-0.5f,
-                                        /*control_relative_time=*/0.25f},
-                                  .y = {/*start=*/0.8f,
-                                        /*end=*/-0.8f,
-                                        /*control=*/0.9f,
-                                        /*control_relative_time=*/0.75f},
-                                  .z = {/*start=*/-0.2f,
-                                        /*end=*/0.2f,
-                                        /*control=*/0.5f,
-                                        /*control_relative_time=*/0.5f},
-                              }},
-                              total_duration)},
+      {"CartesianLinear",
+       CreateAnimatedObjectMetadata(
+           std::vector<roar_animated_cartesian_t>{{
+               .animation_type = ck_roar_animation_type_linear,
+               .x = {/*start=*/-1.0f, /*end=*/1.0f},
+               .y = {/*start=*/0.5f, /*end=*/-0.5f},
+               .z = {/*start=*/-0.2f, /*end=*/0.4f},
+           }},
+           total_duration)},
+      {"CartesianBezier",
+       CreateAnimatedObjectMetadata(
+           std::vector<roar_animated_cartesian_t>{{
+               .animation_type = ck_roar_animation_type_bezier,
+               .x = {/*start=*/-1.0f,
+                     /*end=*/1.0f,
+                     /*control=*/-0.5f,
+                     /*control_relative_time=*/0.25f},
+               .y = {/*start=*/0.8f,
+                     /*end=*/-0.8f,
+                     /*control=*/0.9f,
+                     /*control_relative_time=*/0.75f},
+               .z = {/*start=*/-0.2f,
+                     /*end=*/0.2f,
+                     /*control=*/0.5f,
+                     /*control_relative_time=*/0.5f},
+           }},
+           total_duration)},
   };
 }
 
 // Runs the OAR-ROAR equivalence test.
-void RunAnimatedObjectTest(const oar_config_t& config,
-                           const oar_audio_element_config_t& element_config,
-                           const std::vector<oar_metadata_t>& metadata_sequence,
-                           size_t num_renders,
-                           std::optional<uint32_t> metadata_unit_to_process,
-                           std::string_view error_message) {
-  using OarPtr = std::unique_ptr<oar_t, decltype(&oar_destroy)>;
+void RunAnimatedObjectTest(
+    roar_config_t config, const roar_audio_element_config_t& element_config,
+    const std::vector<roar_metadata_t>& metadata_sequence, size_t num_renders,
+    std::optional<uint32_t> metadata_unit_to_process,
+    std::string_view error_message) {
+  using OarPtr = std::unique_ptr<roar_t, decltype(&oar_destroy)>;
   OarPtr oar(oar_create(&config), oar_destroy);
   ASSERT_THAT(oar, NotNull()) << error_message;
 
-  using RoarPtr = std::unique_ptr<oar_t, decltype(&roar_destroy)>;
+  using RoarPtr = std::unique_ptr<roar_t, decltype(&roar_destroy)>;
   RoarPtr roar(roar_create(&config), roar_destroy);
   ASSERT_THAT(roar, NotNull()) << error_message;
 
@@ -159,12 +154,12 @@ void RunAnimatedObjectTest(const oar_config_t& config,
   // animations.
   if (metadata_unit_to_process.has_value()) {
     ASSERT_EQ(oar_set_metadata_unit_to_process(
-                  oar.get(), ck_metadata_object_positions,
+                  oar.get(), ck_roar_metadata_object_positions,
                   metadata_unit_to_process.value()),
               0)
         << error_message;
     ASSERT_EQ(roar_set_metadata_unit_to_process(
-                  roar.get(), ck_metadata_object_positions,
+                  roar.get(), ck_roar_metadata_object_positions,
                   metadata_unit_to_process.value()),
               0)
         << error_message;
@@ -181,7 +176,10 @@ void RunAnimatedObjectTest(const oar_config_t& config,
   }
 
   const uint32_t input_channels =
-      oar_get_number_of_audio_element_channels(oar.get(), element_id);
+      roar_get_number_of_audio_element_channels(roar.get(), element_id);
+  ASSERT_EQ(oar_get_number_of_audio_element_channels(oar.get(), element_id),
+            input_channels)
+      << error_message;
   std::vector<std::vector<float>> input_data;
   input_data.reserve(num_renders);
   for (size_t render_i = 0; render_i < num_renders; ++render_i) {
@@ -196,19 +194,19 @@ void RunAnimatedObjectTest(const oar_config_t& config,
   ASSERT_EQ(c_output_channels, r_output_channels) << error_message;
 
   auto c_output = GetOutputBuffer(c_samples_per_channel, c_output_channels);
-  oar_audio_block_t c_output_block = {};
+  roar_audio_block_t c_output_block = {};
   c_output_block.channels = c_output_channels;
   c_output_block.samples_per_channel = c_samples_per_channel;
   c_output_block.data = c_output.data();
 
   auto r_output = GetOutputBuffer(r_samples_per_channel, r_output_channels);
-  oar_audio_block_t r_output_block = {};
+  roar_audio_block_t r_output_block = {};
   r_output_block.channels = r_output_channels;
   r_output_block.samples_per_channel = r_samples_per_channel;
   r_output_block.data = r_output.data();
 
   for (size_t render_i = 0; render_i < num_renders; ++render_i) {
-    oar_audio_block_t input_block = {};
+    roar_audio_block_t input_block = {};
     input_block.channels = input_channels;
     input_block.samples_per_channel = c_samples_per_channel;
     input_block.data = input_data[render_i].data();
@@ -242,8 +240,8 @@ TEST(AnimatedObjectTest, MotionVariations_RenderEquivalentlyAcrossAllLayouts) {
   for (const auto& config :
        GetAllOutputConfigs(kSamplesPerChannel, kSampleRate)) {
     for (const auto& test_case : GetAllObjectMotionVariations(total_duration)) {
-      oar_audio_element_config_t element_config = {};
-      element_config.type = ck_object_based;
+      roar_audio_element_config_t element_config = {};
+      element_config.type = ck_roar_object_based;
       element_config.obc.num_objects = 1;
 
       std::string error_message = absl::StrFormat(
@@ -264,18 +262,18 @@ TEST(AnimatedObjectTest,
      SubframeProcessing_RendersEquivalentlyAcrossLoudspeakerLayouts) {
   const size_t num_renders = kDefaultNumRenders;
   const uint32_t total_duration = num_renders * kSamplesPerChannel;
-  const std::vector<oar_layout_t> layouts = {ck_oar_layout_stereo,
-                                             ck_oar_layout_51};
+  const std::vector<roar_layout_t> layouts = {ck_roar_layout_stereo,
+                                              ck_roar_layout_51};
 
   for (auto layout : layouts) {
     for (const auto& test_case : GetAllObjectMotionVariations(total_duration)) {
-      oar_config_t config = {};
+      roar_config_t config = {};
       config.target_layout = layout;
       config.samples_per_channel = kSamplesPerChannel;
       config.sampling_rate = kSampleRate;
 
-      oar_audio_element_config_t element_config = {};
-      element_config.type = ck_object_based;
+      roar_audio_element_config_t element_config = {};
+      element_config.type = ck_roar_object_based;
       element_config.obc.num_objects = 1;
 
       std::string error_message = absl::StrFormat(
@@ -293,19 +291,19 @@ TEST(AnimatedObjectTest,
 // Related bug: https://github.com/AOMediaCodec/oar/issues/20
 TEST(AnimatedObjectTest,
      ZeroDurationMetadata_IsIgnoredAndMaintainsDefaultPosition) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_binaural;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_binaural;
   config.samples_per_channel = kSamplesPerChannel;
   config.sampling_rate = kSampleRate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_object_based;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_object_based;
   element_config.obc.num_objects = 1;
 
   const size_t num_renders = kDefaultNumRenders;
-  std::vector<oar_metadata_t> metadata_seq = {CreateAnimatedObjectMetadata(
-      std::vector<animated_polar_t>{{
-          .animation_type = ck_animation_type_linear,
+  std::vector<roar_metadata_t> metadata_seq = {CreateAnimatedObjectMetadata(
+      std::vector<roar_animated_polar_t>{{
+          .animation_type = ck_roar_animation_type_linear,
           .azimuth = {/*start=*/-90.0f, /*end=*/90.0f},
           .elevation = {/*start=*/0.0f, /*end=*/0.0f},
           .distance = {/*start=*/1.0f, /*end=*/1.0f},
@@ -322,30 +320,30 @@ TEST(AnimatedObjectTest,
 // for 2 renders.
 TEST(AnimatedObjectTest,
      ConsecutiveLinearMoves_RenderSequentiallyAcrossBlocks) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_binaural;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_binaural;
   config.samples_per_channel = kSamplesPerChannel;
   config.sampling_rate = kSampleRate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_object_based;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_object_based;
   element_config.obc.num_objects = 1;
 
   const size_t num_renders_per_move = 2;
   const uint32_t move_duration = num_renders_per_move * kSamplesPerChannel;
   const size_t num_renders = 2 * num_renders_per_move;
-  std::vector<oar_metadata_t> metadata_seq = {
+  std::vector<roar_metadata_t> metadata_seq = {
       CreateAnimatedObjectMetadata(
-          std::vector<animated_polar_t>{{
-              .animation_type = ck_animation_type_linear,
+          std::vector<roar_animated_polar_t>{{
+              .animation_type = ck_roar_animation_type_linear,
               .azimuth = {/*start=*/-90.0f, /*end=*/0.0f},
               .elevation = {/*start=*/0.0f, /*end=*/0.0f},
               .distance = {/*start=*/1.0f, /*end=*/1.0f},
           }},
           move_duration),
       CreateAnimatedObjectMetadata(
-          std::vector<animated_polar_t>{{
-              .animation_type = ck_animation_type_linear,
+          std::vector<roar_animated_polar_t>{{
+              .animation_type = ck_roar_animation_type_linear,
               .azimuth = {/*start=*/0.0f, /*end=*/90.0f},
               .elevation = {/*start=*/0.0f, /*end=*/0.0f},
               .distance = {/*start=*/1.0f, /*end=*/1.0f},
@@ -368,24 +366,24 @@ TEST(AnimatedObjectTest,
 
   for (const auto& config :
        GetAllOutputConfigs(kSamplesPerChannel, kSampleRate)) {
-    oar_audio_element_config_t element_config = {};
-    element_config.type = ck_object_based;
+    roar_audio_element_config_t element_config = {};
+    element_config.type = ck_roar_object_based;
     element_config.obc.num_objects = 2;
 
-    animated_polar_t obj0 = {
-        .animation_type = ck_animation_type_linear,
+    roar_animated_polar_t obj0 = {
+        .animation_type = ck_roar_animation_type_linear,
         .azimuth = {/*start=*/-90.0f, /*end=*/0.0f},
         .elevation = {/*start=*/0.0f, /*end=*/30.0f},
         .distance = {/*start=*/1.0f, /*end=*/0.8f},
     };
-    animated_polar_t obj1 = {
-        .animation_type = ck_animation_type_linear,
+    roar_animated_polar_t obj1 = {
+        .animation_type = ck_roar_animation_type_linear,
         .azimuth = {/*start=*/90.0f, /*end=*/0.0f},
         .elevation = {/*start=*/0.0f, /*end=*/-20.0f},
         .distance = {/*start=*/0.5f, /*end=*/1.0f},
     };
 
-    oar_metadata_t metadata =
+    roar_metadata_t metadata =
         CreateAnimatedObjectMetadata({obj0, obj1}, total_duration);
 
     std::string error_message = absl::StrFormat(
@@ -411,13 +409,13 @@ TEST(AnimatedObjectTest,
 
   for (const auto& config :
        GetAllOutputConfigs(kSamplesPerChannel, kSampleRate)) {
-    oar_audio_element_config_t element_config = {};
-    element_config.type = ck_object_based;
+    roar_audio_element_config_t element_config = {};
+    element_config.type = ck_roar_object_based;
     element_config.obc.num_objects = 1;
 
-    oar_metadata_t metadata = CreateAnimatedObjectMetadata(
-        std::vector<animated_polar_t>{{
-            .animation_type = ck_animation_type_linear,
+    roar_metadata_t metadata = CreateAnimatedObjectMetadata(
+        std::vector<roar_animated_polar_t>{{
+            .animation_type = ck_roar_animation_type_linear,
             .azimuth = {/*start=*/-90.0f, /*end=*/45.0f},
             .elevation = {/*start=*/0.0f, /*end=*/20.0f},
             .distance = {/*start=*/0.6f, /*end=*/1.0f},

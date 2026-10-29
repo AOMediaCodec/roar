@@ -11,18 +11,12 @@
  */
 #include <cstdint>
 #include <memory>
-#include <string>
 #include <vector>
 
 #include "equivalence_testing/test_helpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-
-extern "C" {
-#include "include/oar.h"
-#include "include/oar_base.h"
-#include "include/oar_metadata.h"
-}
+#include "include/roar.h"
 
 namespace roar_equivalence_testing {
 namespace {
@@ -33,12 +27,12 @@ using ::testing::NotNull;
 const uint32_t samples_per_channel = 256;
 const uint32_t sampling_rate = 48000;
 
-using OarPtr = std::unique_ptr<oar_t, decltype(&oar_destroy)>;
-using RoarPtr = std::unique_ptr<oar_t, decltype(&roar_destroy)>;
+using OarPtr = std::unique_ptr<roar_t, decltype(&oar_destroy)>;
+using RoarPtr = std::unique_ptr<roar_t, decltype(&roar_destroy)>;
 
 TEST(ErrorConditionsTest, UpdateHeadPositionWithoutHeadTrackingEnabled) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
@@ -48,8 +42,8 @@ TEST(ErrorConditionsTest, UpdateHeadPositionWithoutHeadTrackingEnabled) {
   ASSERT_THAT(roar, NotNull());
 
   // Create head rotation metadata
-  oar_metadata_t metadata = {};
-  metadata.type = ck_metadata_head_rotation;
+  roar_metadata_t metadata = {};
+  metadata.type = ck_roar_metadata_head_rotation;
   metadata.duration = 256;
   metadata.head_rotation.w = 1.0f;
   metadata.head_rotation.x = 0.0f;
@@ -65,12 +59,12 @@ TEST(ErrorConditionsTest, UpdateHeadPositionWithoutHeadTrackingEnabled) {
   int r_res = roar_update_metadata(roar.get(), r_group_id, &metadata);
 
   EXPECT_EQ(c_res, r_res);
-  EXPECT_LT(c_res, 0);  // Should be an error (Busy, i.e. -16)
+  EXPECT_EQ(r_res, ck_roar_error_busy);
 }
 
 TEST(ErrorConditionsTest, EnableHeadTrackingOnNonBinauralLayout) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
@@ -79,16 +73,16 @@ TEST(ErrorConditionsTest, EnableHeadTrackingOnNonBinauralLayout) {
   RoarPtr roar(roar_create(&config), roar_destroy);
   ASSERT_THAT(roar, NotNull());
 
-  int c_res = oar_enable_head_tracking(oar.get(), true);
-  int r_res = roar_enable_head_tracking(roar.get(), true);
+  int c_res = oar_enable_head_tracking(oar.get(), 1);
+  int r_res = roar_enable_head_tracking(roar.get(), 1);
 
   EXPECT_EQ(c_res, r_res);
-  EXPECT_LT(c_res, 0);  // Should be NotSupported (-95)
+  EXPECT_EQ(r_res, ck_roar_error_notsup);
 }
 
 TEST(ErrorConditionsTest, AddElementWithInvalidGroupId) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
@@ -97,9 +91,9 @@ TEST(ErrorConditionsTest, AddElementWithInvalidGroupId) {
   RoarPtr roar(roar_create(&config), roar_destroy);
   ASSERT_THAT(roar, NotNull());
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_stereo;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_stereo;
 
   // Group 0 does not exist because no group has been created.
   uint32_t group_id = 0;
@@ -110,12 +104,12 @@ TEST(ErrorConditionsTest, AddElementWithInvalidGroupId) {
       roar_add_audio_element(roar.get(), group_id, element_id, &element_config);
 
   EXPECT_EQ(c_res, r_res);
-  EXPECT_LT(c_res, 0);  // Should be InvalidParameter (-22)
+  EXPECT_EQ(r_res, ck_roar_error_inval);
 }
 
 TEST(ErrorConditionsTest, RemoveNonExistentElement) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
@@ -136,12 +130,12 @@ TEST(ErrorConditionsTest, RemoveNonExistentElement) {
   int r_res = roar_remove_audio_element(roar.get(), element_id);
 
   EXPECT_EQ(c_res, r_res);
-  EXPECT_LT(c_res, 0);  // Should be InvalidParameter (-22)
+  EXPECT_EQ(r_res, ck_roar_error_inval);
 }
 
 TEST(ErrorConditionsTest, AddDuplicateElementId) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
@@ -153,9 +147,9 @@ TEST(ErrorConditionsTest, AddDuplicateElementId) {
   int c_gid = oar_add_audio_group(oar.get());
   int r_gid = roar_add_audio_group(roar.get());
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_stereo;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_stereo;
 
   // Add first element successfully
   uint32_t element_id = 10;
@@ -172,12 +166,12 @@ TEST(ErrorConditionsTest, AddDuplicateElementId) {
       roar_add_audio_element(roar.get(), r_gid, element_id, &element_config);
 
   EXPECT_EQ(c_res, r_res);
-  EXPECT_LT(c_res, 0);  // Should be InvalidParameter (-22)
+  EXPECT_EQ(r_res, ck_roar_error_busy);
 }
 
 TEST(ErrorConditionsTest, UpdateMetadataForNonExistentElement) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
@@ -186,10 +180,10 @@ TEST(ErrorConditionsTest, UpdateMetadataForNonExistentElement) {
   RoarPtr roar(roar_create(&config), roar_destroy);
   ASSERT_THAT(roar, NotNull());
 
-  oar_metadata_t metadata = {};
-  metadata.type = ck_metadata_gain;
+  roar_metadata_t metadata = {};
+  metadata.type = ck_roar_metadata_gain;
   metadata.duration = 256;
-  metadata.gain.param_type = ck_param_constant;
+  metadata.gain.param_type = ck_roar_param_constant;
   metadata.gain.constant_gain = 0.5f;
 
   uint32_t element_id = 10;
@@ -199,12 +193,12 @@ TEST(ErrorConditionsTest, UpdateMetadataForNonExistentElement) {
       roar_update_audio_element_metadata(roar.get(), element_id, &metadata);
 
   EXPECT_EQ(c_res, r_res);
-  EXPECT_LT(c_res, 0);  // Should be InvalidParameter (-22)
+  EXPECT_EQ(r_res, ck_roar_error_inval);
 }
 
 TEST(ErrorConditionsTest, UpdateMetadataForNonExistentGroup) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
@@ -213,10 +207,10 @@ TEST(ErrorConditionsTest, UpdateMetadataForNonExistentGroup) {
   RoarPtr roar(roar_create(&config), roar_destroy);
   ASSERT_THAT(roar, NotNull());
 
-  oar_metadata_t metadata = {};
-  metadata.type = ck_metadata_gain;
+  roar_metadata_t metadata = {};
+  metadata.type = ck_roar_metadata_gain;
   metadata.duration = 256;
-  metadata.gain.param_type = ck_param_constant;
+  metadata.gain.param_type = ck_roar_param_constant;
   metadata.gain.constant_gain = 0.5f;
 
   uint32_t group_id = 0;
@@ -228,8 +222,8 @@ TEST(ErrorConditionsTest, UpdateMetadataForNonExistentGroup) {
 }
 
 TEST(ErrorConditionsTest, UpdateMetadataWithInvalidType) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
@@ -241,9 +235,9 @@ TEST(ErrorConditionsTest, UpdateMetadataWithInvalidType) {
   int c_gid = oar_add_audio_group(oar.get());
   int r_gid = roar_add_audio_group(roar.get());
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_stereo;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_stereo;
 
   uint32_t element_id = 10;
   ASSERT_EQ(
@@ -253,8 +247,8 @@ TEST(ErrorConditionsTest, UpdateMetadataWithInvalidType) {
       0);
 
   // Invalid metadata type (e.g. 999)
-  oar_metadata_t metadata = {};
-  metadata.type = (oar_metadata_type_t)999;
+  roar_metadata_t metadata = {};
+  metadata.type = static_cast<roar_metadata_type_t>(999);
   metadata.duration = 256;
 
   int c_res =
@@ -263,13 +257,13 @@ TEST(ErrorConditionsTest, UpdateMetadataWithInvalidType) {
       roar_update_audio_element_metadata(roar.get(), element_id, &metadata);
 
   EXPECT_EQ(c_res, r_res);
-  EXPECT_LT(c_res, 0);  // Should be NotSupported (-95)
+  EXPECT_EQ(r_res, ck_roar_error_notsup);
 }
 
 TEST(ErrorConditionsTest,
      RenderWithoutUpdatingAudioElementDataReturnsInvalidParameter) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
@@ -283,9 +277,9 @@ TEST(ErrorConditionsTest,
   int r_gid = roar_add_audio_group(roar.get());
   ASSERT_THAT(r_gid, Ge(0));
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_stereo;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_stereo;
 
   uint32_t element_id = 10;
   ASSERT_EQ(
@@ -295,7 +289,7 @@ TEST(ErrorConditionsTest,
       0);
 
   auto input_data = GetInputData(samples_per_channel, 2, sampling_rate);
-  oar_audio_block_t input_block = {};
+  roar_audio_block_t input_block = {};
   input_block.channels = 2;
   input_block.samples_per_channel = samples_per_channel;
   input_block.data = input_data.data();
@@ -306,13 +300,13 @@ TEST(ErrorConditionsTest,
       roar_update_audio_element_data(roar.get(), element_id, &input_block), 0);
 
   auto c_output = GetOutputBuffer(samples_per_channel, 2);
-  oar_audio_block_t c_output_block = {};
+  roar_audio_block_t c_output_block = {};
   c_output_block.channels = 2;
   c_output_block.samples_per_channel = samples_per_channel;
   c_output_block.data = c_output.data();
 
   auto r_output = GetOutputBuffer(samples_per_channel, 2);
-  oar_audio_block_t r_output_block = {};
+  roar_audio_block_t r_output_block = {};
   r_output_block.channels = 2;
   r_output_block.samples_per_channel = samples_per_channel;
   r_output_block.data = r_output.data();
@@ -324,13 +318,13 @@ TEST(ErrorConditionsTest,
   int r_second_res = roar_render(roar.get(), &r_output_block);
 
   EXPECT_EQ(c_second_res, r_second_res);
-  EXPECT_EQ(c_second_res, -22);
+  EXPECT_EQ(r_second_res, ck_roar_error_inval);
 }
 
 TEST(ErrorConditionsTest,
      InvalidDownmixModeWithActiveConsumerReturnsInvalidParameter) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
@@ -344,10 +338,10 @@ TEST(ErrorConditionsTest,
   int r_gid = roar_add_audio_group(roar.get());
   ASSERT_THAT(r_gid, Ge(0));
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_51;
-  element_config.parameters.flags = def_parameter_set_flag_iamf_downmix_info;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_51;
+  element_config.parameters.flags = ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
   element_config.parameters.downmix_info.mode = 0;
   element_config.parameters.downmix_info.weight_index = -1;
 
@@ -358,12 +352,15 @@ TEST(ErrorConditionsTest,
       roar_add_audio_element(roar.get(), r_gid, element_id, &element_config),
       0);
 
-  oar_metadata_t neg_meta = CreateDownmixModeMetadata(-1, samples_per_channel);
-  oar_metadata_t mode3_meta = CreateDownmixModeMetadata(3, samples_per_channel);
-  oar_metadata_t mode7_meta = CreateDownmixModeMetadata(7, samples_per_channel);
-  oar_metadata_t mode99_meta =
+  roar_metadata_t neg_meta = CreateDownmixModeMetadata(-1, samples_per_channel);
+  roar_metadata_t mode3_meta =
+      CreateDownmixModeMetadata(3, samples_per_channel);
+  roar_metadata_t mode7_meta =
+      CreateDownmixModeMetadata(7, samples_per_channel);
+  roar_metadata_t mode99_meta =
       CreateDownmixModeMetadata(99, samples_per_channel);
-  oar_metadata_t valid_meta = CreateDownmixModeMetadata(1, samples_per_channel);
+  roar_metadata_t valid_meta =
+      CreateDownmixModeMetadata(1, samples_per_channel);
 
   int c_neg =
       oar_update_audio_element_metadata(oar.get(), element_id, &neg_meta);
@@ -399,8 +396,8 @@ TEST(ErrorConditionsTest,
 }
 
 TEST(ErrorConditionsTest, InvalidDownmixModeWithoutConsumerReturnsOk) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
@@ -414,10 +411,10 @@ TEST(ErrorConditionsTest, InvalidDownmixModeWithoutConsumerReturnsOk) {
   int r_gid = roar_add_audio_group(roar.get());
   ASSERT_THAT(r_gid, Ge(0));
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_512;
-  element_config.parameters.flags = def_parameter_set_flag_iamf_downmix_info;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_512;
+  element_config.parameters.flags = ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
   element_config.parameters.downmix_info.mode = 0;
   element_config.parameters.downmix_info.weight_index = -1;
 
@@ -428,10 +425,12 @@ TEST(ErrorConditionsTest, InvalidDownmixModeWithoutConsumerReturnsOk) {
       roar_add_audio_element(roar.get(), r_gid, element_id, &element_config),
       0);
 
-  oar_metadata_t neg_meta = CreateDownmixModeMetadata(-1, samples_per_channel);
-  oar_metadata_t mode3_meta = CreateDownmixModeMetadata(3, samples_per_channel);
-  oar_metadata_t mode7_meta = CreateDownmixModeMetadata(7, samples_per_channel);
-  oar_metadata_t mode99_meta =
+  roar_metadata_t neg_meta = CreateDownmixModeMetadata(-1, samples_per_channel);
+  roar_metadata_t mode3_meta =
+      CreateDownmixModeMetadata(3, samples_per_channel);
+  roar_metadata_t mode7_meta =
+      CreateDownmixModeMetadata(7, samples_per_channel);
+  roar_metadata_t mode99_meta =
       CreateDownmixModeMetadata(99, samples_per_channel);
 
   int c_neg =
@@ -462,8 +461,8 @@ TEST(ErrorConditionsTest, InvalidDownmixModeWithoutConsumerReturnsOk) {
 }
 
 TEST(ErrorConditionsTest, InvalidDownmixModeOnMatching512LayoutReturnsOk) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_512;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_512;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
@@ -477,10 +476,10 @@ TEST(ErrorConditionsTest, InvalidDownmixModeOnMatching512LayoutReturnsOk) {
   int r_gid = roar_add_audio_group(roar.get());
   ASSERT_THAT(r_gid, Ge(0));
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_512;
-  element_config.parameters.flags = def_parameter_set_flag_iamf_downmix_info;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_512;
+  element_config.parameters.flags = ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
   element_config.parameters.downmix_info.mode = 0;
   element_config.parameters.downmix_info.weight_index = -1;
 
@@ -491,7 +490,8 @@ TEST(ErrorConditionsTest, InvalidDownmixModeOnMatching512LayoutReturnsOk) {
       roar_add_audio_element(roar.get(), r_gid, element_id, &element_config),
       0);
 
-  oar_metadata_t mode3_meta = CreateDownmixModeMetadata(3, samples_per_channel);
+  roar_metadata_t mode3_meta =
+      CreateDownmixModeMetadata(3, samples_per_channel);
 
   int c_res =
       oar_update_audio_element_metadata(oar.get(), element_id, &mode3_meta);
@@ -504,8 +504,8 @@ TEST(ErrorConditionsTest, InvalidDownmixModeOnMatching512LayoutReturnsOk) {
 
 TEST(ErrorConditionsTest,
      DownmixModeUpdateForNonExistentElementReturnsInvalidParameter) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
@@ -519,17 +519,17 @@ TEST(ErrorConditionsTest,
   int r_gid = roar_add_audio_group(roar.get());
   ASSERT_THAT(r_gid, Ge(0));
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_512;
-  element_config.parameters.flags = def_parameter_set_flag_iamf_downmix_info;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_512;
+  element_config.parameters.flags = ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
   element_config.parameters.downmix_info.mode = 0;
   element_config.parameters.downmix_info.weight_index = -1;
 
   ASSERT_EQ(oar_add_audio_element(oar.get(), c_gid, 1, &element_config), 0);
   ASSERT_EQ(roar_add_audio_element(roar.get(), r_gid, 1, &element_config), 0);
 
-  oar_metadata_t metadata = CreateDownmixModeMetadata(1, samples_per_channel);
+  roar_metadata_t metadata = CreateDownmixModeMetadata(1, samples_per_channel);
 
   int c_res = oar_update_audio_element_metadata(oar.get(), 999, &metadata);
   int r_res = roar_update_audio_element_metadata(roar.get(), 999, &metadata);
@@ -540,8 +540,8 @@ TEST(ErrorConditionsTest,
 
 TEST(ErrorConditionsTest,
      ObjectPositionsUpdateOnChannelElementReturnsNotSupported) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
@@ -555,10 +555,10 @@ TEST(ErrorConditionsTest,
   int r_gid = roar_add_audio_group(roar.get());
   ASSERT_THAT(r_gid, Ge(0));
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_512;
-  element_config.parameters.flags = def_parameter_set_flag_iamf_downmix_info;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_512;
+  element_config.parameters.flags = ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
   element_config.parameters.downmix_info.mode = 0;
   element_config.parameters.downmix_info.weight_index = -1;
 
@@ -569,8 +569,8 @@ TEST(ErrorConditionsTest,
       roar_add_audio_element(roar.get(), r_gid, element_id, &element_config),
       0);
 
-  polar_t pos = {30.0f, 0.0f, 1.0f};
-  oar_metadata_t pos_meta = CreateObjectMetadata({pos}, samples_per_channel);
+  roar_polar_t pos = {30.0f, 0.0f, 1.0f};
+  roar_metadata_t pos_meta = CreateObjectMetadata({pos}, samples_per_channel);
 
   int c_res =
       oar_update_audio_element_metadata(oar.get(), element_id, &pos_meta);
@@ -582,8 +582,8 @@ TEST(ErrorConditionsTest,
 }
 
 TEST(ErrorConditionsTest, ReservedElementMetadataTypeCountReturnsNotSupported) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
@@ -597,9 +597,9 @@ TEST(ErrorConditionsTest, ReservedElementMetadataTypeCountReturnsNotSupported) {
   int r_gid = roar_add_audio_group(roar.get());
   ASSERT_THAT(r_gid, Ge(0));
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_512;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_512;
 
   uint32_t element_id = 1;
   ASSERT_EQ(
@@ -608,14 +608,35 @@ TEST(ErrorConditionsTest, ReservedElementMetadataTypeCountReturnsNotSupported) {
       roar_add_audio_element(roar.get(), r_gid, element_id, &element_config),
       0);
 
-  oar_metadata_t metadata = {};
-  metadata.type = ck_metadata_count;
+  roar_metadata_t metadata = {};
+  metadata.type = ck_roar_metadata_count;
   metadata.duration = samples_per_channel;
 
   int c_res =
       oar_update_audio_element_metadata(oar.get(), element_id, &metadata);
   int r_res =
       roar_update_audio_element_metadata(roar.get(), element_id, &metadata);
+
+  EXPECT_EQ(c_res, -95);
+  EXPECT_EQ(r_res, -95);
+}
+
+TEST(ErrorConditionsTest,
+     SetMetadataUnitToProcessWithOutOfRangeTypeReturnsNotSupported) {
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
+  config.samples_per_channel = samples_per_channel;
+  config.sampling_rate = sampling_rate;
+  OarPtr oar(oar_create(&config), oar_destroy);
+  ASSERT_THAT(oar, NotNull());
+  RoarPtr roar(roar_create(&config), roar_destroy);
+  ASSERT_THAT(roar, NotNull());
+  const auto out_of_range_type = static_cast<roar_metadata_type_t>(999);
+
+  int c_res =
+      oar_set_metadata_unit_to_process(oar.get(), out_of_range_type, 64);
+  int r_res =
+      roar_set_metadata_unit_to_process(roar.get(), out_of_range_type, 64);
 
   EXPECT_EQ(c_res, -95);
   EXPECT_EQ(r_res, -95);

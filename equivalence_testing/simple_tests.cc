@@ -22,12 +22,7 @@
 #include "equivalence_testing/test_helpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-
-extern "C" {
-#include "include/oar.h"
-#include "include/oar_base.h"
-#include "include/oar_metadata.h"
-}
+#include "include/roar.h"
 
 namespace roar_equivalence_testing {
 namespace {
@@ -42,21 +37,21 @@ constexpr uint32_t kTargetSamplesToRender = 24000;
 
 // Simple struct to pair element and metadata.
 struct ElementWithMetadata {
-  oar_audio_element_config_t element_config;
-  std::optional<oar_metadata_t> metadata;
+  roar_audio_element_config_t element_config;
+  std::optional<roar_metadata_t> metadata;
 };
 
 // ===== Runs a single test case =====
-void RunTest(oar_config_t config,
+void RunTest(roar_config_t config,
              const std::vector<ElementWithMetadata>& elements,
              std::string_view error_message) {
   // Wrap the C pointers in unique_ptrs with custom deleters for automatic
   // memory management.
-  using OarPtr = std::unique_ptr<oar_t, decltype(&oar_destroy)>;
+  using OarPtr = std::unique_ptr<roar_t, decltype(&oar_destroy)>;
   OarPtr oar(oar_create(&config), oar_destroy);
   ASSERT_THAT(oar, NotNull()) << error_message;
 
-  using RoarPtr = std::unique_ptr<oar_t, decltype(&roar_destroy)>;
+  using RoarPtr = std::unique_ptr<roar_t, decltype(&roar_destroy)>;
   RoarPtr roar(roar_create(&config), roar_destroy);
   ASSERT_THAT(roar, NotNull()) << error_message;
 
@@ -82,7 +77,7 @@ void RunTest(oar_config_t config,
     const int r_add = roar_add_audio_element(roar.get(), r_group_id, element_id,
                                              &element.element_config);
     ASSERT_EQ(r_add, 0) << error_message;
-    if (element.metadata) {
+    if (element.metadata.has_value()) {
       const int c_meta_update = oar_update_audio_element_metadata(
           oar.get(), element_id, &element.metadata.value());
       ASSERT_EQ(c_meta_update, 0) << error_message;
@@ -96,11 +91,14 @@ void RunTest(oar_config_t config,
   // Prepare input audio for each element.
   // Input audio lifetime must survive through to the render calls.
   std::vector<std::vector<float>> all_input_data(elements.size());
-  std::vector<oar_audio_block_t> input_blocks(elements.size());
+  std::vector<roar_audio_block_t> input_blocks(elements.size());
   for (size_t i = 0; i < elements.size(); ++i) {
     uint32_t element_id = i;
     const uint32_t input_channels =
-        oar_get_number_of_audio_element_channels(oar.get(), element_id);
+        roar_get_number_of_audio_element_channels(roar.get(), element_id);
+    ASSERT_EQ(oar_get_number_of_audio_element_channels(oar.get(), element_id),
+              input_channels)
+        << error_message;
     all_input_data[i] = GetInputData(c_samples_per_channel, input_channels,
                                      config.sampling_rate);
     input_blocks[i].channels = input_channels;
@@ -116,13 +114,13 @@ void RunTest(oar_config_t config,
   ASSERT_EQ(c_output_channels, r_output_channels) << error_message;
 
   auto c_output = GetOutputBuffer(c_samples_per_channel, c_output_channels);
-  oar_audio_block_t c_output_block = {};
+  roar_audio_block_t c_output_block = {};
   c_output_block.channels = c_output_channels;
   c_output_block.samples_per_channel = c_samples_per_channel;
   c_output_block.data = c_output.data();
 
   auto r_output = GetOutputBuffer(r_samples_per_channel, r_output_channels);
-  oar_audio_block_t r_output_block = {};
+  roar_audio_block_t r_output_block = {};
   r_output_block.channels = r_output_channels;
   r_output_block.samples_per_channel = r_samples_per_channel;
   r_output_block.data = r_output.data();
@@ -161,8 +159,8 @@ void RunTest(oar_config_t config,
 TEST(RoarEquivalence, ChannelBasedInput) {
   for (auto input : GetAllChannelBasedInputs()) {
     for (auto out_config : GetAllOutputConfigs()) {
-      oar_audio_element_config_t element_config = {};
-      element_config.type = ck_channel_based;
+      roar_audio_element_config_t element_config = {};
+      element_config.type = ck_roar_channel_based;
       element_config.cbc.layout = input;
       std::string error_message =
           absl::StrFormat("Input layout: %d, Output layout: %d", input,
@@ -176,11 +174,11 @@ TEST(RoarEquivalence, ChannelBasedInput) {
 TEST(RoarEquivalence, ChannelBasedInputWithDownmixInfo) {
   for (auto input : GetAllChannelBasedInputs()) {
     for (auto out_config : GetAllOutputConfigs()) {
-      oar_audio_element_config_t element_config = {};
-      element_config.type = ck_channel_based;
+      roar_audio_element_config_t element_config = {};
+      element_config.type = ck_roar_channel_based;
       element_config.cbc.layout = input;
       element_config.parameters.flags |=
-          def_parameter_set_flag_iamf_downmix_info;
+          ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
       element_config.parameters.downmix_info.mode = 0;
       element_config.parameters.downmix_info.weight_index = 5;
       std::string error_message =
@@ -194,14 +192,14 @@ TEST(RoarEquivalence, ChannelBasedInputWithDownmixInfo) {
 
 TEST(RoarEquivalence, ObjectBasedInput) {
   for (auto output_config : GetAllOutputConfigs()) {
-    oar_audio_element_config_t element_config = {};
-    element_config.type = ck_object_based;
+    roar_audio_element_config_t element_config = {};
+    element_config.type = ck_roar_object_based;
     element_config.obc.num_objects = 2;
 
-    std::vector<polar_t> positions = {{50.0f, 0.5f, 1.0f},
-                                      {-105.0f, -1.3f, 3.0f}};
+    std::vector<roar_polar_t> positions = {{50.0f, 0.5f, 1.0f},
+                                           {-105.0f, -1.3f, 3.0f}};
 
-    oar_metadata_t metadata =
+    roar_metadata_t metadata =
         CreateObjectMetadata(positions, kTargetSamplesToRender);
 
     std::string error_message =
@@ -214,9 +212,9 @@ TEST(RoarEquivalence, ObjectBasedInput) {
 TEST(RoarEquivalence, SceneBasedInput) {
   for (auto config : GetAllOutputConfigs()) {
     for (auto order : GetAllAmbisonicOrders()) {
-      oar_audio_element_config_t element_config = {};
-      element_config.type = ck_scene_based;
-      element_config.sbc.order = static_cast<oar_hoa_t>(order);
+      roar_audio_element_config_t element_config = {};
+      element_config.type = ck_roar_scene_based;
+      element_config.sbc.order = order;
 
       std::string error_message = absl::StrFormat(
           "scene_based (%d order -> layout %d)", order, config.target_layout);
@@ -228,23 +226,23 @@ TEST(RoarEquivalence, SceneBasedInput) {
 TEST(RoarEquivalence, CombinationInput) {
   for (auto config : GetAllOutputConfigs()) {
     // One 5.1 channel-based element.
-    oar_audio_element_config_t channel_element_config = {};
-    channel_element_config.type = ck_channel_based;
-    channel_element_config.cbc.layout = ck_oar_layout_51;
+    roar_audio_element_config_t channel_element_config = {};
+    channel_element_config.type = ck_roar_channel_based;
+    channel_element_config.cbc.layout = ck_roar_layout_51;
 
     // 2 object-based elements.
-    oar_audio_element_config_t object_element_config = {};
-    object_element_config.type = ck_object_based;
+    roar_audio_element_config_t object_element_config = {};
+    object_element_config.type = ck_roar_object_based;
     object_element_config.obc.num_objects = 2;
-    std::vector<polar_t> positions = {{45.0f, 1.2f, 2.0f},
-                                      {-180.0f, -0.1f, 1.0f}};
-    oar_metadata_t metadata =
+    std::vector<roar_polar_t> positions = {{45.0f, 1.2f, 2.0f},
+                                           {-180.0f, -0.1f, 1.0f}};
+    roar_metadata_t metadata =
         CreateObjectMetadata(positions, kTargetSamplesToRender);
 
     // First order ambisonics element.
-    oar_audio_element_config_t scene_element_config = {};
-    scene_element_config.type = ck_scene_based;
-    scene_element_config.sbc.order = ck_oar_1oa;
+    roar_audio_element_config_t scene_element_config = {};
+    scene_element_config.type = ck_roar_scene_based;
+    scene_element_config.sbc.order = ck_roar_1oa;
 
     std::string error_message = absl::StrFormat(
         "(5.1, 2 objects, 1OA) -> layout %d", config.target_layout);

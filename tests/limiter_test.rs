@@ -18,7 +18,7 @@ mod test {
         create_channel_based_config, create_planar_buffer_mut, create_planar_buffer_ref, TestRoar,
     };
     use aom_roar::{
-        c_types::{oar_audio_block_t, oar_layout_t},
+        c_types::{roar_audio_block_t, roar_layout_t},
         ffi::{
             roar_add_audio_element, roar_add_audio_group, roar_enable_limiter, roar_flush,
             roar_get_limiter_delay, roar_render, roar_set_limiter_threshold,
@@ -52,32 +52,33 @@ mod test {
         let output_channels: usize = 2;
         let element_id: u32 = 10;
         // Create test ROAR instance.
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
+        let oar =
+            TestRoar::new(roar_layout_t::ck_roar_layout_stereo, frame_size as u32, sample_rate);
         // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
         // access.
         let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         verify_that!(group_id, ge(0))?;
-        let element_cfg = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
+        let element_cfg = create_channel_based_config(roar_layout_t::ck_roar_layout_stereo);
         // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
-        // access, and `element_cfg` is a valid initialized `oar_audio_element_config_t`.
+        // access, and `element_cfg` is a valid initialized `roar_audio_element_config_t`.
         let ret =
             unsafe { roar_add_audio_element(oar.ptr(), group_id as u32, element_id, &element_cfg) };
         verify_eq!(ret, 0)?;
         // Very loud input.
         let mut input_buffer = vec![VALUE_GREATER_THAN_LIMIT; input_channels * frame_size];
-        let mut input_data = oar_audio_block_t {
+        let mut input_data = roar_audio_block_t {
             data: input_buffer.as_mut_ptr(),
             channels: input_channels as u32,
             samples_per_channel: frame_size as u32,
         };
         let mut output_no_limiter = vec![0.0f32; output_channels * frame_size];
-        let mut out_block_1 = oar_audio_block_t {
+        let mut out_block_1 = roar_audio_block_t {
             data: output_no_limiter.as_mut_ptr(),
             channels: output_channels as u32,
             samples_per_channel: frame_size as u32,
         };
         let mut output_with_limiter = vec![0.0f32; output_channels * frame_size];
-        let mut out_block_2 = oar_audio_block_t {
+        let mut out_block_2 = roar_audio_block_t {
             data: output_with_limiter.as_mut_ptr(),
             channels: output_channels as u32,
             samples_per_channel: frame_size as u32,
@@ -132,7 +133,7 @@ mod test {
 
     #[gtest]
     fn ffi_get_limiter_delay_returns_configured_look_ahead_samples() {
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, 480, 48000);
+        let oar = TestRoar::new(roar_layout_t::ck_roar_layout_stereo, 480, 48000);
 
         // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with no concurrent
         // mutation.
@@ -147,25 +148,26 @@ mod test {
         let sample_rate: u32 = 48000;
         let channels: usize = 2;
         let element_id: u32 = 10;
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
+        let oar =
+            TestRoar::new(roar_layout_t::ck_roar_layout_stereo, frame_size as u32, sample_rate);
         // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
         // access.
         let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         verify_that!(group_id, ge(0))?;
-        let element_cfg = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
+        let element_cfg = create_channel_based_config(roar_layout_t::ck_roar_layout_stereo);
         // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
-        // access, and `element_cfg` is a valid initialized `oar_audio_element_config_t`.
+        // access, and `element_cfg` is a valid initialized `roar_audio_element_config_t`.
         let add_ret =
             unsafe { roar_add_audio_element(oar.ptr(), group_id as u32, element_id, &element_cfg) };
         verify_eq!(add_ret, 0)?;
         let mut input_buffer = vec![0.8f32; channels * frame_size];
-        let mut input_data = oar_audio_block_t {
+        let mut input_data = roar_audio_block_t {
             data: input_buffer.as_mut_ptr(),
             channels: channels as u32,
             samples_per_channel: frame_size as u32,
         };
         let mut render_output = vec![0.0f32; channels * frame_size];
-        let mut render_block = oar_audio_block_t {
+        let mut render_block = roar_audio_block_t {
             data: render_output.as_mut_ptr(),
             channels: channels as u32,
             samples_per_channel: frame_size as u32,
@@ -208,36 +210,37 @@ mod test {
         let sample_rate: u32 = 48000;
         let channels: usize = 2;
         let element_id: u32 = 10;
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
+        let oar =
+            TestRoar::new(roar_layout_t::ck_roar_layout_stereo, frame_size as u32, sample_rate);
         // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
         // access.
         let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         verify_that!(group_id, ge(0))?;
-        let element_cfg = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
+        let element_cfg = create_channel_based_config(roar_layout_t::ck_roar_layout_stereo);
         // SAFETY: `oar.ptr()` is a live, valid renderer instance created above with exclusive
-        // access, and `element_cfg` is a valid initialized `oar_audio_element_config_t`.
+        // access, and `element_cfg` is a valid initialized `roar_audio_element_config_t`.
         let add_ret =
             unsafe { roar_add_audio_element(oar.ptr(), group_id as u32, element_id, &element_cfg) };
         verify_eq!(add_ret, 0)?;
         let mut input_buffer = vec![0.5f32; channels * frame_size];
-        let mut input_data = oar_audio_block_t {
+        let mut input_data = roar_audio_block_t {
             data: input_buffer.as_mut_ptr(),
             channels: channels as u32,
             samples_per_channel: frame_size as u32,
         };
         let mut render_output = vec![0.0f32; channels * frame_size];
-        let mut render_block = oar_audio_block_t {
+        let mut render_block = roar_audio_block_t {
             data: render_output.as_mut_ptr(),
             channels: channels as u32,
             samples_per_channel: frame_size as u32,
         };
         let mut flush_output = vec![0.0f32; channels * EXPECTED_DELAY_SAMPLES];
-        let mut flush_block = oar_audio_block_t {
+        let mut flush_block = roar_audio_block_t {
             data: flush_output.as_mut_ptr(),
             channels: channels as u32,
             samples_per_channel: 0,
         };
-        let mut disabled_flush_block = oar_audio_block_t {
+        let mut disabled_flush_block = roar_audio_block_t {
             data: flush_output.as_mut_ptr(),
             channels: channels as u32,
             samples_per_channel: 99,
@@ -282,15 +285,18 @@ mod test {
 
     #[gtest]
     fn ffi_flush_returns_invalid_parameter_for_invalid_output_block() {
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, 480, 48000);
+        let oar = TestRoar::new(roar_layout_t::ck_roar_layout_stereo, 480, 48000);
         let mut buf = vec![0.0f32; 2 * EXPECTED_DELAY_SAMPLES];
-        let mut null_data_block =
-            oar_audio_block_t { data: std::ptr::null_mut(), channels: 2, samples_per_channel: 240 };
+        let mut null_data_block = roar_audio_block_t {
+            data: std::ptr::null_mut(),
+            channels: 2,
+            samples_per_channel: 240,
+        };
         let mut wrong_channels_block =
-            oar_audio_block_t { data: buf.as_mut_ptr(), channels: 1, samples_per_channel: 240 };
+            roar_audio_block_t { data: buf.as_mut_ptr(), channels: 1, samples_per_channel: 240 };
 
         // SAFETY: `oar.ptr()` is a live, valid renderer instance created above, and
-        // `null_data_block` is a valid initialized `oar_audio_block_t` with null `data`, which
+        // `null_data_block` is a valid initialized `roar_audio_block_t` with null `data`, which
         // `roar_flush` explicitly permits under its safety contract.
         let null_data_ret = unsafe { roar_flush(oar.ptr(), &mut null_data_block) };
         // SAFETY: `oar.ptr()` is a live, valid renderer instance created above.

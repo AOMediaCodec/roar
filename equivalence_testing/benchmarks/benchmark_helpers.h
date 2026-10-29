@@ -19,12 +19,7 @@
 #include <vector>
 
 #include "absl/types/span.h"
-
-extern "C" {
-#include "include/oar.h"
-#include "include/oar_base.h"
-#include "include/oar_metadata.h"
-}
+#include "include/roar.h"
 
 namespace roar_equivalence_testing {
 
@@ -43,7 +38,7 @@ class RendererInstance {
  public:
   // Constructs the renderer of the given type with the given config.
   static std::unique_ptr<RendererInstance> Create(RendererEngine engine,
-                                                  const oar_config_t& config);
+                                                  const roar_config_t& config);
 
   ~RendererInstance();
 
@@ -55,34 +50,34 @@ class RendererInstance {
 
   // Adds an audio element to the specified audio group.
   int AddAudioElement(uint32_t gid, uint32_t id,
-                      const oar_audio_element_config_t& config);
+                      const roar_audio_element_config_t& config);
 
   // Updates metadata (e.g. object positions) for an audio element.
-  int UpdateAudioElementMetadata(uint32_t id, const oar_metadata_t& metadata);
+  int UpdateAudioElementMetadata(uint32_t id, const roar_metadata_t& metadata);
 
   // Updates group-level metadata (such as head rotation).
-  int UpdateMetadata(uint32_t gid, const oar_metadata_t& metadata);
+  int UpdateMetadata(uint32_t gid, const roar_metadata_t& metadata);
 
   // Enables or disables head tracking in the renderer.
   int EnableHeadTracking(bool enable);
 
   // Sets planar audio sample data for an audio element.
-  int UpdateAudioElementData(uint32_t id, oar_audio_block_t* data);
+  int UpdateAudioElementData(uint32_t id, roar_audio_block_t* data);
 
   // Executes one frame of audio rendering into the supplied output block.
-  int Render(oar_audio_block_t* output);
+  int Render(roar_audio_block_t* output);
 
  private:
-  RendererInstance(RendererEngine engine, oar_t* handle);
+  RendererInstance(RendererEngine engine, roar_t* handle);
 
   RendererEngine engine_;
-  oar_t* handle_;
+  roar_t* handle_;
 };
 
-// Bundles an allocated float vector with oar_audio_block_t referencing it.
+// Bundles an allocated float vector with roar_audio_block_t referencing it.
 struct AudioBlock {
   std::vector<float> data;
-  oar_audio_block_t block;
+  roar_audio_block_t block;
 
   // Allocates synthetic test audio data for input channels.
   static AudioBlock CreateInput(
@@ -95,33 +90,34 @@ struct AudioBlock {
 };
 
 // Creates an element configuration for channel-based audio.
-oar_audio_element_config_t CreateChannelConfig(oar_layout_t layout);
+roar_audio_element_config_t CreateChannelConfig(roar_layout_t layout);
 
 // Creates an element configuration for Higher-Order Ambisonics (HOA) audio.
-oar_audio_element_config_t CreateAmbisonicConfig(oar_hoa_t order);
+roar_audio_element_config_t CreateAmbisonicConfig(roar_hoa_t order);
 
 // Creates an element configuration for object-based audio.
-oar_audio_element_config_t CreateObjectConfig(uint32_t num_objects = 2);
+roar_audio_element_config_t CreateObjectConfig(uint32_t num_objects = 2);
 
 // Adds parameter indicating the element should be world-locked for binaural
 // rendering.
-void AddWorldLockedParameter(oar_audio_element_config_t& config);
+void AddWorldLockedParameter(roar_audio_element_config_t& config);
 
 // Generates polar position metadata for `num_pairs` (2 objects per pair)
 // distributed across azimuths.
-std::vector<oar_metadata_t> CreateObjectPairMetadatas(
+std::vector<roar_metadata_t> CreateObjectPairMetadatas(
     size_t num_pairs, uint32_t frame_size = kDefaultFrameSize);
 
 // Generates a sequence of head rotation metadata quaternions.
-std::vector<oar_metadata_t> CreateHeadRotationMetadatas(
+std::vector<roar_metadata_t> CreateHeadRotationMetadatas(
     uint32_t frame_size = kDefaultFrameSize);
 
 // Registers `num_pairs` object audio elements into `renderer`, associates their
 // initial metadata and input blocks, and returns the registered element IDs.
 std::vector<uint32_t> SetupObjectElements(
     RendererInstance& renderer, int group_id, size_t num_pairs,
-    const oar_audio_element_config_t& element_cfg,
-    oar_audio_block_t* input_block, absl::Span<const oar_metadata_t> metadatas);
+    const roar_audio_element_config_t& element_cfg,
+    roar_audio_block_t* input_block,
+    absl::Span<const roar_metadata_t> metadatas);
 
 }  // namespace roar_equivalence_testing
 

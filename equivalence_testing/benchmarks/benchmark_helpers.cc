@@ -20,19 +20,14 @@
 #include "absl/log/absl_check.h"
 #include "absl/types/span.h"
 #include "equivalence_testing/test_helpers.h"
-
-extern "C" {
-#include "include/oar.h"
-#include "include/oar_base.h"
-#include "include/oar_metadata.h"
-}
+#include "include/roar.h"
 
 namespace roar_equivalence_testing {
 
 std::unique_ptr<RendererInstance> RendererInstance::Create(
-    RendererEngine engine, const oar_config_t& config) {
-  oar_t* handle = (engine == RendererEngine::kOar) ? oar_create(&config)
-                                                   : roar_create(&config);
+    RendererEngine engine, const roar_config_t& config) {
+  roar_t* handle = (engine == RendererEngine::kOar) ? oar_create(&config)
+                                                    : roar_create(&config);
   if (!handle) {
     return nullptr;
   }
@@ -40,7 +35,7 @@ std::unique_ptr<RendererInstance> RendererInstance::Create(
       new RendererInstance(engine, handle));
 }
 
-RendererInstance::RendererInstance(RendererEngine engine, oar_t* handle)
+RendererInstance::RendererInstance(RendererEngine engine, roar_t* handle)
     : engine_(engine), handle_(handle) {}
 
 RendererInstance::~RendererInstance() {
@@ -59,21 +54,21 @@ int RendererInstance::AddAudioGroup() {
 }
 
 int RendererInstance::AddAudioElement(
-    uint32_t gid, uint32_t id, const oar_audio_element_config_t& config) {
+    uint32_t gid, uint32_t id, const roar_audio_element_config_t& config) {
   return (engine_ == RendererEngine::kOar)
              ? oar_add_audio_element(handle_, gid, id, &config)
              : roar_add_audio_element(handle_, gid, id, &config);
 }
 
 int RendererInstance::UpdateAudioElementMetadata(
-    uint32_t id, const oar_metadata_t& metadata) {
+    uint32_t id, const roar_metadata_t& metadata) {
   return (engine_ == RendererEngine::kOar)
              ? oar_update_audio_element_metadata(handle_, id, &metadata)
              : roar_update_audio_element_metadata(handle_, id, &metadata);
 }
 
 int RendererInstance::UpdateMetadata(uint32_t gid,
-                                     const oar_metadata_t& metadata) {
+                                     const roar_metadata_t& metadata) {
   return (engine_ == RendererEngine::kOar)
              ? oar_update_metadata(handle_, gid, &metadata)
              : roar_update_metadata(handle_, gid, &metadata);
@@ -86,13 +81,13 @@ int RendererInstance::EnableHeadTracking(bool enable) {
 }
 
 int RendererInstance::UpdateAudioElementData(uint32_t id,
-                                             oar_audio_block_t* data) {
+                                             roar_audio_block_t* data) {
   return (engine_ == RendererEngine::kOar)
              ? oar_update_audio_element_data(handle_, id, data)
              : roar_update_audio_element_data(handle_, id, data);
 }
 
-int RendererInstance::Render(oar_audio_block_t* output) {
+int RendererInstance::Render(roar_audio_block_t* output) {
   return (engine_ == RendererEngine::kOar) ? oar_render(handle_, output)
                                            : roar_render(handle_, output);
 }
@@ -122,44 +117,44 @@ AudioBlock AudioBlock::CreateOutput(uint32_t channels,
   return ab;
 }
 
-oar_audio_element_config_t CreateChannelConfig(oar_layout_t layout) {
-  oar_audio_element_config_t cfg = {};
-  cfg.type = ck_channel_based;
+roar_audio_element_config_t CreateChannelConfig(roar_layout_t layout) {
+  roar_audio_element_config_t cfg = {};
+  cfg.type = ck_roar_channel_based;
   cfg.cbc.layout = layout;
   return cfg;
 }
 
-oar_audio_element_config_t CreateAmbisonicConfig(oar_hoa_t order) {
-  oar_audio_element_config_t cfg = {};
-  cfg.type = ck_scene_based;
+roar_audio_element_config_t CreateAmbisonicConfig(roar_hoa_t order) {
+  roar_audio_element_config_t cfg = {};
+  cfg.type = ck_roar_scene_based;
   cfg.sbc.order = order;
   return cfg;
 }
 
-oar_audio_element_config_t CreateObjectConfig(uint32_t num_objects) {
-  oar_audio_element_config_t cfg = {};
-  cfg.type = ck_object_based;
+roar_audio_element_config_t CreateObjectConfig(uint32_t num_objects) {
+  roar_audio_element_config_t cfg = {};
+  cfg.type = ck_roar_object_based;
   cfg.obc.num_objects = num_objects;
   return cfg;
 }
 
-void AddWorldLockedParameter(oar_audio_element_config_t& config) {
+void AddWorldLockedParameter(roar_audio_element_config_t& config) {
   config.parameters.flags |=
-      def_parameter_set_flag_iamf_element_rendering_config;
+      ROAR_PARAMETER_SET_FLAG_IAMF_ELEMENT_RENDERING_CONFIG;
   config.parameters.element_rendering_config.headphones_rendering_mode =
-      ck_world_locked;
+      ck_roar_world_locked;
   config.parameters.element_rendering_config.binaural_filter_profile =
-      ck_ambient;
+      ck_roar_ambient;
 }
 
-std::vector<oar_metadata_t> CreateObjectPairMetadatas(size_t num_pairs,
-                                                      uint32_t frame_size) {
-  std::vector<oar_metadata_t> metadatas;
+std::vector<roar_metadata_t> CreateObjectPairMetadatas(size_t num_pairs,
+                                                       uint32_t frame_size) {
+  std::vector<roar_metadata_t> metadatas;
   metadatas.reserve(num_pairs);
   for (size_t i = 0; i < num_pairs; ++i) {
     const float azimuth0 = 10.0f * i;
     const float azimuth1 = -azimuth0;
-    std::vector<polar_t> positions = {
+    std::vector<roar_polar_t> positions = {
         {.azimuth = azimuth0, .elevation = 0.0f, .distance = 1.0f},
         {.azimuth = azimuth1, .elevation = 0.0f, .distance = 1.0f},
     };
@@ -168,7 +163,7 @@ std::vector<oar_metadata_t> CreateObjectPairMetadatas(size_t num_pairs,
   return metadatas;
 }
 
-std::vector<oar_metadata_t> CreateHeadRotationMetadatas(uint32_t frame_size) {
+std::vector<roar_metadata_t> CreateHeadRotationMetadatas(uint32_t frame_size) {
   struct Rotation {
     float w, x, y, z;
   };
@@ -179,11 +174,11 @@ std::vector<oar_metadata_t> CreateHeadRotationMetadatas(uint32_t frame_size) {
       {0.7071068f, 0.0f, 0.0f, 0.7071068f},
       {-0.7f, 0.3f, -0.2f, 0.6f},
   };
-  std::vector<oar_metadata_t> metadata_list;
+  std::vector<roar_metadata_t> metadata_list;
   metadata_list.reserve(rotations.size());
   for (const auto& rot : rotations) {
-    oar_metadata_t meta = {};
-    meta.type = ck_metadata_head_rotation;
+    roar_metadata_t meta = {};
+    meta.type = ck_roar_metadata_head_rotation;
     meta.head_rotation.w = rot.w;
     meta.head_rotation.x = rot.x;
     meta.head_rotation.y = rot.y;
@@ -196,9 +191,9 @@ std::vector<oar_metadata_t> CreateHeadRotationMetadatas(uint32_t frame_size) {
 
 std::vector<uint32_t> SetupObjectElements(
     RendererInstance& renderer, int group_id, size_t num_pairs,
-    const oar_audio_element_config_t& element_cfg,
-    oar_audio_block_t* input_block,
-    absl::Span<const oar_metadata_t> metadatas) {
+    const roar_audio_element_config_t& element_cfg,
+    roar_audio_block_t* input_block,
+    absl::Span<const roar_metadata_t> metadatas) {
   ABSL_CHECK_EQ(metadatas.size(), num_pairs);
 
   std::vector<uint32_t> element_ids;

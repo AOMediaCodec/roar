@@ -20,7 +20,7 @@ use std::ops::{Add, Mul, Sub};
 pub struct Distance(f32);
 
 /// Represents a 3D spherical polar coordinate centered on the listener, equivalent of C API
-/// `polar_t`.
+/// `roar_polar_t`.
 ///
 /// Coordinate system details:
 /// - `azimuth`: Horizontal angle in degrees. Range: `[-180.0, 180.0]`. 0° = front, 90° = left, -90°
@@ -35,7 +35,7 @@ pub struct PolarCoordinate {
     distance: Distance,
 }
 
-/// Represents a 3D cartesian coordinate, equivalent of C API `cartesian_t`.
+/// Represents a 3D cartesian coordinate, equivalent of C API `roar_cartesian_t`.
 ///
 /// Uses the ADM object coordinate system centered on the listener:
 /// - **X-axis**: Left (negative) / Right (positive).

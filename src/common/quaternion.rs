@@ -13,7 +13,7 @@
 use super::definitions::OarError;
 use std::ops::Mul;
 
-/// Represents a 3D spatial rotation quaternion, equivalent of C API `quaternion_t`.
+/// Represents a 3D spatial rotation quaternion, equivalent of C API `roar_quaternion_t`.
 ///
 /// The quaternion head tracking input uses the ADM object coordinate system to orient the
 /// listener's head:

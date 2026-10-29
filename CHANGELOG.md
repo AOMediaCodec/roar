@@ -19,14 +19,18 @@ Changes in the repo not yet in a release will appear here.
 
 ### [Added]
 
--   Split the main library entrypoint into `aom_roar` into `aom_roar` (for C++)
-    and `aom_roar_rlib` (for Rust) to allow Bazel integration with either Rust
-    or C++ and to allow the Rust integration tests to run with Bazel.
+-   Added standalone public C/C++ header `include/roar.h` and Bazel `cc_library`
+    target `include:roar` so C/C++ consumers do not need manual forward
+    declarations or `liboar` headers. Bazel Rust users could still use
+    `src:aom_roar`.
 
 ### [Changed]
 
+-   Prefixed C API types, enum constants, and macros in `include/roar.h` (and
+    `aom_roar::c_types`) with `roar_` / `ck_roar_` / `ROAR_` to match the
+    `roar_*` C API functions and prevent symbol collisions with `liboar`.
 -   Separated `Layout` type into `InputLayout` and `OutputLayout` for the Rust
-    API. The C API remains unchanged.
+    API.
 -   Changed the way the different types of filter coefficients and matrices are
     stored in the binary in order to shrink the binary size. Effected data
     include SH HRIR filters for binaural rendering, matrices for channel-to-

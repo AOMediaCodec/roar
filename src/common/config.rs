@@ -20,12 +20,12 @@ use std::num::NonZeroUsize;
 /// Number of channels in an audio element or layout or similar.
 pub type ChannelCount = NonZeroUsize;
 
-/// Configuration for creating the ROAR instance, equivalent of C API `oar_config_t`.
+/// Configuration for creating the ROAR instance, equivalent of C API `roar_config_t`.
 #[derive(Debug, Clone, Copy)]
 pub struct Config {
     /// The target output layout.
     target_layout: OutputLayout,
-    /// Number of samples per channel per render call.
+    /// Number of samples per channel per render call, [32, 16384].
     samples_per_channel: Samples,
     /// The sample rate in Hz.
     sample_rate: SampleRate,
@@ -154,7 +154,7 @@ impl ObjectBasedConfig {
     }
 }
 
-/// Configuration for an audio element, equivalent of C API `oar_audio_element_config_t`.
+/// Configuration for an audio element, equivalent of C API `roar_audio_element_config_t`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AudioElementConfig {
     /// Channel-based layout configuration.

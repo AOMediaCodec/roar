@@ -14,19 +14,12 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <string>
 #include <vector>
 
 #include "equivalence_testing/test_helpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-
-extern "C" {
-#include "include/animation.h"
-#include "include/oar.h"
-#include "include/oar_base.h"
-#include "include/oar_metadata.h"
-}
+#include "include/roar.h"
 
 namespace roar_equivalence_testing {
 namespace {
@@ -42,16 +35,15 @@ const uint32_t samples_per_channel = 1024;
 const uint32_t sampling_rate = 48000;
 
 void RunGainsTest(
-    const oar_config_t& config,
-    const oar_audio_element_config_t& element_config,
-    const std::vector<std::optional<oar_metadata_t>>& metadata_sequence) {
+    roar_config_t config, const roar_audio_element_config_t& element_config,
+    const std::vector<std::optional<roar_metadata_t>>& metadata_sequence) {
   // Wrap the C pointers in unique_ptrs with custom deleters for automatic
   // memory management.
-  using OarPtr = std::unique_ptr<oar_t, decltype(&oar_destroy)>;
+  using OarPtr = std::unique_ptr<roar_t, decltype(&oar_destroy)>;
   OarPtr oar(oar_create(&config), oar_destroy);
   ASSERT_THAT(oar, NotNull());
 
-  using RoarPtr = std::unique_ptr<oar_t, decltype(&roar_destroy)>;
+  using RoarPtr = std::unique_ptr<roar_t, decltype(&roar_destroy)>;
   RoarPtr roar(roar_create(&config), roar_destroy);
   ASSERT_THAT(roar, NotNull());
 
@@ -78,7 +70,9 @@ void RunGainsTest(
 
   // Feed input audio for the element. We will render multiple chunks.
   const uint32_t input_channels =
-      oar_get_number_of_audio_element_channels(oar.get(), element_id);
+      roar_get_number_of_audio_element_channels(roar.get(), element_id);
+  ASSERT_EQ(oar_get_number_of_audio_element_channels(oar.get(), element_id),
+            input_channels);
   std::vector<std::vector<float>> input_chunks;
   const size_t num_chunks = metadata_sequence.size();
   input_chunks.reserve(num_chunks);
@@ -95,20 +89,20 @@ void RunGainsTest(
   ASSERT_EQ(c_output_channels, r_output_channels);
 
   auto c_output = GetOutputBuffer(c_samples_per_channel, c_output_channels);
-  oar_audio_block_t c_output_block = {};
+  roar_audio_block_t c_output_block = {};
   c_output_block.channels = c_output_channels;
   c_output_block.samples_per_channel = c_samples_per_channel;
   c_output_block.data = c_output.data();
 
   auto r_output = GetOutputBuffer(r_samples_per_channel, r_output_channels);
-  oar_audio_block_t r_output_block = {};
+  roar_audio_block_t r_output_block = {};
   r_output_block.channels = r_output_channels;
   r_output_block.samples_per_channel = r_samples_per_channel;
   r_output_block.data = r_output.data();
 
   for (size_t chunk = 0; chunk < num_chunks; ++chunk) {
     // 1. Update element data
-    oar_audio_block_t input_block = {};
+    roar_audio_block_t input_block = {};
     input_block.channels = input_channels;
     input_block.samples_per_channel = c_samples_per_channel;
     input_block.data = input_chunks[chunk].data();
@@ -150,18 +144,18 @@ void RunGainsTest(
 }
 
 TEST(ElementGainTest, ConstantGain) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_stereo;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_stereo;
 
   // We will run 3 chunks. Constant gain: -6dB.
   // Gain ID = 1.
-  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+  std::vector<std::optional<roar_metadata_t>> metadata_seq = {
       CreateConstantGainMetadata(1, -6.0f, samples_per_channel),
       CreateConstantGainMetadata(1, -6.0f, samples_per_channel),
       CreateConstantGainMetadata(1, -6.0f, samples_per_channel),
@@ -171,14 +165,14 @@ TEST(ElementGainTest, ConstantGain) {
 }
 
 TEST(ElementGainTest, MultipleGain) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_stereo;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_stereo;
 
   // We will run 2 chunks.
   // In each chunk we have a different per-sample gain vector.
@@ -192,7 +186,7 @@ TEST(ElementGainTest, MultipleGain) {
         -10.0f * (1.0f - static_cast<float>(i) / samples_per_channel);
   }
 
-  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+  std::vector<std::optional<roar_metadata_t>> metadata_seq = {
       CreateMultipleGainMetadata(1, gains_chunk0, samples_per_channel),
       CreateMultipleGainMetadata(1, gains_chunk1, samples_per_channel),
   };
@@ -201,20 +195,20 @@ TEST(ElementGainTest, MultipleGain) {
 }
 
 TEST(ElementGainTest, AnimatedGainLinear) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_stereo;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_stereo;
 
   // Linear animation from 0dB to -12dB over 3 chunks.
   const uint32_t total_duration = 3 * samples_per_channel;
 
-  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
-      CreateAnimatedGainMetadata(1, ck_animation_type_linear, 0.0f, -12.0f,
+  std::vector<std::optional<roar_metadata_t>> metadata_seq = {
+      CreateAnimatedGainMetadata(1, ck_roar_animation_type_linear, 0.0f, -12.0f,
                                  0.0f, 0.0f, total_duration),
       std::nullopt,  // No follow-up metadata for chunks 2 and 3.
       std::nullopt,
@@ -224,21 +218,21 @@ TEST(ElementGainTest, AnimatedGainLinear) {
 }
 
 TEST(ElementGainTest, AnimatedGainStep) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_stereo;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_stereo;
 
   // Step animation at -6dB over 3 chunks.
   const uint32_t total_duration = 3 * samples_per_channel;
 
-  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
-      CreateAnimatedGainMetadata(1, ck_animation_type_step, -6.0f, 0.0f, 0.0f,
-                                 0.0f, total_duration),
+  std::vector<std::optional<roar_metadata_t>> metadata_seq = {
+      CreateAnimatedGainMetadata(1, ck_roar_animation_type_step, -6.0f, 0.0f,
+                                 0.0f, 0.0f, total_duration),
       std::nullopt,  // No follow-up metadata for chunks 2 and 3.
       std::nullopt,
   };
@@ -247,21 +241,21 @@ TEST(ElementGainTest, AnimatedGainStep) {
 }
 
 TEST(ElementGainTest, AnimatedGainBezier) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_stereo;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_stereo;
 
   // Bezier animation from 0dB to -12dB, with control -6dB at 50% time, over 3
   // chunks.
   const uint32_t total_duration = 3 * samples_per_channel;
 
-  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
-      CreateAnimatedGainMetadata(1, ck_animation_type_bezier, 0.0f, -12.0f,
+  std::vector<std::optional<roar_metadata_t>> metadata_seq = {
+      CreateAnimatedGainMetadata(1, ck_roar_animation_type_bezier, 0.0f, -12.0f,
                                  -6.0f, 0.5f, total_duration),
       std::nullopt,  // No follow-up metadata for chunks 2 and 3.
       std::nullopt,
@@ -271,20 +265,20 @@ TEST(ElementGainTest, AnimatedGainBezier) {
 }
 
 TEST(ElementGainTest, ConstantGainDurationZeroIgnored) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_stereo;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_stereo;
   config.samples_per_channel = samples_per_channel;
   config.sampling_rate = sampling_rate;
 
-  oar_audio_element_config_t element_config = {};
-  element_config.type = ck_channel_based;
-  element_config.cbc.layout = ck_oar_layout_stereo;
+  roar_audio_element_config_t element_config = {};
+  element_config.type = ck_roar_channel_based;
+  element_config.cbc.layout = ck_roar_layout_stereo;
 
   // Chunk 0: Default gain (0dB)
   // Chunk 1: Update to -6dB with duration 0. This should be IGNORED.
   //          Output should still be 0dB.
   // Chunk 2: No update. Output should still be 0dB.
-  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+  std::vector<std::optional<roar_metadata_t>> metadata_seq = {
       std::nullopt,
       CreateConstantGainMetadata(1, -6.0f, 0),
       std::nullopt,

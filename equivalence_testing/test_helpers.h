@@ -18,56 +18,58 @@
 #include <string>
 #include <vector>
 
-extern "C" {
-#include "include/animation.h"
-#include "include/oar.h"
-#include "include/oar_base.h"
-#include "include/oar_metadata.h"
+#include "include/roar.h"
 
-// Rust port declarations (`roar_*`) directly exported by roar (`ffi.rs`)
-oar_t* roar_create(const oar_config_t* config);
-void roar_destroy(oar_t* oar);
-int roar_add_audio_group(oar_t* oar);
-int roar_add_audio_element(oar_t* oar, uint32_t gid, uint32_t id,
-                           const oar_audio_element_config_t* config);
-int roar_remove_audio_element(oar_t* oar, uint32_t id);
-int roar_update_audio_element_metadata(oar_t* oar, uint32_t id,
-                                       const oar_metadata_t* metadata);
-int roar_update_audio_element_data(oar_t* oar, uint32_t id,
-                                   oar_audio_block_t* data);
-int roar_set_metadata_unit_to_process(oar_t* oar, oar_metadata_type_t type,
-                                      uint32_t samples);
-int roar_update_metadata(oar_t* oar, uint32_t gid,
-                         const oar_metadata_t* metadata);
-int roar_render(oar_t* oar, oar_audio_block_t* output);
-int roar_enable_loudness_processor(oar_t* oar, int enable);
-int roar_set_loudness(oar_t* oar, uint32_t gid, float loudness,
-                      float target_loudness);
-int roar_enable_limiter(oar_t* oar, int enable);
-int roar_flush(oar_t* oar, oar_audio_block_t* output);
-int roar_set_limiter_threshold(oar_t* oar, float threshold_db);
-int roar_get_limiter_delay(const oar_t* oar);
-int roar_enable_head_tracking(oar_t* oar, int enable);
-uint32_t roar_get_samples_per_channel(oar_t* oar);
-uint32_t roar_get_sampling_rate(oar_t* oar);
-uint32_t roar_get_number_of_audio_element_channels(oar_t* oar, uint32_t id);
-uint32_t roar_get_number_of_output_channels(oar_t* oar);
-uint32_t roar_get_number_of_audio_elements(oar_t* oar);
-}
+extern "C" {
+// C reference declarations (`oar_*`) exported by `liboar`, declared using
+// ROAR's ABI-compatible C types so equivalence tests and benchmarks can pass
+// `roar_*` structs directly to both libraries without including `liboar`
+// headers. Exact C ABI layout parity between `roar.h` and `liboar` is verified
+// at compile time in `abi_equivalence_test.cc`.
+roar_t* oar_create(const roar_config_t* config);
+void oar_destroy(roar_t* oar);
+int oar_add_audio_group(roar_t* oar);
+int oar_add_audio_element(roar_t* oar, uint32_t gid, uint32_t id,
+                          const roar_audio_element_config_t* config);
+int oar_remove_audio_element(roar_t* oar, uint32_t id);
+int oar_update_audio_element_metadata(roar_t* oar, uint32_t id,
+                                      const roar_metadata_t* metadata);
+int oar_update_audio_element_data(roar_t* oar, uint32_t id,
+                                  roar_audio_block_t* data);
+int oar_set_metadata_unit_to_process(roar_t* oar, roar_metadata_type_t type,
+                                     uint32_t samples);
+int oar_update_metadata(roar_t* oar, uint32_t gid,
+                        const roar_metadata_t* metadata);
+int oar_render(roar_t* oar, roar_audio_block_t* output);
+int oar_flush(roar_t* oar, roar_audio_block_t* output);
+int oar_enable_loudness_processor(roar_t* oar, int enable);
+int oar_set_loudness(roar_t* oar, uint32_t gid, float loudness,
+                     float target_loudness);
+int oar_enable_limiter(roar_t* oar, int enable);
+int oar_set_limiter_threshold(roar_t* oar, float threshold_db);
+int oar_get_limiter_delay(const roar_t* oar);
+int oar_enable_head_tracking(roar_t* oar, int enable);
+uint32_t oar_get_samples_per_channel(const roar_t* oar);
+uint32_t oar_get_sampling_rate(const roar_t* oar);
+uint32_t oar_get_number_of_audio_element_channels(const roar_t* oar,
+                                                  uint32_t id);
+uint32_t oar_get_number_of_output_channels(const roar_t* oar);
+uint32_t oar_get_number_of_audio_elements(const roar_t* oar);
+}  // extern "C"
 
 namespace roar_equivalence_testing {
 
 // Returns all valid ambisonic orders.
-std::vector<oar_hoa_t> GetAllAmbisonicOrders();
+std::vector<roar_hoa_t> GetAllAmbisonicOrders();
 
 // Returns all valid channel-based input layouts.
-std::vector<oar_layout_t> GetAllChannelBasedInputs();
+std::vector<roar_layout_t> GetAllChannelBasedInputs();
 
 // Returns all valid output layouts (including binaural).
-std::vector<oar_layout_t> GetAllOutputLayouts();
+std::vector<roar_layout_t> GetAllOutputLayouts();
 
 // Returns all valid output layouts, wrapped into the config.
-std::vector<oar_config_t> GetAllOutputConfigs(
+std::vector<roar_config_t> GetAllOutputConfigs(
     uint32_t samples_per_channel = 1024, uint32_t sampling_rate = 48000);
 
 // Gets a vector of input data with sine waves on each channel.
@@ -79,42 +81,40 @@ std::vector<float> GetOutputBuffer(size_t samples_per_channel,
                                    size_t num_channels);
 
 // Creates an IAMF downmix mode metadata block.
-oar_metadata_t CreateDownmixModeMetadata(int mode, uint32_t duration);
+roar_metadata_t CreateDownmixModeMetadata(int mode, uint32_t duration);
 
 // Creates a metadata instance to configure polar object-based element.
-oar_metadata_t CreateObjectMetadata(const std::vector<polar_t>& positions,
-                                    uint32_t duration);
+roar_metadata_t CreateObjectMetadata(const std::vector<roar_polar_t>& positions,
+                                     uint32_t duration);
 
 // Creates a metadata instance to configure cartesian object-based element.
-oar_metadata_t CreateObjectMetadata(const std::vector<cartesian_t>& positions,
-                                    uint32_t duration);
+roar_metadata_t CreateObjectMetadata(
+    const std::vector<roar_cartesian_t>& positions, uint32_t duration);
 
 // Creates a metadata instance to configure animated polar object(s).
-oar_metadata_t CreateAnimatedObjectMetadata(
-    const std::vector<animated_polar_t>& positions, uint32_t duration);
+roar_metadata_t CreateAnimatedObjectMetadata(
+    const std::vector<roar_animated_polar_t>& positions, uint32_t duration);
 
 // Creates a metadata instance to configure animated cartesian object(s).
-oar_metadata_t CreateAnimatedObjectMetadata(
-    const std::vector<animated_cartesian_t>& positions, uint32_t duration);
+roar_metadata_t CreateAnimatedObjectMetadata(
+    const std::vector<roar_animated_cartesian_t>& positions, uint32_t duration);
 
 // Creates a metadata instance to configure constant gain.
-oar_metadata_t CreateConstantGainMetadata(uint32_t id, float gain_db,
-                                          uint32_t duration);
+roar_metadata_t CreateConstantGainMetadata(uint32_t id, float gain_db,
+                                           uint32_t duration);
 
 // Creates a metadata instance to configure multiple gains.
-oar_metadata_t CreateMultipleGainMetadata(uint32_t id,
-                                          const std::vector<float>& gains_db,
-                                          uint32_t duration);
+roar_metadata_t CreateMultipleGainMetadata(uint32_t id,
+                                           const std::vector<float>& gains_db,
+                                           uint32_t duration);
 
 // Creates a metadata instance to configure animated gain.
-oar_metadata_t CreateAnimatedGainMetadata(uint32_t id,
-                                          animation_type_t anim_type,
-                                          float start, float end, float control,
-                                          float control_relative_time,
-                                          uint32_t duration);
+roar_metadata_t CreateAnimatedGainMetadata(
+    uint32_t id, roar_animation_type_t anim_type, float start, float end,
+    float control, float control_relative_time, uint32_t duration);
 
 // Creates a debug string for the audio element config.
-std::string Describe(oar_audio_element_config_t element_config);
+std::string Describe(const roar_audio_element_config_t& element_config);
 
 }  // namespace roar_equivalence_testing
 #endif  // EQUIVALENCE_TESTING_TEST_HELPERS_H_

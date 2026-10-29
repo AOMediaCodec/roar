@@ -20,7 +20,7 @@ mod test {
         create_flat_sine_input, create_object_based_config, create_planar_buffer_mut,
         create_planar_buffer_ref, create_sine_input_channels, rms, TestRoar,
     };
-    use aom_roar::c_types::{oar_audio_block_t, oar_headphones_rendering_mode_t, oar_layout_t};
+    use aom_roar::c_types::{roar_audio_block_t, roar_headphones_rendering_mode_t, roar_layout_t};
     use aom_roar::ffi::*;
     use aom_roar::{
         AudioElementConfig, BinauralFilterProfile, ChannelBasedConfig, Config, DownmixInfo,
@@ -44,9 +44,10 @@ mod test {
         let output_channels: usize = 2;
 
         // Create test ROAR instance.
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
+        let oar =
+            TestRoar::new(roar_layout_t::ck_roar_layout_stereo, frame_size as u32, sample_rate);
         // Create audio group and audio element.
-        let element_cfg = create_channel_based_config(oar_layout_t::ck_oar_layout_51);
+        let element_cfg = create_channel_based_config(roar_layout_t::ck_roar_layout_51);
         // SAFETY: `oar.ptr()` is a valid pointer initialized by `TestRoar::new`.
         let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
@@ -69,14 +70,14 @@ mod test {
         let freq: f32 = 440.0;
         let mut input_buffer =
             create_flat_sine_input(input_channels, frame_size, amplitude, freq, sample_rate as f32);
-        let mut input_data = oar_audio_block_t {
+        let mut input_data = roar_audio_block_t {
             data: input_buffer.as_mut_ptr(),
             channels: input_channels as u32,
             samples_per_channel: frame_size as u32,
         };
         // Create output audio block.
         let mut output_buffer = vec![0.0f32; output_channels * frame_size];
-        let mut output_data = oar_audio_block_t {
+        let mut output_data = roar_audio_block_t {
             data: output_buffer.as_mut_ptr(),
             channels: output_channels as u32,
             samples_per_channel: frame_size as u32,
@@ -104,9 +105,10 @@ mod test {
         let channels: usize = 2;
 
         // Create test ROAR instance.
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
+        let oar =
+            TestRoar::new(roar_layout_t::ck_roar_layout_stereo, frame_size as u32, sample_rate);
         // Create audio group and audio element.
-        let element_cfg = create_channel_based_config(oar_layout_t::ck_oar_layout_stereo);
+        let element_cfg = create_channel_based_config(roar_layout_t::ck_roar_layout_stereo);
         // SAFETY: `oar.ptr()` is a valid pointer initialized by `TestRoar::new`.
         let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
@@ -122,14 +124,14 @@ mod test {
         let right_fill_val: f32 = 0.75;
         input_buffer[..frame_size].fill(left_fill_val);
         input_buffer[frame_size..].fill(right_fill_val);
-        let mut input_data = oar_audio_block_t {
+        let mut input_data = roar_audio_block_t {
             data: input_buffer.as_mut_ptr(),
             channels: channels as u32,
             samples_per_channel: frame_size as u32,
         };
         // Create output audio block.
         let mut output_buffer = vec![0.0f32; channels * frame_size];
-        let mut output_data = oar_audio_block_t {
+        let mut output_data = roar_audio_block_t {
             data: output_buffer.as_mut_ptr(),
             channels: channels as u32,
             samples_per_channel: frame_size as u32,
@@ -159,11 +161,11 @@ mod test {
         let output_channels: usize = 2;
         let element_id: u32 = 1;
         let baseline_oar =
-            TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
+            TestRoar::new(roar_layout_t::ck_roar_layout_stereo, frame_size as u32, sample_rate);
         let updated_oar =
-            TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
+            TestRoar::new(roar_layout_t::ck_roar_layout_stereo, frame_size as u32, sample_rate);
         let element_cfg =
-            create_channel_based_config_with_downmix(oar_layout_t::ck_oar_layout_512, 0);
+            create_channel_based_config_with_downmix(roar_layout_t::ck_roar_layout_512, 0);
         let baseline_gid = unsafe { roar_add_audio_group(baseline_oar.ptr()) };
         let updated_gid = unsafe { roar_add_audio_group(updated_oar.ptr()) };
         assert!(baseline_gid >= 0);
@@ -193,24 +195,24 @@ mod test {
         let mut baseline_input =
             create_flat_sine_input(input_channels, frame_size, 0.8, 330.0, sample_rate as f32);
         let mut updated_input = baseline_input.clone();
-        let mut baseline_input_block = oar_audio_block_t {
+        let mut baseline_input_block = roar_audio_block_t {
             data: baseline_input.as_mut_ptr(),
             channels: input_channels as u32,
             samples_per_channel: frame_size as u32,
         };
-        let mut updated_input_block = oar_audio_block_t {
+        let mut updated_input_block = roar_audio_block_t {
             data: updated_input.as_mut_ptr(),
             channels: input_channels as u32,
             samples_per_channel: frame_size as u32,
         };
         let mut baseline_output = vec![0.0f32; output_channels * frame_size];
         let mut updated_output = vec![0.0f32; output_channels * frame_size];
-        let mut baseline_output_block = oar_audio_block_t {
+        let mut baseline_output_block = roar_audio_block_t {
             data: baseline_output.as_mut_ptr(),
             channels: output_channels as u32,
             samples_per_channel: frame_size as u32,
         };
-        let mut updated_output_block = oar_audio_block_t {
+        let mut updated_output_block = roar_audio_block_t {
             data: updated_output.as_mut_ptr(),
             channels: output_channels as u32,
             samples_per_channel: frame_size as u32,
@@ -255,9 +257,9 @@ mod test {
         let sample_rate: u32 = 48000;
         let channels: usize = 8;
         let element_id: u32 = 1;
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_512, frame_size as u32, sample_rate);
+        let oar = TestRoar::new(roar_layout_t::ck_roar_layout_512, frame_size as u32, sample_rate);
         let element_cfg =
-            create_channel_based_config_with_downmix(oar_layout_t::ck_oar_layout_512, 0);
+            create_channel_based_config_with_downmix(roar_layout_t::ck_roar_layout_512, 0);
         let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
         assert_eq!(
@@ -265,13 +267,13 @@ mod test {
             0
         );
         let mut input_buffer = vec![0.5f32; channels * frame_size];
-        let mut input_block = oar_audio_block_t {
+        let mut input_block = roar_audio_block_t {
             data: input_buffer.as_mut_ptr(),
             channels: channels as u32,
             samples_per_channel: frame_size as u32,
         };
         let mut output_buffer = vec![0.0f32; channels * frame_size];
-        let mut output_block = oar_audio_block_t {
+        let mut output_block = roar_audio_block_t {
             data: output_buffer.as_mut_ptr(),
             channels: channels as u32,
             samples_per_channel: frame_size as u32,
@@ -299,9 +301,10 @@ mod test {
         let input_channels: usize = 6;
         let output_channels: usize = 2;
         let element_id: u32 = 1;
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
+        let oar =
+            TestRoar::new(roar_layout_t::ck_roar_layout_stereo, frame_size as u32, sample_rate);
         let element_cfg =
-            create_channel_based_config_with_downmix(oar_layout_t::ck_oar_layout_51, 0);
+            create_channel_based_config_with_downmix(roar_layout_t::ck_roar_layout_51, 0);
         let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
         assert_eq!(
@@ -312,13 +315,13 @@ mod test {
         // `delta`.
         let mut input_buffer = vec![0.0f32; input_channels * frame_size];
         input_buffer[4 * frame_size..5 * frame_size].fill(1.0);
-        let mut input_block = oar_audio_block_t {
+        let mut input_block = roar_audio_block_t {
             data: input_buffer.as_mut_ptr(),
             channels: input_channels as u32,
             samples_per_channel: frame_size as u32,
         };
         let mut output_buffer = vec![0.0f32; output_channels * frame_size];
-        let mut output_block = oar_audio_block_t {
+        let mut output_block = roar_audio_block_t {
             data: output_buffer.as_mut_ptr(),
             channels: output_channels as u32,
             samples_per_channel: frame_size as u32,
@@ -342,7 +345,7 @@ mod test {
     /// accepted and ignored (`0`).
     #[gtest]
     fn ffi_downmix_mode_update_on_binaural_obr_element_returns_ok() {
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_binaural, 256, 48000);
+        let oar = TestRoar::new(roar_layout_t::ck_roar_layout_binaural, 256, 48000);
         let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
         let element_cfg = create_object_based_config(1);
@@ -357,8 +360,8 @@ mod test {
         expect_that!(meta_ret, eq(0));
     }
 
-    /// Verifies that a `ck_world_locked_restricted` `5.1` channel element with `downmix_info` on
-    /// binaural output uses the Downmix renderer and applies dynamic downmix mode updates.
+    /// Verifies that a `ck_roar_world_locked_restricted` `5.1` channel element with `downmix_info`
+    /// on binaural output uses the Downmix renderer and applies dynamic downmix mode updates.
     #[gtest]
     fn ffi_downmix_mode_update_on_binaural_world_locked_restricted_51_applies_mode() {
         let frame_size: usize = 32;
@@ -367,11 +370,11 @@ mod test {
         let output_channels: usize = 2;
         let element_id: u32 = 1;
         let oar =
-            TestRoar::new(oar_layout_t::ck_oar_layout_binaural, frame_size as u32, sample_rate);
+            TestRoar::new(roar_layout_t::ck_roar_layout_binaural, frame_size as u32, sample_rate);
         let element_cfg = create_channel_based_config_with_downmix_and_headphones_mode(
-            oar_layout_t::ck_oar_layout_51,
+            roar_layout_t::ck_roar_layout_51,
             0,
-            oar_headphones_rendering_mode_t::ck_world_locked_restricted,
+            roar_headphones_rendering_mode_t::ck_roar_world_locked_restricted,
         );
         let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
@@ -381,13 +384,13 @@ mod test {
         );
         let mut input_buffer = vec![0.0f32; input_channels * frame_size];
         input_buffer[4 * frame_size..5 * frame_size].fill(1.0);
-        let mut input_block = oar_audio_block_t {
+        let mut input_block = roar_audio_block_t {
             data: input_buffer.as_mut_ptr(),
             channels: input_channels as u32,
             samples_per_channel: frame_size as u32,
         };
         let mut output_buffer = vec![0.0f32; output_channels * frame_size];
-        let mut output_block = oar_audio_block_t {
+        let mut output_block = roar_audio_block_t {
             data: output_buffer.as_mut_ptr(),
             channels: output_channels as u32,
             samples_per_channel: frame_size as u32,

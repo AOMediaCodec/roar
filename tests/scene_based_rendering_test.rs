@@ -18,7 +18,7 @@ mod test {
         create_flat_sine_input, create_planar_buffer_mut, create_planar_buffer_ref,
         create_scene_based_config, create_sine_input_channels, rms, TestRoar,
     };
-    use aom_roar::c_types::{oar_audio_block_t, oar_hoa_t, oar_layout_t};
+    use aom_roar::c_types::{roar_audio_block_t, roar_hoa_t, roar_layout_t};
     use aom_roar::ffi::*;
     use aom_roar::{
         AudioElementConfig, Config, HighOrderAmbisonics, OutputLayout, RoarRenderer, SampleRate,
@@ -42,9 +42,10 @@ mod test {
         let element_id: u32 = 1;
 
         // Create test ROAR instance.
-        let oar = TestRoar::new(oar_layout_t::ck_oar_layout_stereo, frame_size as u32, sample_rate);
+        let oar =
+            TestRoar::new(roar_layout_t::ck_roar_layout_stereo, frame_size as u32, sample_rate);
         // Create audio group and audio element.
-        let element_cfg = create_scene_based_config(oar_hoa_t::ck_oar_1oa);
+        let element_cfg = create_scene_based_config(roar_hoa_t::ck_roar_1oa);
         // SAFETY: `oar.ptr()` is a valid pointer initialized by `TestRoar::new`.
         let group_id = unsafe { roar_add_audio_group(oar.ptr()) };
         assert!(group_id >= 0);
@@ -63,14 +64,14 @@ mod test {
         let freq: f32 = 440.0;
         let mut input_buffer =
             create_flat_sine_input(input_channels, frame_size, amplitude, freq, sample_rate as f32);
-        let mut input_data = oar_audio_block_t {
+        let mut input_data = roar_audio_block_t {
             data: input_buffer.as_mut_ptr(),
             channels: input_channels as u32,
             samples_per_channel: frame_size as u32,
         };
         // Create output audio block.
         let mut output_buffer = vec![0.0f32; output_channels * frame_size];
-        let mut output_data = oar_audio_block_t {
+        let mut output_data = roar_audio_block_t {
             data: output_buffer.as_mut_ptr(),
             channels: output_channels as u32,
             samples_per_channel: frame_size as u32,

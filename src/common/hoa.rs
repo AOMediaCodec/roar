@@ -12,7 +12,7 @@
 
 use crate::common::definitions::ChannelCount;
 
-/// High Order Ambisonics (HOA) orders, equivalent of C API `oar_hoa_t`.
+/// High Order Ambisonics (HOA) orders, equivalent of C API `roar_hoa_t`.
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HighOrderAmbisonics {

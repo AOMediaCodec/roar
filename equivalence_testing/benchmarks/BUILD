@@ -12,7 +12,7 @@ cc_library(
         "@abseil-cpp//absl/log:absl_check",
         "@abseil-cpp//absl/types:span",
         "@aom-roar//equivalence_testing:test_helpers",
-        "@oar",
+        "@aom-roar//include:roar",
     ],
 )
 
@@ -26,7 +26,7 @@ cc_test(
         "@abseil-cpp//absl/log:globals",
         "@abseil-cpp//absl/types:span",
         "@aom-roar//equivalence_testing:test_helpers",
+        "@aom-roar//include:roar",
         "@google_benchmark//:benchmark_main",
-        "@oar",
     ],
 )

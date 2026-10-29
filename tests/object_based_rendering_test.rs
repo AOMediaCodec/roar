@@ -19,7 +19,7 @@ mod test {
         create_planar_buffer_ref, create_polar_position_metadata, create_polar_positions,
         create_sine_input_channels, rms, TestRoar,
     };
-    use aom_roar::c_types::{oar_audio_block_t, oar_layout_t, oar_metadata_type_t};
+    use aom_roar::c_types::{roar_audio_block_t, roar_layout_t, roar_metadata_type_t};
     use aom_roar::ffi::*;
     use aom_roar::{
         AudioElementConfig, Config, OarError, ObjectBasedConfig, OutputLayout, RoarRenderer,
@@ -32,7 +32,7 @@ mod test {
 
     /// Creates a C FFI `TestRoar` instance with a group and object-based audio element registered.
     fn create_ffi_object_renderer(
-        layout: oar_layout_t,
+        layout: roar_layout_t,
         samples_per_channel: Samples,
         sample_rate: SampleRate,
         element_id: u32,
@@ -83,7 +83,7 @@ mod test {
         let element_id: u32 = 10;
 
         let oar = create_ffi_object_renderer(
-            oar_layout_t::ck_oar_layout_stereo,
+            roar_layout_t::ck_roar_layout_stereo,
             frame_size,
             sample_rate,
             element_id,
@@ -100,13 +100,13 @@ mod test {
             440.0,
             sample_rate.value() as f32,
         );
-        let mut input_data = oar_audio_block_t {
+        let mut input_data = roar_audio_block_t {
             data: input_buffer.as_mut_ptr(),
             channels: num_objects as u32,
             samples_per_channel: frame_size.value(),
         };
         let mut output_buffer = vec![0.0f32; output_channels * frame_size.value() as usize];
-        let mut output_data = oar_audio_block_t {
+        let mut output_data = roar_audio_block_t {
             data: output_buffer.as_mut_ptr(),
             channels: output_channels as u32,
             samples_per_channel: frame_size.value(),
@@ -143,7 +143,7 @@ mod test {
         let element_id: u32 = 10;
 
         let oar = create_ffi_object_renderer(
-            oar_layout_t::ck_oar_layout_stereo,
+            roar_layout_t::ck_roar_layout_stereo,
             frame_size,
             sample_rate,
             element_id,
@@ -158,13 +158,13 @@ mod test {
             440.0,
             sample_rate.value() as f32,
         );
-        let mut input_data = oar_audio_block_t {
+        let mut input_data = roar_audio_block_t {
             data: input_buffer.as_mut_ptr(),
             channels: num_objects as u32,
             samples_per_channel: frame_size.value(),
         };
         let mut output_buffer = vec![0.0f32; output_channels * frame_size.value() as usize];
-        let mut output_data = oar_audio_block_t {
+        let mut output_data = roar_audio_block_t {
             data: output_buffer.as_mut_ptr(),
             channels: output_channels as u32,
             samples_per_channel: frame_size.value(),
@@ -201,7 +201,7 @@ mod test {
         let element_id: u32 = 10;
 
         let oar = create_ffi_object_renderer(
-            oar_layout_t::ck_oar_layout_binaural,
+            roar_layout_t::ck_roar_layout_binaural,
             frame_size,
             sample_rate,
             element_id,
@@ -216,13 +216,13 @@ mod test {
             440.0,
             sample_rate.value() as f32,
         );
-        let mut input_data = oar_audio_block_t {
+        let mut input_data = roar_audio_block_t {
             data: input_buffer.as_mut_ptr(),
             channels: num_objects as u32,
             samples_per_channel: frame_size.value(),
         };
         let mut output_buffer = vec![0.0f32; output_channels * frame_size.value() as usize];
-        let mut output_data = oar_audio_block_t {
+        let mut output_data = roar_audio_block_t {
             data: output_buffer.as_mut_ptr(),
             channels: output_channels as u32,
             samples_per_channel: frame_size.value(),
@@ -235,7 +235,7 @@ mod test {
             (
                 roar_set_metadata_unit_to_process(
                     oar.ptr(),
-                    oar_metadata_type_t::ck_metadata_object_positions,
+                    roar_metadata_type_t::ck_roar_metadata_object_positions as u32,
                     sub_frame_size,
                 ),
                 roar_update_audio_element_metadata(oar.ptr(), element_id, &pos_meta),
@@ -409,7 +409,7 @@ mod test {
         let frame_size = Samples::new(256)?;
         let sample_rate = SampleRate::new(48000)?;
         let oar = create_ffi_object_renderer(
-            oar_layout_t::ck_oar_layout_binaural,
+            roar_layout_t::ck_roar_layout_binaural,
             frame_size,
             sample_rate,
             10,
@@ -422,7 +422,7 @@ mod test {
         let ret = unsafe {
             roar_set_metadata_unit_to_process(
                 oar.ptr(),
-                oar_metadata_type_t::ck_metadata_object_positions,
+                roar_metadata_type_t::ck_roar_metadata_object_positions as u32,
                 0,
             )
         };

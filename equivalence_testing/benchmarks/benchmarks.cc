@@ -20,13 +20,7 @@
 #include "benchmark/benchmark.h"
 #include "equivalence_testing/benchmarks/benchmark_helpers.h"
 #include "equivalence_testing/test_helpers.h"
-
-extern "C" {
-#include "include/animation.h"
-#include "include/oar.h"
-#include "include/oar_base.h"
-#include "include/oar_metadata.h"
-}
+#include "include/roar.h"
 
 namespace roar_equivalence_testing {
 namespace {
@@ -54,7 +48,7 @@ void SetAudioMetrics(benchmark::State& state, int64_t num_frames,
 // Updates planar input data for every element in `element_ids`.
 void FeedAudioElements(RendererInstance& renderer,
                        absl::Span<const uint32_t> element_ids,
-                       oar_audio_block_t& input_block) {
+                       roar_audio_block_t& input_block) {
   for (uint32_t id : element_ids) {
     renderer.UpdateAudioElementData(id, &input_block);
   }
@@ -64,8 +58,8 @@ void FeedAudioElements(RendererInstance& renderer,
 // updating audio element data prior to each frame.
 void RunRenderLoop(benchmark::State& state, RendererInstance& renderer,
                    absl::Span<const uint32_t> element_ids,
-                   oar_audio_block_t& input_block,
-                   oar_audio_block_t& output_block, int64_t num_frames,
+                   roar_audio_block_t& input_block,
+                   roar_audio_block_t& output_block, int64_t num_frames,
                    uint32_t frame_size = kDefaultFrameSize,
                    uint32_t sample_rate = kDefaultSampleRate) {
   // Warm-up pass.
@@ -85,10 +79,10 @@ void RunRenderLoop(benchmark::State& state, RendererInstance& renderer,
 // Executes a benchmark render loop with audio data and metadata updates prior
 // to each frame.
 void RunDynamicRenderLoop(benchmark::State& state, RendererInstance& renderer,
-                          oar_audio_block_t& input_block,
-                          oar_audio_block_t& output_block,
+                          roar_audio_block_t& input_block,
+                          roar_audio_block_t& output_block,
                           absl::Span<const uint32_t> element_ids,
-                          absl::Span<const oar_metadata_t> metadatas,
+                          absl::Span<const roar_metadata_t> metadatas,
                           int64_t num_frames,
                           uint32_t frame_size = kDefaultFrameSize,
                           uint32_t sample_rate = kDefaultSampleRate) {
@@ -119,12 +113,12 @@ void RunDynamicRenderLoop(benchmark::State& state, RendererInstance& renderer,
 // gain metadata updates to isolate gain calculation and application throughput.
 void RunStereoElementGainBenchmark(benchmark::State& state,
                                    RendererEngine engine,
-                                   const oar_metadata_t& gain_metadata) {
+                                   const roar_metadata_t& gain_metadata) {
   const int64_t num_frames = state.range(0);
   constexpr uint32_t kStereoChannels = 2;
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_stereo,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_stereo,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kDefaultSampleRate,
   };
@@ -134,15 +128,15 @@ void RunStereoElementGainBenchmark(benchmark::State& state,
   const int group_id = renderer->AddAudioGroup();
   ABSL_CHECK_GE(group_id, 0);
 
-  const oar_audio_element_config_t element_cfg =
-      CreateChannelConfig(ck_oar_layout_stereo);
+  const roar_audio_element_config_t element_cfg =
+      CreateChannelConfig(ck_roar_layout_stereo);
   ABSL_CHECK_EQ(renderer->AddAudioElement(group_id, kElementId, element_cfg),
                 0);
 
   AudioBlock input = AudioBlock::CreateInput(kStereoChannels);
   AudioBlock output = AudioBlock::CreateOutput(kStereoChannels);
   const uint32_t element_ids[] = {kElementId};
-  const oar_metadata_t metadatas[] = {gain_metadata};
+  const roar_metadata_t metadatas[] = {gain_metadata};
   RunDynamicRenderLoop(state, *renderer, input.block, output.block, element_ids,
                        metadatas, num_frames);
 }
@@ -152,9 +146,9 @@ void RunStereoElementGainBenchmark(benchmark::State& state,
 void RunHeadTrackingRenderLoop(benchmark::State& state,
                                RendererInstance& renderer, uint32_t group_id,
                                absl::Span<const uint32_t> element_ids,
-                               oar_audio_block_t& input_block,
-                               oar_audio_block_t& output_block,
-                               absl::Span<const oar_metadata_t> head_rotations,
+                               roar_audio_block_t& input_block,
+                               roar_audio_block_t& output_block,
+                               absl::Span<const roar_metadata_t> head_rotations,
                                int64_t num_frames,
                                uint32_t frame_size = kDefaultFrameSize,
                                uint32_t sample_rate = kDefaultSampleRate) {
@@ -187,8 +181,8 @@ void Render9_1_6ToBinaural(benchmark::State& state, RendererEngine engine) {
   constexpr uint32_t kInputChannels = 16;  // 9.1.6
   constexpr uint32_t kOutputChannels = 2;  // Binaural
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_binaural,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_binaural,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kDefaultSampleRate,
   };
@@ -198,7 +192,7 @@ void Render9_1_6ToBinaural(benchmark::State& state, RendererEngine engine) {
   const int group_id = renderer->AddAudioGroup();
   ABSL_CHECK_GE(group_id, 0);
 
-  auto element_cfg = CreateChannelConfig(ck_oar_layout_916);
+  auto element_cfg = CreateChannelConfig(ck_roar_layout_916);
   AddWorldLockedParameter(element_cfg);
   ABSL_CHECK_EQ(renderer->AddAudioElement(group_id, kElementId, element_cfg),
                 0);
@@ -220,8 +214,8 @@ void Render9_1_6ToBinaural_Resampled_44100(benchmark::State& state,
   constexpr uint32_t kOutputChannels = 2;  // Binaural
   constexpr uint32_t kSampleRate44100 = 44100;
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_binaural,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_binaural,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kSampleRate44100,
   };
@@ -231,7 +225,7 @@ void Render9_1_6ToBinaural_Resampled_44100(benchmark::State& state,
   const int group_id = renderer->AddAudioGroup();
   ABSL_CHECK_GE(group_id, 0);
 
-  auto element_cfg = CreateChannelConfig(ck_oar_layout_916);
+  auto element_cfg = CreateChannelConfig(ck_roar_layout_916);
   AddWorldLockedParameter(element_cfg);
   ABSL_CHECK_EQ(renderer->AddAudioElement(group_id, kElementId, element_cfg),
                 0);
@@ -257,8 +251,8 @@ void Render9_1_6ToBinauralWithHeadRotation(benchmark::State& state,
   constexpr uint32_t kInputChannels = 16;  // 9.1.6
   constexpr uint32_t kOutputChannels = 2;  // Binaural
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_binaural,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_binaural,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kDefaultSampleRate,
   };
@@ -268,7 +262,7 @@ void Render9_1_6ToBinauralWithHeadRotation(benchmark::State& state,
   const int group_id = renderer->AddAudioGroup();
   ABSL_CHECK_GE(group_id, 0);
 
-  auto element_cfg = CreateChannelConfig(ck_oar_layout_916);
+  auto element_cfg = CreateChannelConfig(ck_roar_layout_916);
   AddWorldLockedParameter(element_cfg);
   ABSL_CHECK_EQ(renderer->AddAudioElement(group_id, kElementId, element_cfg),
                 0);
@@ -295,8 +289,8 @@ void Render4oaToBinaural(benchmark::State& state, RendererEngine engine) {
   constexpr uint32_t kInputChannels = 25;  // 4OA
   constexpr uint32_t kOutputChannels = 2;  // Binaural
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_binaural,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_binaural,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kDefaultSampleRate,
   };
@@ -306,7 +300,7 @@ void Render4oaToBinaural(benchmark::State& state, RendererEngine engine) {
   const int group_id = renderer->AddAudioGroup();
   ABSL_CHECK_GE(group_id, 0);
 
-  auto element_cfg = CreateAmbisonicConfig(ck_oar_4oa);
+  auto element_cfg = CreateAmbisonicConfig(ck_roar_4oa);
   AddWorldLockedParameter(element_cfg);
   ABSL_CHECK_EQ(renderer->AddAudioElement(group_id, kElementId, element_cfg),
                 0);
@@ -326,8 +320,8 @@ void Render4oaToBinauralWithHeadRotation(benchmark::State& state,
   constexpr uint32_t kInputChannels = 25;  // 4OA
   constexpr uint32_t kOutputChannels = 2;  // Binaural
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_binaural,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_binaural,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kDefaultSampleRate,
   };
@@ -337,7 +331,7 @@ void Render4oaToBinauralWithHeadRotation(benchmark::State& state,
   const int group_id = renderer->AddAudioGroup();
   ABSL_CHECK_GE(group_id, 0);
 
-  auto element_cfg = CreateAmbisonicConfig(ck_oar_4oa);
+  auto element_cfg = CreateAmbisonicConfig(ck_roar_4oa);
   AddWorldLockedParameter(element_cfg);
   ABSL_CHECK_EQ(renderer->AddAudioElement(group_id, kElementId, element_cfg),
                 0);
@@ -366,8 +360,8 @@ void RenderStaticObjectsToBinaural(benchmark::State& state,
   constexpr size_t kNumPairs = 8;
   constexpr uint32_t kOutputChannels = 2;  // Binaural
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_binaural,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_binaural,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kDefaultSampleRate,
   };
@@ -401,8 +395,8 @@ void RenderDynamicObjectsToBinaural(benchmark::State& state,
   constexpr size_t kNumPairs = 8;
   constexpr uint32_t kOutputChannels = 2;  // Binaural
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_binaural,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_binaural,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kDefaultSampleRate,
   };
@@ -434,8 +428,8 @@ void Render9_1_6ToStereo(benchmark::State& state, RendererEngine engine) {
   constexpr uint32_t kInputChannels = 16;  // 9.1.6
   constexpr uint32_t kOutputChannels = 2;  // Stereo
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_stereo,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_stereo,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kDefaultSampleRate,
   };
@@ -445,7 +439,7 @@ void Render9_1_6ToStereo(benchmark::State& state, RendererEngine engine) {
   const int group_id = renderer->AddAudioGroup();
   ABSL_CHECK_GE(group_id, 0);
 
-  const auto element_cfg = CreateChannelConfig(ck_oar_layout_916);
+  const auto element_cfg = CreateChannelConfig(ck_roar_layout_916);
   ABSL_CHECK_EQ(renderer->AddAudioElement(group_id, kElementId, element_cfg),
                 0);
 
@@ -463,8 +457,8 @@ void Render4oaTo9_1_6(benchmark::State& state, RendererEngine engine) {
   constexpr uint32_t kInputChannels = 25;   // 4OA
   constexpr uint32_t kOutputChannels = 16;  // 9.1.6
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_916,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_916,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kDefaultSampleRate,
   };
@@ -474,7 +468,7 @@ void Render4oaTo9_1_6(benchmark::State& state, RendererEngine engine) {
   const int group_id = renderer->AddAudioGroup();
   ABSL_CHECK_GE(group_id, 0);
 
-  const auto element_cfg = CreateAmbisonicConfig(ck_oar_4oa);
+  const auto element_cfg = CreateAmbisonicConfig(ck_roar_4oa);
   ABSL_CHECK_EQ(renderer->AddAudioElement(group_id, kElementId, element_cfg),
                 0);
 
@@ -494,8 +488,8 @@ void RenderStaticObjectsTo9_1_6(benchmark::State& state,
   constexpr size_t kNumPairs = 8;
   constexpr uint32_t kOutputChannels = 16;  // 9.1.6
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_916,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_916,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kDefaultSampleRate,
   };
@@ -528,8 +522,8 @@ void RenderDynamicObjectsTo9_1_6(benchmark::State& state,
   constexpr size_t kNumPairs = 8;
   constexpr uint32_t kOutputChannels = 16;  // 9.1.6
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_916,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_916,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kDefaultSampleRate,
   };
@@ -557,7 +551,7 @@ BENCHMARK_CAPTURE(RenderDynamicObjectsTo9_1_6, roar, RendererEngine::kRoar)
 // Stereo element rendered to stereo loudspeakers with constant gain updates.
 void RenderStereoWithConstantGain(benchmark::State& state,
                                   RendererEngine engine) {
-  const oar_metadata_t gain_metadata = CreateConstantGainMetadata(
+  const roar_metadata_t gain_metadata = CreateConstantGainMetadata(
       /*id=*/1, /*gain_db=*/-6.0f, kDefaultFrameSize);
   RunStereoElementGainBenchmark(state, engine, gain_metadata);
 }
@@ -569,8 +563,8 @@ BENCHMARK_CAPTURE(RenderStereoWithConstantGain, roar, RendererEngine::kRoar)
 // Stereo element rendered to stereo loudspeakers with linear dB gain ramps.
 void RenderStereoWithAnimatedGainLinear(benchmark::State& state,
                                         RendererEngine engine) {
-  const oar_metadata_t gain_metadata = CreateAnimatedGainMetadata(
-      /*id=*/1, ck_animation_type_linear, /*start=*/0.0f, /*end=*/-12.0f,
+  const roar_metadata_t gain_metadata = CreateAnimatedGainMetadata(
+      /*id=*/1, ck_roar_animation_type_linear, /*start=*/0.0f, /*end=*/-12.0f,
       /*control=*/0.0f, /*control_relative_time=*/0.0f, kDefaultFrameSize);
   RunStereoElementGainBenchmark(state, engine, gain_metadata);
 }
@@ -584,8 +578,8 @@ BENCHMARK_CAPTURE(RenderStereoWithAnimatedGainLinear, roar,
 // curves.
 void RenderStereoWithAnimatedGainBezier(benchmark::State& state,
                                         RendererEngine engine) {
-  const oar_metadata_t gain_metadata = CreateAnimatedGainMetadata(
-      /*id=*/1, ck_animation_type_bezier, /*start=*/0.0f, /*end=*/-12.0f,
+  const roar_metadata_t gain_metadata = CreateAnimatedGainMetadata(
+      /*id=*/1, ck_roar_animation_type_bezier, /*start=*/0.0f, /*end=*/-12.0f,
       /*control=*/-6.0f, /*control_relative_time=*/0.5f, kDefaultFrameSize);
   RunStereoElementGainBenchmark(state, engine, gain_metadata);
 }
@@ -604,12 +598,12 @@ BENCHMARK_CAPTURE(RenderStereoWithAnimatedGainBezier, roar,
 void Setup9_1_6ToBinaural(benchmark::State& state, RendererEngine engine) {
   constexpr uint32_t kInputChannels = 16;
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_binaural,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_binaural,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kDefaultSampleRate,
   };
-  auto element_cfg = CreateChannelConfig(ck_oar_layout_916);
+  auto element_cfg = CreateChannelConfig(ck_roar_layout_916);
   AddWorldLockedParameter(element_cfg);
   auto input = AudioBlock::CreateInput(kInputChannels);
 
@@ -631,12 +625,12 @@ void Setup9_1_6ToBinaural_Resampled_44100(benchmark::State& state,
   constexpr uint32_t kInputChannels = 16;
   constexpr uint32_t kSampleRate44100 = 44100;
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_binaural,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_binaural,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kSampleRate44100,
   };
-  auto element_cfg = CreateChannelConfig(ck_oar_layout_916);
+  auto element_cfg = CreateChannelConfig(ck_roar_layout_916);
   AddWorldLockedParameter(element_cfg);
   auto input = AudioBlock::CreateInput(kInputChannels, kDefaultFrameSize,
                                        kSampleRate44100);
@@ -658,12 +652,12 @@ BENCHMARK_CAPTURE(Setup9_1_6ToBinaural_Resampled_44100, roar,
 void Setup9_1_6ToStereo(benchmark::State& state, RendererEngine engine) {
   constexpr uint32_t kInputChannels = 16;
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_stereo,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_stereo,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kDefaultSampleRate,
   };
-  const auto element_cfg = CreateChannelConfig(ck_oar_layout_916);
+  const auto element_cfg = CreateChannelConfig(ck_roar_layout_916);
   auto input = AudioBlock::CreateInput(kInputChannels);
 
   for (auto _ : state) {
@@ -681,12 +675,12 @@ BENCHMARK_CAPTURE(Setup9_1_6ToStereo, roar, RendererEngine::kRoar);
 void Setup4oaTo9_1_6(benchmark::State& state, RendererEngine engine) {
   constexpr uint32_t kInputChannels = 25;  // 4OA
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_916,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_916,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kDefaultSampleRate,
   };
-  const auto element_cfg = CreateAmbisonicConfig(ck_oar_4oa);
+  const auto element_cfg = CreateAmbisonicConfig(ck_roar_4oa);
   auto input = AudioBlock::CreateInput(kInputChannels);
 
   for (auto _ : state) {
@@ -705,8 +699,8 @@ BENCHMARK_CAPTURE(Setup4oaTo9_1_6, roar, RendererEngine::kRoar);
 void SetupObjectsTo9_1_6(benchmark::State& state, RendererEngine engine) {
   constexpr size_t kNumPairs = 8;
 
-  const oar_config_t config = {
-      .target_layout = ck_oar_layout_916,
+  const roar_config_t config = {
+      .target_layout = ck_roar_layout_916,
       .samples_per_channel = kDefaultFrameSize,
       .sampling_rate = kDefaultSampleRate,
   };

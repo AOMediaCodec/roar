@@ -14,10 +14,13 @@
 mod test {
 
     use aom_roar::c_types::{
-        audio_element_type_t, coordinate_type_t, oar_audio_element_config_t, oar_config_t,
-        oar_headphones_rendering_mode_t, oar_layout_t, oar_metadata_iamf_downmix_mode_t,
-        oar_metadata_object_positions_t, oar_metadata_object_positions_union_t, oar_metadata_t,
-        oar_metadata_type_t, oar_metadata_union_t, oar_param_type_t, parameter_set_t, polar_t,
+        roar_audio_element_config_t, roar_audio_element_type_t, roar_binaural_filter_profile_t,
+        roar_config_t, roar_coordinate_type_t, roar_headphones_rendering_mode_t, roar_layout_t,
+        roar_metadata_iamf_downmix_mode_t, roar_metadata_object_positions_t,
+        roar_metadata_object_positions_union_t, roar_metadata_t, roar_metadata_type_t,
+        roar_metadata_union_t, roar_param_type_t, roar_polar_t,
+        ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO,
+        ROAR_PARAMETER_SET_FLAG_IAMF_ELEMENT_RENDERING_CONFIG,
     };
     use aom_roar::ffi::*;
     use aom_roar::OarError;
@@ -27,14 +30,15 @@ mod test {
         Samples,
     };
     use googletest::prelude::*;
+    use std::mem::MaybeUninit;
 
     // ===== FFI C API Validation Tests =====
 
     /// Verifies that the FFI layer enforces the limit of 2 audio groups.
     #[gtest]
     fn ffi_adding_third_group_fails_with_invalid_parameter() {
-        let config = oar_config_t {
-            target_layout: oar_layout_t::ck_oar_layout_stereo as i32,
+        let config = roar_config_t {
+            target_layout: roar_layout_t::ck_roar_layout_stereo as i32,
             samples_per_channel: 256,
             sampling_rate: 48000,
         };
@@ -57,8 +61,8 @@ mod test {
     /// Verifies that the FFI layer prevents adding elements with duplicate IDs.
     #[gtest]
     fn ffi_adding_duplicate_element_id_fails_with_busy() {
-        let config = oar_config_t {
-            target_layout: oar_layout_t::ck_oar_layout_stereo as i32,
+        let config = roar_config_t {
+            target_layout: roar_layout_t::ck_roar_layout_stereo as i32,
             samples_per_channel: 256,
             sampling_rate: 48000,
         };
@@ -68,9 +72,9 @@ mod test {
         let group_id_0 = unsafe { roar_add_audio_group(oar) };
         assert!(group_id_0 >= 0);
 
-        let mut element_cfg: oar_audio_element_config_t = unsafe { std::mem::zeroed() };
-        element_cfg.r#type = audio_element_type_t::ck_channel_based as i32;
-        element_cfg.config.cbc.layout = oar_layout_t::ck_oar_layout_stereo as i32;
+        let mut element_cfg: roar_audio_element_config_t = unsafe { std::mem::zeroed() };
+        element_cfg.r#type = roar_audio_element_type_t::ck_roar_channel_based as i32;
+        element_cfg.config.cbc.layout = roar_layout_t::ck_roar_layout_stereo as i32;
 
         // Add element 10
         let add_first_result =
@@ -88,17 +92,17 @@ mod test {
     /// Verifies that the FFI layer errors when adding an element to a non-existent group.
     #[gtest]
     fn ffi_adding_element_to_non_existent_group_fails_with_invalid_parameter() {
-        let config = oar_config_t {
-            target_layout: oar_layout_t::ck_oar_layout_stereo as i32,
+        let config = roar_config_t {
+            target_layout: roar_layout_t::ck_roar_layout_stereo as i32,
             samples_per_channel: 256,
             sampling_rate: 48000,
         };
         let oar = unsafe { roar_create(&config) };
         assert!(!oar.is_null());
 
-        let mut element_cfg: oar_audio_element_config_t = unsafe { std::mem::zeroed() };
-        element_cfg.r#type = audio_element_type_t::ck_channel_based as i32;
-        element_cfg.config.cbc.layout = oar_layout_t::ck_oar_layout_stereo as i32;
+        let mut element_cfg: roar_audio_element_config_t = unsafe { std::mem::zeroed() };
+        element_cfg.r#type = roar_audio_element_type_t::ck_roar_channel_based as i32;
+        element_cfg.config.cbc.layout = roar_layout_t::ck_roar_layout_stereo as i32;
 
         // Add to group 99 (non-existent) -> should fail
         let add_result = unsafe { roar_add_audio_element(oar, 99, 10, &element_cfg) };
@@ -113,8 +117,8 @@ mod test {
     #[gtest]
     fn ffi_creating_renderer_with_zero_sample_rate_or_samples_fails() {
         // Zero sample rate
-        let config_zero_rate = oar_config_t {
-            target_layout: oar_layout_t::ck_oar_layout_stereo as i32,
+        let config_zero_rate = roar_config_t {
+            target_layout: roar_layout_t::ck_roar_layout_stereo as i32,
             samples_per_channel: 256,
             sampling_rate: 0,
         };
@@ -123,8 +127,8 @@ mod test {
         expect_true!(oar_1.is_null());
 
         // Zero samples per channel
-        let config_zero_samples = oar_config_t {
-            target_layout: oar_layout_t::ck_oar_layout_stereo as i32,
+        let config_zero_samples = roar_config_t {
+            target_layout: roar_layout_t::ck_roar_layout_stereo as i32,
             samples_per_channel: 0,
             sampling_rate: 48000,
         };
@@ -138,8 +142,8 @@ mod test {
     /// that a subsequent valid mode update still returns `0`.
     #[gtest]
     fn ffi_invalid_downmix_modes_with_active_downmix_consumer_return_invalid_parameter() {
-        let config = oar_config_t {
-            target_layout: oar_layout_t::ck_oar_layout_stereo as i32,
+        let config = roar_config_t {
+            target_layout: roar_layout_t::ck_roar_layout_stereo as i32,
             samples_per_channel: 256,
             sampling_rate: 48000,
         };
@@ -147,46 +151,46 @@ mod test {
         assert!(!oar.is_null());
         let group_id = unsafe { roar_add_audio_group(oar) };
         assert!(group_id >= 0);
-        let mut element_cfg: oar_audio_element_config_t = unsafe { std::mem::zeroed() };
-        element_cfg.r#type = audio_element_type_t::ck_channel_based as i32;
-        element_cfg.config.cbc.layout = oar_layout_t::ck_oar_layout_51 as i32;
-        element_cfg.parameters.flags = parameter_set_t::def_parameter_set_flag_iamf_downmix_info;
+        let mut element_cfg: roar_audio_element_config_t = unsafe { std::mem::zeroed() };
+        element_cfg.r#type = roar_audio_element_type_t::ck_roar_channel_based as i32;
+        element_cfg.config.cbc.layout = roar_layout_t::ck_roar_layout_51 as i32;
+        element_cfg.parameters.flags = ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
         element_cfg.parameters.downmix_info.mode = 0;
         element_cfg.parameters.downmix_info.weight_index = -1;
         let add_ret = unsafe { roar_add_audio_element(oar, group_id as u32, 1, &element_cfg) };
         assert_eq!(add_ret, 0);
-        let neg_meta = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32,
-            value: oar_metadata_union_t {
-                iamf_downmix_mode: oar_metadata_iamf_downmix_mode_t { mode: -1 },
+        let neg_meta = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_iamf_downmix_mode as u32,
+            value: roar_metadata_union_t {
+                iamf_downmix_mode: roar_metadata_iamf_downmix_mode_t { mode: -1 },
             },
             duration: 256,
         };
-        let mode3_meta = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32,
-            value: oar_metadata_union_t {
-                iamf_downmix_mode: oar_metadata_iamf_downmix_mode_t { mode: 3 },
+        let mode3_meta = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_iamf_downmix_mode as u32,
+            value: roar_metadata_union_t {
+                iamf_downmix_mode: roar_metadata_iamf_downmix_mode_t { mode: 3 },
             },
             duration: 256,
         };
-        let mode7_meta = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32,
-            value: oar_metadata_union_t {
-                iamf_downmix_mode: oar_metadata_iamf_downmix_mode_t { mode: 7 },
+        let mode7_meta = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_iamf_downmix_mode as u32,
+            value: roar_metadata_union_t {
+                iamf_downmix_mode: roar_metadata_iamf_downmix_mode_t { mode: 7 },
             },
             duration: 256,
         };
-        let mode99_meta = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32,
-            value: oar_metadata_union_t {
-                iamf_downmix_mode: oar_metadata_iamf_downmix_mode_t { mode: 99 },
+        let mode99_meta = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_iamf_downmix_mode as u32,
+            value: roar_metadata_union_t {
+                iamf_downmix_mode: roar_metadata_iamf_downmix_mode_t { mode: 99 },
             },
             duration: 256,
         };
-        let valid_meta = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32,
-            value: oar_metadata_union_t {
-                iamf_downmix_mode: oar_metadata_iamf_downmix_mode_t { mode: 1 },
+        let valid_meta = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_iamf_downmix_mode as u32,
+            value: roar_metadata_union_t {
+                iamf_downmix_mode: roar_metadata_iamf_downmix_mode_t { mode: 1 },
             },
             duration: 256,
         };
@@ -207,12 +211,12 @@ mod test {
     }
 
     /// Verifies that invalid IAMF downmix mode values are also rejected with `-22` on binaural
-    /// output when a `5.1` channel element is configured as `ck_world_locked_restricted` with
+    /// output when a `5.1` channel element is configured as `ck_roar_world_locked_restricted` with
     /// `downmix_info` (which selects the Downmix renderer targeting stereo).
     #[gtest]
     fn ffi_invalid_downmix_mode_on_binaural_world_locked_restricted_51_returns_invalid_parameter() {
-        let config = oar_config_t {
-            target_layout: oar_layout_t::ck_oar_layout_binaural as i32,
+        let config = roar_config_t {
+            target_layout: roar_layout_t::ck_roar_layout_binaural as i32,
             samples_per_channel: 256,
             sampling_rate: 48000,
         };
@@ -220,21 +224,21 @@ mod test {
         assert!(!oar.is_null());
         let group_id = unsafe { roar_add_audio_group(oar) };
         assert!(group_id >= 0);
-        let mut element_cfg: oar_audio_element_config_t = unsafe { std::mem::zeroed() };
-        element_cfg.r#type = audio_element_type_t::ck_channel_based as i32;
-        element_cfg.config.cbc.layout = oar_layout_t::ck_oar_layout_51 as i32;
-        element_cfg.parameters.flags = parameter_set_t::def_parameter_set_flag_iamf_downmix_info
-            | parameter_set_t::def_parameter_set_flag_iamf_element_rendering_config;
+        let mut element_cfg: roar_audio_element_config_t = unsafe { std::mem::zeroed() };
+        element_cfg.r#type = roar_audio_element_type_t::ck_roar_channel_based as i32;
+        element_cfg.config.cbc.layout = roar_layout_t::ck_roar_layout_51 as i32;
+        element_cfg.parameters.flags = ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO
+            | ROAR_PARAMETER_SET_FLAG_IAMF_ELEMENT_RENDERING_CONFIG;
         element_cfg.parameters.downmix_info.mode = 0;
         element_cfg.parameters.downmix_info.weight_index = -1;
         element_cfg.parameters.element_rendering_config.headphones_rendering_mode =
-            oar_headphones_rendering_mode_t::ck_world_locked_restricted;
+            roar_headphones_rendering_mode_t::ck_roar_world_locked_restricted as u32;
         let add_ret = unsafe { roar_add_audio_element(oar, group_id as u32, 1, &element_cfg) };
         assert_eq!(add_ret, 0);
-        let invalid_meta = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32,
-            value: oar_metadata_union_t {
-                iamf_downmix_mode: oar_metadata_iamf_downmix_mode_t { mode: 3 },
+        let invalid_meta = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_iamf_downmix_mode as u32,
+            value: roar_metadata_union_t {
+                iamf_downmix_mode: roar_metadata_iamf_downmix_mode_t { mode: 3 },
             },
             duration: 256,
         };
@@ -250,8 +254,8 @@ mod test {
     /// element's active rendering path has no downmix consumer (`5.1.2 -> stereo` EAR fallback).
     #[gtest]
     fn ffi_invalid_downmix_modes_without_downmix_consumer_return_ok() {
-        let config = oar_config_t {
-            target_layout: oar_layout_t::ck_oar_layout_stereo as i32,
+        let config = roar_config_t {
+            target_layout: roar_layout_t::ck_roar_layout_stereo as i32,
             samples_per_channel: 256,
             sampling_rate: 48000,
         };
@@ -259,39 +263,39 @@ mod test {
         assert!(!oar.is_null());
         let group_id = unsafe { roar_add_audio_group(oar) };
         assert!(group_id >= 0);
-        let mut element_cfg: oar_audio_element_config_t = unsafe { std::mem::zeroed() };
-        element_cfg.r#type = audio_element_type_t::ck_channel_based as i32;
-        element_cfg.config.cbc.layout = oar_layout_t::ck_oar_layout_512 as i32;
-        element_cfg.parameters.flags = parameter_set_t::def_parameter_set_flag_iamf_downmix_info;
+        let mut element_cfg: roar_audio_element_config_t = unsafe { std::mem::zeroed() };
+        element_cfg.r#type = roar_audio_element_type_t::ck_roar_channel_based as i32;
+        element_cfg.config.cbc.layout = roar_layout_t::ck_roar_layout_512 as i32;
+        element_cfg.parameters.flags = ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
         element_cfg.parameters.downmix_info.mode = 0;
         element_cfg.parameters.downmix_info.weight_index = -1;
         let add_ret = unsafe { roar_add_audio_element(oar, group_id as u32, 1, &element_cfg) };
         assert_eq!(add_ret, 0);
-        let neg_meta = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32,
-            value: oar_metadata_union_t {
-                iamf_downmix_mode: oar_metadata_iamf_downmix_mode_t { mode: -1 },
+        let neg_meta = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_iamf_downmix_mode as u32,
+            value: roar_metadata_union_t {
+                iamf_downmix_mode: roar_metadata_iamf_downmix_mode_t { mode: -1 },
             },
             duration: 256,
         };
-        let mode3_meta = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32,
-            value: oar_metadata_union_t {
-                iamf_downmix_mode: oar_metadata_iamf_downmix_mode_t { mode: 3 },
+        let mode3_meta = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_iamf_downmix_mode as u32,
+            value: roar_metadata_union_t {
+                iamf_downmix_mode: roar_metadata_iamf_downmix_mode_t { mode: 3 },
             },
             duration: 256,
         };
-        let mode7_meta = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32,
-            value: oar_metadata_union_t {
-                iamf_downmix_mode: oar_metadata_iamf_downmix_mode_t { mode: 7 },
+        let mode7_meta = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_iamf_downmix_mode as u32,
+            value: roar_metadata_union_t {
+                iamf_downmix_mode: roar_metadata_iamf_downmix_mode_t { mode: 7 },
             },
             duration: 256,
         };
-        let mode99_meta = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32,
-            value: oar_metadata_union_t {
-                iamf_downmix_mode: oar_metadata_iamf_downmix_mode_t { mode: 99 },
+        let mode99_meta = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_iamf_downmix_mode as u32,
+            value: roar_metadata_union_t {
+                iamf_downmix_mode: roar_metadata_iamf_downmix_mode_t { mode: 99 },
             },
             duration: 256,
         };
@@ -313,8 +317,8 @@ mod test {
     /// (`5.1.2 -> 5.1.2`, which falls back to EAR) is accepted and ignored (`0`).
     #[gtest]
     fn ffi_invalid_downmix_mode_on_matching_512_layout_returns_ok() {
-        let config = oar_config_t {
-            target_layout: oar_layout_t::ck_oar_layout_512 as i32,
+        let config = roar_config_t {
+            target_layout: roar_layout_t::ck_roar_layout_512 as i32,
             samples_per_channel: 256,
             sampling_rate: 48000,
         };
@@ -322,18 +326,18 @@ mod test {
         assert!(!oar.is_null());
         let group_id = unsafe { roar_add_audio_group(oar) };
         assert!(group_id >= 0);
-        let mut element_cfg: oar_audio_element_config_t = unsafe { std::mem::zeroed() };
-        element_cfg.r#type = audio_element_type_t::ck_channel_based as i32;
-        element_cfg.config.cbc.layout = oar_layout_t::ck_oar_layout_512 as i32;
-        element_cfg.parameters.flags = parameter_set_t::def_parameter_set_flag_iamf_downmix_info;
+        let mut element_cfg: roar_audio_element_config_t = unsafe { std::mem::zeroed() };
+        element_cfg.r#type = roar_audio_element_type_t::ck_roar_channel_based as i32;
+        element_cfg.config.cbc.layout = roar_layout_t::ck_roar_layout_512 as i32;
+        element_cfg.parameters.flags = ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
         element_cfg.parameters.downmix_info.mode = 0;
         element_cfg.parameters.downmix_info.weight_index = -1;
         let add_ret = unsafe { roar_add_audio_element(oar, group_id as u32, 1, &element_cfg) };
         assert_eq!(add_ret, 0);
-        let mode3_meta = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32,
-            value: oar_metadata_union_t {
-                iamf_downmix_mode: oar_metadata_iamf_downmix_mode_t { mode: 3 },
+        let mode3_meta = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_iamf_downmix_mode as u32,
+            value: roar_metadata_union_t {
+                iamf_downmix_mode: roar_metadata_iamf_downmix_mode_t { mode: 3 },
             },
             duration: 256,
         };
@@ -349,8 +353,8 @@ mod test {
     /// returns `-22` (`InvalidParameter`) rather than being silently ignored.
     #[gtest]
     fn ffi_downmix_mode_update_for_missing_element_returns_invalid_parameter() {
-        let config = oar_config_t {
-            target_layout: oar_layout_t::ck_oar_layout_stereo as i32,
+        let config = roar_config_t {
+            target_layout: roar_layout_t::ck_roar_layout_stereo as i32,
             samples_per_channel: 256,
             sampling_rate: 48000,
         };
@@ -358,18 +362,18 @@ mod test {
         assert!(!oar.is_null());
         let group_id = unsafe { roar_add_audio_group(oar) };
         assert!(group_id >= 0);
-        let mut element_cfg: oar_audio_element_config_t = unsafe { std::mem::zeroed() };
-        element_cfg.r#type = audio_element_type_t::ck_channel_based as i32;
-        element_cfg.config.cbc.layout = oar_layout_t::ck_oar_layout_512 as i32;
-        element_cfg.parameters.flags = parameter_set_t::def_parameter_set_flag_iamf_downmix_info;
+        let mut element_cfg: roar_audio_element_config_t = unsafe { std::mem::zeroed() };
+        element_cfg.r#type = roar_audio_element_type_t::ck_roar_channel_based as i32;
+        element_cfg.config.cbc.layout = roar_layout_t::ck_roar_layout_512 as i32;
+        element_cfg.parameters.flags = ROAR_PARAMETER_SET_FLAG_IAMF_DOWNMIX_INFO;
         element_cfg.parameters.downmix_info.mode = 0;
         element_cfg.parameters.downmix_info.weight_index = -1;
         let add_ret = unsafe { roar_add_audio_element(oar, group_id as u32, 1, &element_cfg) };
         assert_eq!(add_ret, 0);
-        let meta = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32,
-            value: oar_metadata_union_t {
-                iamf_downmix_mode: oar_metadata_iamf_downmix_mode_t { mode: 1 },
+        let meta = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_iamf_downmix_mode as u32,
+            value: roar_metadata_union_t {
+                iamf_downmix_mode: roar_metadata_iamf_downmix_mode_t { mode: 1 },
             },
             duration: 256,
         };
@@ -384,8 +388,8 @@ mod test {
     /// Verifies that reserved and unknown element metadata types return `-95` (`NotSupported`).
     #[gtest]
     fn ffi_reserved_and_unknown_element_metadata_types_return_not_supported() {
-        let config = oar_config_t {
-            target_layout: oar_layout_t::ck_oar_layout_stereo as i32,
+        let config = roar_config_t {
+            target_layout: roar_layout_t::ck_roar_layout_stereo as i32,
             samples_per_channel: 256,
             sampling_rate: 48000,
         };
@@ -393,15 +397,15 @@ mod test {
         assert!(!oar.is_null());
         let group_id = unsafe { roar_add_audio_group(oar) };
         assert!(group_id >= 0);
-        let mut element_cfg: oar_audio_element_config_t = unsafe { std::mem::zeroed() };
-        element_cfg.r#type = audio_element_type_t::ck_channel_based as i32;
-        element_cfg.config.cbc.layout = oar_layout_t::ck_oar_layout_512 as i32;
+        let mut element_cfg: roar_audio_element_config_t = unsafe { std::mem::zeroed() };
+        element_cfg.r#type = roar_audio_element_type_t::ck_roar_channel_based as i32;
+        element_cfg.config.cbc.layout = roar_layout_t::ck_roar_layout_512 as i32;
         let add_ret = unsafe { roar_add_audio_element(oar, group_id as u32, 1, &element_cfg) };
         assert_eq!(add_ret, 0);
-        let mut reserved_meta: oar_metadata_t = unsafe { std::mem::zeroed() };
-        reserved_meta.r#type = oar_metadata_type_t::ck_metadata_count as u32;
+        let mut reserved_meta: roar_metadata_t = unsafe { std::mem::zeroed() };
+        reserved_meta.r#type = roar_metadata_type_t::ck_roar_metadata_count as u32;
         reserved_meta.duration = 256;
-        let mut unknown_meta: oar_metadata_t = unsafe { std::mem::zeroed() };
+        let mut unknown_meta: roar_metadata_t = unsafe { std::mem::zeroed() };
         unknown_meta.r#type = 99;
         unknown_meta.duration = 256;
 
@@ -418,8 +422,8 @@ mod test {
     /// (`NotSupported`).
     #[gtest]
     fn ffi_object_positions_update_on_channel_element_returns_not_supported() {
-        let config = oar_config_t {
-            target_layout: oar_layout_t::ck_oar_layout_stereo as i32,
+        let config = roar_config_t {
+            target_layout: roar_layout_t::ck_roar_layout_stereo as i32,
             samples_per_channel: 256,
             sampling_rate: 48000,
         };
@@ -427,22 +431,22 @@ mod test {
         assert!(!oar.is_null());
         let group_id = unsafe { roar_add_audio_group(oar) };
         assert!(group_id >= 0);
-        let mut element_cfg: oar_audio_element_config_t = unsafe { std::mem::zeroed() };
-        element_cfg.r#type = audio_element_type_t::ck_channel_based as i32;
-        element_cfg.config.cbc.layout = oar_layout_t::ck_oar_layout_512 as i32;
+        let mut element_cfg: roar_audio_element_config_t = unsafe { std::mem::zeroed() };
+        element_cfg.r#type = roar_audio_element_type_t::ck_roar_channel_based as i32;
+        element_cfg.config.cbc.layout = roar_layout_t::ck_roar_layout_512 as i32;
         let add_ret = unsafe { roar_add_audio_element(oar, group_id as u32, 1, &element_cfg) };
         assert_eq!(add_ret, 0);
-        let pos_meta = oar_metadata_t {
-            r#type: oar_metadata_type_t::ck_metadata_object_positions as u32,
-            value: oar_metadata_union_t {
-                object_positions: oar_metadata_object_positions_t {
-                    param_type: oar_param_type_t::ck_param_constant,
-                    position_type: coordinate_type_t::ck_polar,
+        let pos_meta = roar_metadata_t {
+            r#type: roar_metadata_type_t::ck_roar_metadata_object_positions as u32,
+            value: roar_metadata_union_t {
+                object_positions: roar_metadata_object_positions_t {
+                    param_type: roar_param_type_t::ck_roar_param_constant as u32,
+                    position_type: roar_coordinate_type_t::ck_roar_polar as u32,
                     num_objects: 1,
-                    positions: oar_metadata_object_positions_union_t {
+                    positions: roar_metadata_object_positions_union_t {
                         polar_positions: [
-                            polar_t { azimuth: 30.0, elevation: 0.0, distance: 1.0 },
-                            polar_t { azimuth: 0.0, elevation: 0.0, distance: 0.0 },
+                            roar_polar_t { azimuth: 30.0, elevation: 0.0, distance: 1.0 },
+                            roar_polar_t { azimuth: 0.0, elevation: 0.0, distance: 0.0 },
                         ],
                     },
                 },
@@ -454,6 +458,134 @@ mod test {
 
         expect_that!(ret, eq(-95));
 
+        unsafe { roar_destroy(oar) };
+    }
+
+    /// Verifies that `roar_set_metadata_unit_to_process` rejects out-of-range metadata type
+    /// discriminants with `-95` (`ck_roar_error_notsup`) without triggering undefined behavior.
+    #[gtest]
+    fn ffi_set_metadata_unit_to_process_with_out_of_range_type_returns_not_supported() {
+        let config = roar_config_t {
+            target_layout: roar_layout_t::ck_roar_layout_stereo as i32,
+            samples_per_channel: 256,
+            sampling_rate: 48000,
+        };
+        // SAFETY: `&config` points to a valid, initialized `roar_config_t` readable for the
+        // duration of the call.
+        let oar = unsafe { roar_create(&config) };
+        assert!(!oar.is_null());
+
+        // SAFETY: `oar` is a valid, aligned, non-null `roar_t` handle returned by `roar_create`
+        // with exclusive access for the duration of the call.
+        let count_ret = unsafe {
+            roar_set_metadata_unit_to_process(
+                oar,
+                roar_metadata_type_t::ck_roar_metadata_count as u32,
+                64,
+            )
+        };
+        // SAFETY: `oar` is a valid, aligned, non-null `roar_t` handle returned by `roar_create`
+        // with exclusive access for the duration of the call.
+        let out_of_range_ret = unsafe { roar_set_metadata_unit_to_process(oar, 999, 64) };
+
+        expect_that!(count_ret, eq(-95));
+        expect_that!(out_of_range_ret, eq(-95));
+
+        // SAFETY: `oar` is a valid `roar_t` handle returned by `roar_create`, is not accessed
+        // concurrently, and has not been destroyed yet.
+        unsafe { roar_destroy(oar) };
+    }
+
+    /// Verifies that `roar_add_audio_element` succeeds when inactive `parameters` sub-structs are
+    /// left uninitialized and `parameters.flags == 0`.
+    #[gtest]
+    fn ffi_adding_element_with_uninitialized_inactive_parameters_returns_ok() {
+        let config = roar_config_t {
+            target_layout: roar_layout_t::ck_roar_layout_stereo as i32,
+            samples_per_channel: 256,
+            sampling_rate: 48000,
+        };
+        // SAFETY: `&config` points to a valid, initialized `roar_config_t` readable for the
+        // duration of the call.
+        let oar = unsafe { roar_create(&config) };
+        assert!(!oar.is_null());
+        // SAFETY: `oar` is a valid, initialized, non-null `roar_t` handle returned by
+        // `roar_create` with exclusive access for the duration of the call.
+        let group_id = unsafe { roar_add_audio_group(oar) };
+        assert!(group_id >= 0);
+        let mut raw_cfg = MaybeUninit::<roar_audio_element_config_t>::uninit();
+        let cfg_ptr = raw_cfg.as_mut_ptr();
+        // SAFETY: `cfg_ptr` points to the valid, aligned stack allocation of `raw_cfg`
+        // (`MaybeUninit<roar_audio_element_config_t>`), and each `&raw mut` projection stays
+        // within that allocation without creating intermediate references to uninitialized fields.
+        unsafe {
+            (&raw mut (*cfg_ptr).r#type)
+                .write(roar_audio_element_type_t::ck_roar_channel_based as i32);
+            (&raw mut (*cfg_ptr).config.cbc.layout)
+                .write(roar_layout_t::ck_roar_layout_stereo as i32);
+            (&raw mut (*cfg_ptr).parameters.flags).write(0);
+        }
+
+        // SAFETY: `oar` is a valid, initialized `roar_t` handle with exclusive access, and
+        // `cfg_ptr` points to a readable, aligned `roar_audio_element_config_t` whose active
+        // fields (`r#type`, `config.cbc`, and `parameters.flags = 0`) were initialized above.
+        let add_ret = unsafe { roar_add_audio_element(oar, group_id as u32, 1, cfg_ptr) };
+
+        expect_that!(add_ret, eq(0));
+
+        // SAFETY: `oar` is a valid `roar_t` handle returned by `roar_create`, is not accessed
+        // concurrently, and has not been destroyed yet.
+        unsafe { roar_destroy(oar) };
+    }
+
+    /// Verifies that `roar_add_audio_element` rejects out-of-range `headphones_rendering_mode` and
+    /// `binaural_filter_profile` discriminants with `-22` (`ck_roar_error_inval`) when
+    /// `ROAR_PARAMETER_SET_FLAG_IAMF_ELEMENT_RENDERING_CONFIG` is set.
+    #[gtest]
+    fn ffi_adding_element_with_out_of_range_rendering_config_enums_returns_invalid_parameter() {
+        let config = roar_config_t {
+            target_layout: roar_layout_t::ck_roar_layout_binaural as i32,
+            samples_per_channel: 256,
+            sampling_rate: 48000,
+        };
+        // SAFETY: `&config` points to a valid, initialized `roar_config_t` readable for the
+        // duration of the call.
+        let oar = unsafe { roar_create(&config) };
+        assert!(!oar.is_null());
+        // SAFETY: `oar` is a valid, initialized, non-null `roar_t` handle returned by
+        // `roar_create` with exclusive access for the duration of the call.
+        let group_id = unsafe { roar_add_audio_group(oar) };
+        assert!(group_id >= 0);
+        // SAFETY: `roar_audio_element_config_t` is a C ABI (`#[repr(C)]`) struct composed of
+        // integer and C union fields for which an all-zero bit pattern is valid.
+        let mut bad_headphones_cfg: roar_audio_element_config_t = unsafe { std::mem::zeroed() };
+        bad_headphones_cfg.r#type = roar_audio_element_type_t::ck_roar_channel_based as i32;
+        bad_headphones_cfg.config.cbc.layout = roar_layout_t::ck_roar_layout_stereo as i32;
+        bad_headphones_cfg.parameters.flags = ROAR_PARAMETER_SET_FLAG_IAMF_ELEMENT_RENDERING_CONFIG;
+        bad_headphones_cfg.parameters.element_rendering_config.headphones_rendering_mode = 99;
+        bad_headphones_cfg.parameters.element_rendering_config.binaural_filter_profile =
+            roar_binaural_filter_profile_t::ck_roar_ambient as u32;
+        let mut bad_profile_cfg = bad_headphones_cfg;
+        bad_profile_cfg.parameters.element_rendering_config.headphones_rendering_mode =
+            roar_headphones_rendering_mode_t::ck_roar_world_locked as u32;
+        bad_profile_cfg.parameters.element_rendering_config.binaural_filter_profile = 99;
+
+        // SAFETY: `oar` is a valid, initialized `roar_t` handle with exclusive access, and
+        // `&bad_headphones_cfg` points to a readable, aligned, fully initialized
+        // `roar_audio_element_config_t`.
+        let bad_headphones_ret =
+            unsafe { roar_add_audio_element(oar, group_id as u32, 1, &bad_headphones_cfg) };
+        // SAFETY: `oar` is a valid, initialized `roar_t` handle with exclusive access, and
+        // `&bad_profile_cfg` points to a readable, aligned, fully initialized
+        // `roar_audio_element_config_t`.
+        let bad_profile_ret =
+            unsafe { roar_add_audio_element(oar, group_id as u32, 2, &bad_profile_cfg) };
+
+        expect_that!(bad_headphones_ret, eq(-22));
+        expect_that!(bad_profile_ret, eq(-22));
+
+        // SAFETY: `oar` is a valid `roar_t` handle returned by `roar_create`, is not accessed
+        // concurrently, and has not been destroyed yet.
         unsafe { roar_destroy(oar) };
     }
 

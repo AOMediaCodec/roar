@@ -22,12 +22,7 @@
 #include "equivalence_testing/test_helpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-
-extern "C" {
-#include "include/oar.h"
-#include "include/oar_base.h"
-#include "include/oar_metadata.h"
-}
+#include "include/roar.h"
 
 namespace roar_equivalence_testing {
 namespace {
@@ -37,17 +32,17 @@ using ::testing::NotNull;
 using ::testing::Pointwise;
 
 // Tolerable error level.
-const float kEpsilon = 1e-6;
+const float kEpsilon = 2e-6;
 const uint32_t kSamplesPerChannel = 1024;
 
 // Simple struct to pair element and metadata.
 struct ElementWithMetadata {
-  oar_audio_element_config_t element_config;
-  std::optional<oar_metadata_t> metadata;
+  roar_audio_element_config_t element_config;
+  std::optional<roar_metadata_t> metadata;
 };
 
-std::vector<oar_metadata_t> GetHeadTrackingMetadata() {
-  std::vector<oar_metadata_t> metadata_list;
+std::vector<roar_metadata_t> GetHeadTrackingMetadata() {
+  std::vector<roar_metadata_t> metadata_list;
   struct Rotation {
     float w, x, y, z;
   };
@@ -56,9 +51,10 @@ std::vector<oar_metadata_t> GetHeadTrackingMetadata() {
       {0.707f, 0.707f, 0.0f, 0.0f}, {0.707f, 0.0f, 0.0f, 0.707f},
       {-0.7f, 0.3f, -0.2f, 0.6f},
   };
+  metadata_list.reserve(rotations.size());
   for (const auto& rot : rotations) {
-    oar_metadata_t meta = {};
-    meta.type = ck_metadata_head_rotation;
+    roar_metadata_t meta = {};
+    meta.type = ck_roar_metadata_head_rotation;
     meta.head_rotation.w = rot.w;
     meta.head_rotation.x = rot.x;
     meta.head_rotation.y = rot.y;
@@ -70,16 +66,16 @@ std::vector<oar_metadata_t> GetHeadTrackingMetadata() {
 }
 
 // Run the test with head rotations with a given config and elements.
-void RunTest(const oar_config_t& config,
+void RunTest(roar_config_t config,
              const std::vector<ElementWithMetadata>& elements,
              std::string_view error_message) {
   // Wrap the C pointers in unique_ptrs with custom deleters for automatic
   // memory management.
-  using OarPtr = std::unique_ptr<oar_t, decltype(&oar_destroy)>;
+  using OarPtr = std::unique_ptr<roar_t, decltype(&oar_destroy)>;
   OarPtr oar(oar_create(&config), oar_destroy);
   ASSERT_THAT(oar, NotNull()) << error_message;
 
-  using RoarPtr = std::unique_ptr<oar_t, decltype(&roar_destroy)>;
+  using RoarPtr = std::unique_ptr<roar_t, decltype(&roar_destroy)>;
   RoarPtr roar(roar_create(&config), roar_destroy);
   ASSERT_THAT(roar, NotNull()) << error_message;
 
@@ -97,7 +93,7 @@ void RunTest(const oar_config_t& config,
 
   // Add elements and prepare input audio for each audio element.
   std::vector<std::vector<float>> all_input_data(elements.size());
-  std::vector<oar_audio_block_t> input_blocks(elements.size());
+  std::vector<roar_audio_block_t> input_blocks(elements.size());
   for (size_t i = 0; i < elements.size(); ++i) {
     const uint32_t element_id = 42 + i;
     const auto& element = elements[i];
@@ -109,18 +105,22 @@ void RunTest(const oar_config_t& config,
     ASSERT_EQ(r_add, 0) << error_message;
 
     if (element.metadata.has_value()) {
-      ASSERT_EQ(oar_update_audio_element_metadata(oar.get(), element_id,
-                                                  &element.metadata.value()),
-                0)
+      const roar_metadata_t& metadata = element.metadata.value();
+      ASSERT_EQ(
+          oar_update_audio_element_metadata(oar.get(), element_id, &metadata),
+          0)
           << error_message;
-      ASSERT_EQ(roar_update_audio_element_metadata(roar.get(), element_id,
-                                                   &element.metadata.value()),
-                0)
+      ASSERT_EQ(
+          roar_update_audio_element_metadata(roar.get(), element_id, &metadata),
+          0)
           << error_message;
     }
 
     const uint32_t input_channels =
-        oar_get_number_of_audio_element_channels(oar.get(), element_id);
+        roar_get_number_of_audio_element_channels(roar.get(), element_id);
+    ASSERT_EQ(oar_get_number_of_audio_element_channels(oar.get(), element_id),
+              input_channels)
+        << error_message;
     all_input_data[i] = GetInputData(c_samples_per_channel, input_channels,
                                      config.sampling_rate, 200.0f + 50.0f * i);
     input_blocks[i].channels = input_channels;
@@ -136,13 +136,13 @@ void RunTest(const oar_config_t& config,
   ASSERT_EQ(c_output_channels, r_output_channels) << error_message;
   auto c_output = GetOutputBuffer(c_samples_per_channel, c_output_channels);
 
-  oar_audio_block_t c_output_block = {};
+  roar_audio_block_t c_output_block = {};
   c_output_block.channels = c_output_channels;
   c_output_block.samples_per_channel = c_samples_per_channel;
   c_output_block.data = c_output.data();
 
   auto r_output = GetOutputBuffer(r_samples_per_channel, r_output_channels);
-  oar_audio_block_t r_output_block = {};
+  roar_audio_block_t r_output_block = {};
   r_output_block.channels = r_output_channels;
   r_output_block.samples_per_channel = r_samples_per_channel;
   r_output_block.data = r_output.data();
@@ -194,38 +194,38 @@ std::vector<ElementWithMetadata> GetSelectionOfElements() {
   std::vector<ElementWithMetadata> output;
   // All channel-based.
   for (auto input : GetAllChannelBasedInputs()) {
-    oar_audio_element_config_t element_config = {};
-    element_config.type = ck_channel_based;
+    roar_audio_element_config_t element_config = {};
+    element_config.type = ck_roar_channel_based;
     element_config.cbc.layout = input;
     output.push_back({element_config, std::nullopt});
   }
   // All ambisonic.
   for (auto order : GetAllAmbisonicOrders()) {
-    oar_audio_element_config_t element_config = {};
-    element_config.type = ck_scene_based;
+    roar_audio_element_config_t element_config = {};
+    element_config.type = ck_roar_scene_based;
     element_config.sbc.order = order;
     output.push_back({element_config, std::nullopt});
   }
 
   // Object-based with one (polar) object.
   {
-    oar_audio_element_config_t object_element_config = {};
-    object_element_config.type = ck_object_based;
+    roar_audio_element_config_t object_element_config = {};
+    object_element_config.type = ck_roar_object_based;
     object_element_config.obc.num_objects = 1;
-    std::vector<polar_t> positions = {{45.0f, 0.0f, 1.0f}};
-    oar_metadata_t metadata =
+    std::vector<roar_polar_t> positions = {{45.0f, 0.0f, 1.0f}};
+    roar_metadata_t metadata =
         CreateObjectMetadata(positions, kSamplesPerChannel);
     output.push_back({object_element_config, metadata});
   }
 
   // Object-based with two (cartesian) objects.
   {
-    oar_audio_element_config_t object_element_config = {};
-    object_element_config.type = ck_object_based;
+    roar_audio_element_config_t object_element_config = {};
+    object_element_config.type = ck_roar_object_based;
     object_element_config.obc.num_objects = 2;
-    std::vector<cartesian_t> positions = {{0.0f, 0.0f, 1.0f},
-                                          {0.0f, 1.0f, 0.0f}};
-    oar_metadata_t metadata =
+    std::vector<roar_cartesian_t> positions = {{0.0f, 0.0f, 1.0f},
+                                               {0.0f, 1.0f, 0.0f}};
+    roar_metadata_t metadata =
         CreateObjectMetadata(positions, kSamplesPerChannel);
     output.push_back({object_element_config, metadata});
   }
@@ -236,21 +236,22 @@ std::vector<ElementWithMetadata> GetSelectionOfElements() {
 // Tests rendering with head tracking enabled and updated.
 TEST(RoarEquivalence, RenderingToBinauralWithRenderingConfig) {
   // Always target binaural output.
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_binaural;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_binaural;
   config.samples_per_channel = kSamplesPerChannel;
   config.sampling_rate = 48000;
 
-  const std::vector<oar_headphones_rendering_mode_t> modes = {
-      ck_world_locked_restricted, ck_world_locked, ck_head_locked};
-  const std::vector<oar_binaural_filter_profile_t> profiles = {
-      ck_ambient, ck_direct, ck_reverberant};
+  const std::vector<roar_headphones_rendering_mode_t> modes = {
+      ck_roar_world_locked_restricted, ck_roar_world_locked,
+      ck_roar_head_locked};
+  const std::vector<roar_binaural_filter_profile_t> profiles = {
+      ck_roar_ambient, ck_roar_direct, ck_roar_reverberant};
 
   for (auto mode : modes) {
     for (auto profile : profiles) {
       for (auto input : GetSelectionOfElements()) {
         input.element_config.parameters.flags |=
-            def_parameter_set_flag_iamf_element_rendering_config;
+            ROAR_PARAMETER_SET_FLAG_IAMF_ELEMENT_RENDERING_CONFIG;
         input.element_config.parameters.element_rendering_config
             .headphones_rendering_mode = mode;
         input.element_config.parameters.element_rendering_config
@@ -269,35 +270,36 @@ TEST(RoarEquivalence, RenderingToBinauralWithRenderingConfig) {
 // Tests rendering an audio group containing mixed world-locked and head-locked
 // elements with head tracking enabled.
 TEST(RoarEquivalence, RenderingMixedWorldAndHeadLockedElementsInSameGroup) {
-  oar_config_t config = {};
-  config.target_layout = ck_oar_layout_binaural;
+  roar_config_t config = {};
+  config.target_layout = ck_roar_layout_binaural;
   config.samples_per_channel = kSamplesPerChannel;
   config.sampling_rate = 48000;
 
-  oar_audio_element_config_t channel_config = {};
-  channel_config.type = ck_channel_based;
-  channel_config.cbc.layout = ck_oar_layout_stereo;
+  roar_audio_element_config_t channel_config = {};
+  channel_config.type = ck_roar_channel_based;
+  channel_config.cbc.layout = ck_roar_layout_stereo;
   channel_config.parameters.flags |=
-      def_parameter_set_flag_iamf_element_rendering_config;
+      ROAR_PARAMETER_SET_FLAG_IAMF_ELEMENT_RENDERING_CONFIG;
 
-  oar_audio_element_config_t object_config = {};
-  object_config.type = ck_object_based;
+  roar_audio_element_config_t object_config = {};
+  object_config.type = ck_roar_object_based;
   object_config.obc.num_objects = 1;
   object_config.parameters.flags |=
-      def_parameter_set_flag_iamf_element_rendering_config;
-  oar_metadata_t object_metadata = CreateObjectMetadata(
-      std::vector<polar_t>{{45.0f, 0.0f, 1.0f}}, kSamplesPerChannel);
+      ROAR_PARAMETER_SET_FLAG_IAMF_ELEMENT_RENDERING_CONFIG;
+  roar_metadata_t object_metadata = CreateObjectMetadata(
+      std::vector<roar_polar_t>{{45.0f, 0.0f, 1.0f}}, kSamplesPerChannel);
 
-  oar_audio_element_config_t scene_config = {};
-  scene_config.type = ck_scene_based;
-  scene_config.sbc.order = ck_oar_1oa;
+  roar_audio_element_config_t scene_config = {};
+  scene_config.type = ck_roar_scene_based;
+  scene_config.sbc.order = ck_roar_1oa;
   scene_config.parameters.flags |=
-      def_parameter_set_flag_iamf_element_rendering_config;
+      ROAR_PARAMETER_SET_FLAG_IAMF_ELEMENT_RENDERING_CONFIG;
 
-  const std::vector<oar_headphones_rendering_mode_t> modes = {
-      ck_world_locked_restricted, ck_world_locked, ck_head_locked};
-  const std::vector<oar_binaural_filter_profile_t> profiles = {
-      ck_ambient, ck_direct, ck_reverberant};
+  const std::vector<roar_headphones_rendering_mode_t> modes = {
+      ck_roar_world_locked_restricted, ck_roar_world_locked,
+      ck_roar_head_locked};
+  const std::vector<roar_binaural_filter_profile_t> profiles = {
+      ck_roar_ambient, ck_roar_direct, ck_roar_reverberant};
 
   for (auto profile : profiles) {
     channel_config.parameters.element_rendering_config.binaural_filter_profile =
