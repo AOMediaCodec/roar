@@ -338,6 +338,42 @@ impl RoarRenderer {
         Ok(self.is_binaural_route_for_config(config))
     }
 
+    /// Returns the loudspeaker target layout for an element rendered via an individual
+    /// sub-renderer, or `None` when the element routes through the shared binaural OBR renderer.
+    fn individual_target_layout_for_config(
+        &self,
+        config: &AudioElementConfig,
+    ) -> Option<OutputLayout> {
+        if self.is_binaural_route_for_config(config) {
+            None
+        } else if self.config.output_layout() == OutputLayout::Binaural {
+            // Channel-based elements configured as `WorldLockedRestricted` on binaural output
+            // render to stereo via an individual loudspeaker sub-renderer (Downmix or EAR).
+            Some(OutputLayout::Stereo)
+        } else {
+            Some(self.config.output_layout())
+        }
+    }
+
+    /// Returns whether `config` selects `DownmixRenderer` for `target_layout`.
+    fn config_uses_downmix_renderer(
+        config: &AudioElementConfig,
+        target_layout: OutputLayout,
+    ) -> bool {
+        matches!(
+            config,
+            AudioElementConfig::ChannelBased(cbc)
+                if target_layout != OutputLayout::Binaural
+                    && cbc.downmix_info.is_some()
+                    && cbc.layout.is_valid_downmix_to(target_layout)
+        )
+    }
+
+    /// Creates and activates a new audio group (up to 2 active groups).
+    ///
+    /// # Errors
+    ///
+    /// Returns `OarError::InvalidParameter` if the maximum number of audio groups is exceeded.
     // TODO(b/525080422): The groups must be added before elements, so the API can be used wrong if
     // elements are added before adding groups, but it doesn't have to be that way.  I think get rid
     // of this method, create the group the first time an element is pushed to that group.
@@ -356,11 +392,7 @@ impl RoarRenderer {
     ) -> Result<Box<dyn AudioRenderer>, OarError> {
         let sub: Box<dyn AudioRenderer> = match config {
             AudioElementConfig::ChannelBased(cbc) => {
-                let use_dm = target_layout != OutputLayout::Binaural
-                    && cbc.downmix_info.is_some()
-                    && cbc.layout.is_valid_downmix_to(target_layout);
-
-                if use_dm {
+                if Self::config_uses_downmix_renderer(config, target_layout) {
                     let info = cbc.downmix_info.unwrap();
                     let mut dm = DownmixRenderer::new(cbc.layout, target_layout);
                     dm.set_mode_weight(info.mode(), info.weight_index())?;
@@ -395,8 +427,8 @@ impl RoarRenderer {
     ///
     /// # Errors
     ///
-    /// Returns `OarError::InvalidParameter` if the group ID does not exist, or the ID is already
-    /// registered.
+    /// Returns `OarError::InvalidParameter` if the group ID does not exist, or `OarError::Busy`
+    /// if `id` is already registered.
     pub fn add_element(
         &mut self,
         group_id: GroupId,
@@ -410,36 +442,34 @@ impl RoarRenderer {
             return Err(OarError::Busy);
         }
 
-        let is_binaural = self.config.output_layout() == OutputLayout::Binaural;
-        let is_binaural_route = self.is_binaural_route_for_config(config);
+        match self.individual_target_layout_for_config(config) {
+            None => {
+                let renderers = self.group_renderers.entry(group_id).or_default();
+                let shared_obr_idx = renderers.iter().position(|r| r.element_id.is_none());
+                if let Some(idx) = shared_obr_idx {
+                    renderers[idx].renderer.add_element(id, config)?;
+                } else {
+                    let obr = ObrAudioRendererAdapter::new(
+                        self.object_position_metadata_samples,
+                        self.config.sample_rate(),
+                    );
+                    let router = AudioElementsRenderer::with_backend(
+                        Box::new(obr),
+                        self.config.output_layout().channels(),
+                        Some(self.object_position_metadata_samples),
+                    );
 
-        if is_binaural_route {
-            let renderers = self.group_renderers.entry(group_id).or_default();
-            let shared_obr_idx = renderers.iter().position(|r| r.element_id.is_none());
-            if let Some(idx) = shared_obr_idx {
-                renderers[idx].renderer.add_element(id, config)?;
-            } else {
-                let obr = ObrAudioRendererAdapter::new(
-                    self.object_position_metadata_samples,
-                    self.config.sample_rate(),
-                );
-                let router = AudioElementsRenderer::with_backend(
-                    Box::new(obr),
-                    self.config.output_layout().channels(),
-                    Some(self.object_position_metadata_samples),
-                );
-
-                let mut active_sub: Box<dyn AudioRenderer> = Box::new(router);
-                active_sub.add_element(id, config)?;
-                let _ = active_sub.enable_head_tracking(self.head_tracking_enabled);
-                renderers.push(ActiveRenderer { element_id: None, renderer: active_sub });
+                    let mut active_sub: Box<dyn AudioRenderer> = Box::new(router);
+                    active_sub.add_element(id, config)?;
+                    let _ = active_sub.enable_head_tracking(self.head_tracking_enabled);
+                    renderers.push(ActiveRenderer { element_id: None, renderer: active_sub });
+                }
             }
-        } else {
-            let target_layout =
-                if is_binaural { OutputLayout::Stereo } else { self.config.output_layout() };
-            let sub = self.instantiate_sub_renderer(id, config, target_layout)?;
-            let renderers = self.group_renderers.entry(group_id).or_default();
-            renderers.push(ActiveRenderer { element_id: Some(id), renderer: sub });
+            Some(target_layout) => {
+                let sub = self.instantiate_sub_renderer(id, config, target_layout)?;
+                let renderers = self.group_renderers.entry(group_id).or_default();
+                renderers.push(ActiveRenderer { element_id: Some(id), renderer: sub });
+            }
         }
 
         self.active_elements.insert(id, *config);
@@ -656,7 +686,18 @@ impl RoarRenderer {
         Ok(())
     }
 
-    /// Updates dynamic metadata parameters on the active sub-renderers.
+    /// Queues a dynamic gain update for an active audio element.
+    ///
+    /// # Parameters
+    ///
+    /// * `id`: Unique identifier of an active audio element.
+    /// * `gain_id`: Identifier of the gain parameter stream on the element.
+    /// * `gain`: Constant, per-sample, or animated gain curve in dB.
+    /// * `duration`: Duration in samples over which `gain` applies.
+    ///
+    /// # Errors
+    ///
+    /// Returns `OarError::InvalidParameter` if `id` is not an active element.
     pub fn update_element_gain(
         &mut self,
         id: u32,
@@ -682,6 +723,18 @@ impl RoarRenderer {
         Ok(())
     }
 
+    /// Queues dynamic 3D object positions for an active object-based audio element.
+    ///
+    /// # Parameters
+    ///
+    /// * `id`: Unique identifier of an active object-based audio element.
+    /// * `positions`: Static or animated polar/Cartesian coordinates for the element's objects.
+    /// * `duration`: Duration in samples over which `positions` applies.
+    ///
+    /// # Errors
+    ///
+    /// Returns `OarError::InvalidParameter` if `id` is not an active element, or
+    /// `OarError::NotSupported` if `id` is not an object-based element.
     pub fn update_element_positions(
         &mut self,
         id: u32,
@@ -707,30 +760,60 @@ impl RoarRenderer {
         Ok(())
     }
 
+    /// Updates the dynamic IAMF downmix mode for an active audio element.
+    ///
+    /// Downmix mode updates are advisory hints: they take effect only when the element's active
+    /// rendering path uses `DownmixRenderer`. When the element is rendered via another backend
+    /// (such as EAR fallback, OLR, or binaural OBR), the update is accepted and ignored as a
+    /// no-op (`Ok(())`).
+    ///
+    /// # Parameters
+    ///
+    /// * `id`: Unique identifier of an active audio element.
+    /// * `mode`: Target IAMF downmix mode to apply when a downmix consumer is active.
+    /// * `duration`: Duration in samples for which `mode` applies, or `None` to persist
+    ///   indefinitely until the next downmix mode update.
+    ///
+    /// # Errors
+    ///
+    /// Returns `OarError::InvalidParameter` if `id` is not an active element.
     pub fn update_element_downmix_mode(
         &mut self,
         id: u32,
         mode: DownmixMode,
         duration: Option<Samples>,
     ) -> Result<(), OarError> {
-        if !self.active_elements.contains_key(&id) {
-            return Err(OarError::InvalidParameter);
-        }
-        if self.config.output_layout() == OutputLayout::Binaural {
-            return Err(OarError::NotSupported);
-        }
-        if !self.element_supports_downmix(id) {
-            return Err(OarError::NotSupported);
-        }
+        let is_obr_element = self.is_binaural_route(id)?;
         let group_id = self.element_to_group.get(&id).copied().ok_or(OarError::InvalidParameter)?;
-        if let Some(renderers) = self.group_renderers.get_mut(&group_id)
-            && let Some(rdr) = renderers.iter_mut().find(|r| r.element_id == Some(id))
-        {
-            rdr.renderer.update_element_downmix_mode(id, mode, duration)?;
+        if let Some(renderers) = self.group_renderers.get_mut(&group_id) {
+            let active_rdr = if is_obr_element {
+                renderers.iter_mut().find(|r| r.element_id.is_none())
+            } else {
+                renderers.iter_mut().find(|r| r.element_id == Some(id))
+            };
+            if let Some(rdr) = active_rdr {
+                match rdr.renderer.update_element_downmix_mode(id, mode, duration) {
+                    // Downmix mode metadata is advisory: backends without a downmix stage report
+                    // `NotSupported`, which is accepted and ignored as a no-op.
+                    Ok(()) | Err(OarError::NotSupported) => {}
+                    Err(e) => return Err(e),
+                }
+            }
         }
         Ok(())
     }
 
+    /// Queues a dynamic gain update applied to all output channels of an active audio group.
+    ///
+    /// # Parameters
+    ///
+    /// * `gid`: Identifier of an active audio group.
+    /// * `gain`: Constant, per-sample, or animated gain curve in dB.
+    /// * `duration`: Duration in samples over which `gain` applies.
+    ///
+    /// # Errors
+    ///
+    /// Returns `OarError::InvalidParameter` if `gid` is not an active audio group.
     pub fn update_group_gain(
         &mut self,
         gid: GroupId,
@@ -755,17 +838,15 @@ impl RoarRenderer {
         self.active_elements.get(&id).map(|c| c.channels())
     }
 
-    fn element_supports_downmix(&self, id: u32) -> bool {
-        let Some(config) = self.active_elements.get(&id) else {
-            return false;
-        };
-        match config {
-            AudioElementConfig::ChannelBased(cbc) => {
-                self.config.output_layout() != OutputLayout::Binaural
-                    && cbc.downmix_info.is_some()
-                    && cbc.layout.is_valid_downmix_to(self.config.output_layout())
-            }
-            _ => false,
-        }
+    /// Returns whether the active rendering path for `id` consumes IAMF downmix mode updates.
+    ///
+    /// # Errors
+    ///
+    /// Returns `OarError::InvalidParameter` if `id` is not an active element.
+    pub(crate) fn element_has_downmix_consumer(&self, id: u32) -> Result<bool, OarError> {
+        let config = self.active_elements.get(&id).ok_or(OarError::InvalidParameter)?;
+        Ok(self
+            .individual_target_layout_for_config(config)
+            .is_some_and(|target_layout| Self::config_uses_downmix_renderer(config, target_layout)))
     }
 }

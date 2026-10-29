@@ -15,6 +15,11 @@
 use crate::common::definitions::OarError;
 
 /// Standard IAMF downmix modes, mapping to configuration weights and default shifts.
+///
+/// Valid IAMF mode integer values are `{0, 1, 2, 4, 5, 6}` (value `3` and values outside `[0, 6]`
+/// are reserved/invalid). Dynamic downmix mode updates via
+/// `RoarRenderer::update_element_downmix_mode` are advisory hints that take effect only when
+/// `DownmixRenderer` is active on the element's rendering path.
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DownmixMode {
@@ -57,10 +62,12 @@ pub struct MixFactors {
 }
 
 impl DownmixMode {
+    /// Returns the IAMF integer discriminant (`0, 1, 2, 4, 5, 6`) for this downmix mode.
     pub fn value(&self) -> i32 {
         *self as i32
     }
 
+    /// Returns the IAMF mix coefficients and weight-index shift direction for this mode.
     pub fn mix_factors(&self) -> MixFactors {
         match self {
             DownmixMode::Mode1NegOffset => MixFactors {
@@ -109,15 +116,18 @@ impl DownmixMode {
     }
 }
 
+/// Validated IAMF demixing weight index in the inclusive range `[0, 10]`.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct WeightIndex(i32);
 
 impl WeightIndex {
+    /// Minimum valid IAMF demixing weight index (`0`).
     pub const MIN: Self = WeightIndex(0);
+    /// Maximum valid IAMF demixing weight index (`10`).
     pub const MAX: Self = WeightIndex(10);
 
-    /// Creates a new `WeightIndex` if it lies within the valid range `[0, 10]`.
+    /// Creates a new `WeightIndex` if `val` lies within the valid range `[0, 10]`.
     pub fn new(val: i32) -> Result<Self, OarError> {
         if (0..=10).contains(&val) {
             Ok(WeightIndex(val))
@@ -126,6 +136,7 @@ impl WeightIndex {
         }
     }
 
+    /// Returns the underlying integer weight index in `[0, 10]`.
     pub fn value(&self) -> i32 {
         self.0
     }
@@ -141,24 +152,33 @@ impl WeightIndex {
     }
 }
 
-/// Downmix parameters for channel-based audio.
+/// Initial IAMF downmix parameters for a channel-based audio element.
+///
+/// Supplies the initial demixing mode and optional weight index when configuring a
+/// `ChannelBasedConfig`. `DownmixRenderer` is selected only when `downmix_info` is present and the
+/// element's input layout forms a supported IAMF downmix pair with the effective loudspeaker
+/// target layout; otherwise rendering falls back to EAR (or binaural OBR) and subsequent dynamic
+/// downmix mode updates are accepted as advisory no-ops.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DownmixInfo {
-    /// Demixing mode.
+    /// Initial IAMF demixing mode.
     pub mode: DownmixMode,
-    /// Downmix weight index.
+    /// Optional initial IAMF demixing weight index (`[0, 10]`).
     pub weight_index: Option<WeightIndex>,
 }
 
 impl DownmixInfo {
+    /// Constructs a `DownmixInfo` from an initial `mode` and optional `weight_index`.
     pub fn new(mode: DownmixMode, weight_index: Option<WeightIndex>) -> Self {
         DownmixInfo { mode, weight_index }
     }
 
+    /// Returns the initial IAMF demixing mode.
     pub fn mode(&self) -> DownmixMode {
         self.mode
     }
 
+    /// Returns the optional initial IAMF demixing weight index.
     pub fn weight_index(&self) -> Option<WeightIndex> {
         self.weight_index
     }

@@ -310,13 +310,18 @@ pub struct oar_audio_block_t {
     pub samples_per_channel: u32,
 }
 
-/// IAMF downmix and demixing parameters.
+/// Initial IAMF downmix and demixing parameters supplied with a channel-based element config.
+///
+/// Activates the Downmix renderer when `def_parameter_set_flag_iamf_downmix_info` is set on
+/// `parameter_set_t::flags` and the element's input layout forms a supported IAMF downmix pair
+/// with the effective loudspeaker target layout.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct downmix_info_t {
-    /// Downmix mode index.
+    /// Initial IAMF downmix mode index (valid values: `0, 1, 2, 4, 5, 6`; `3` is reserved).
     pub mode: c_int,
-    /// Demixing weight parameter index.
+    /// Initial demixing weight parameter index (`[0, 10]`; values outside `[0, 10]` leave the
+    /// initial weight index unset).
     pub weight_index: c_int,
 }
 
@@ -355,15 +360,18 @@ impl parameter_set_t {
 pub enum oar_metadata_type_t {
     /// Unspecified metadata type.
     ck_metadata_none = 0,
-    /// Gain/Volume adjustment metadata.
+    /// Gain/Volume adjustment metadata (supported on both audio elements and audio groups).
     ck_metadata_gain = 1,
-    /// IAMF downmix configuration mode metadata.
+    /// Advisory IAMF downmix mode metadata for audio elements.
+    ///
+    /// Takes effect only when the element's active rendering path has a downmix consumer
+    /// (`DownmixRenderer`); accepted and ignored (`ROAR_STATUS_OK`) on other rendering paths.
     ck_metadata_iamf_downmix_mode = 2,
-    /// 3D coordinates for spatial audio objects.
+    /// 3D coordinates metadata for object-based spatial audio elements.
     ck_metadata_object_positions = 3,
-    /// Rotational tracking offsets for head orientation.
+    /// Rotational tracking offsets for listener head orientation on audio groups.
     ck_metadata_head_rotation = 4,
-    /// Count of supported metadata categories.
+    /// Count of supported metadata categories (sentinel; rejected if passed as a metadata type).
     ck_metadata_count = 5,
 }
 
@@ -403,11 +411,17 @@ pub struct oar_metadata_gain_t {
     pub value: oar_metadata_gain_union_t,
 }
 
-/// Structure representing IAMF downmix parameters.
+/// Advisory dynamic IAMF downmix mode metadata payload for audio elements.
+///
+/// Updates take effect only when the target element's active rendering path has a downmix consumer
+/// (`DownmixRenderer`); otherwise `roar_update_audio_element_metadata` accepts and ignores the
+/// update with `ROAR_STATUS_OK` (`0`).
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct oar_metadata_iamf_downmix_mode_t {
-    /// Downmix mode identifier as specified by IAMF standards.
+    /// IAMF downmix mode identifier (valid values: `0, 1, 2, 4, 5, 6`; `3` and values outside
+    /// `[0, 6]` are invalid and return `-22` when a downmix consumer is active on the element's
+    /// rendering path).
     pub mode: c_int,
 }
 
@@ -457,11 +471,16 @@ pub union oar_metadata_union_t {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct oar_metadata_t {
-    /// Specifies which variant of metadata is active in the value union.
+    /// Metadata category discriminant (`oar_metadata_type_t`) selecting the active `value` union
+    /// field.
     pub r#type: u32,
     /// Target metadata properties block.
     pub value: oar_metadata_union_t,
     /// Duration in samples for which this metadata payload is valid.
+    ///
+    /// Required (`> 0`) for gain and object positions (`<= 0` is ignored); optional for
+    /// `ck_metadata_iamf_downmix_mode` (`<= 0` persists indefinitely until the next downmix mode
+    /// update); unused for `ck_metadata_head_rotation`.
     pub duration: c_int,
 }
 

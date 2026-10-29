@@ -77,9 +77,18 @@ pub trait AudioRenderer: Send + Sync {
         Err(OarError::NotSupported)
     }
 
-    /// Updates dynamic downmix mode.
+    /// Updates the dynamic IAMF downmix mode for an audio element.
     ///
-    /// No duration specified means the mode is applied indefinitely.
+    /// Only backends with an IAMF downmix stage (`DownmixRenderer`) consume this update. Other
+    /// backends return the default `Err(OarError::NotSupported)`, which `RoarRenderer` accepts and
+    /// ignores as an advisory no-op (`Ok(())`).
+    ///
+    /// # Parameters
+    ///
+    /// * `id`: Unique identifier for the audio element.
+    /// * `mode`: Target IAMF downmix mode.
+    /// * `duration`: Duration in samples for which `mode` applies, or `None` to apply `mode`
+    ///   indefinitely until superseded by a subsequent update.
     fn update_element_downmix_mode(
         &mut self,
         _id: u32,

@@ -219,18 +219,35 @@ pub unsafe extern "C" fn roar_remove_audio_element(oar: *mut oar_t, id: u32) -> 
 /// Updates metadata parameters for an audio element.
 ///
 /// Supported metadata types:
-/// - **Object positions**
-///   - Duration must be specified.  A value <= 0 means the update will be silently dropped.
-/// - **Gain** (`oar_metadata_gain_t`): See the struct for details.
-///   - Duration must be specified.  A value <= 0 means the update will be silently dropped.
-/// - **IAMF downmix mode** (`oar_metadata_object_positions_t): See the struct for details.
-///   - Duration is optional.  A value <= 0 means the update will persist indefinitely (until a new
+/// - **Object positions** (`oar_metadata_object_positions_t`): 3D spatial coordinates supported
+///   only on object-based audio elements.
+///   - Duration must be specified. A value `<= 0` means the update will be silently dropped.
+/// - **Gain** (`oar_metadata_gain_t`): Dynamic gain adjustment supported on all audio element
+///   types.
+///   - Duration must be specified. A value `<= 0` means the update will be silently dropped.
+/// - **IAMF downmix mode** (`oar_metadata_iamf_downmix_mode_t`): Advisory metadata hint that takes
+///   effect only when the element's current rendering path has a downmix consumer
+///   (`DownmixRenderer`). When the element's current rendering path has no downmix consumer (such
+///   as EAR fallback, OLR, or binaural OBR), the update is accepted and ignored (`ROAR_STATUS_OK`).
+///   - Duration is optional. A value `<= 0` means the update will persist indefinitely (until a new
 ///     update is provided).
 ///
 /// To update head rotation (which is always applied globally), use `roar_update_metadata` instead.
 ///
-/// Returns `ROAR_STATUS_OK` (0) on success, or a negative error code (e.g. `-22` for invalid param,
-/// `-95` for unsupported metadata type) on failure.
+/// # Arguments
+/// * `oar` - Pointer to the ROAR object.
+/// * `id` - Unique element identifier (searched across all audio groups).
+/// * `metadata` - Metadata payload to apply to the element.
+///
+/// # Returns
+/// - `ROAR_STATUS_OK` (`0`) on success. For advisory metadata (`ck_metadata_iamf_downmix_mode`),
+///   `0` means "accepted" and also covers updates ignored because the element's current rendering
+///   path has no downmix consumer.
+/// - `-22` (`OarError::InvalidParameter`) for null pointers, invalid parameters, a non-existent
+///   element `id`, or an invalid `mode` value (outside `{0, 1, 2, 4, 5, 6}`) when the element's
+///   current rendering path has a downmix consumer.
+/// - `-95` (`OarError::NotSupported`) for unknown metadata types, or non-advisory metadata
+///   unsupported by the target element (e.g., object positions on a non-object element).
 ///
 /// # Safety
 ///
@@ -249,6 +266,9 @@ pub unsafe extern "C" fn roar_update_audio_element_metadata(
         }
         // SAFETY: The caller guarantees `oar` points to a valid FfiWrapper.
         let wrapper = unsafe { &mut *(oar as *mut FfiWrapper) };
+        if !wrapper.renderer.active_elements().contains_key(&id) {
+            return OarError::InvalidParameter.into();
+        }
         // SAFETY: We checked that `metadata` is not null. The caller guarantees that `metadata`
         // points to a valid, initialized `oar_metadata_t` structure.
         let meta_ref = unsafe { &*metadata };
@@ -293,6 +313,13 @@ pub unsafe extern "C" fn roar_update_audio_element_metadata(
                 Err(e) => e.into(),
             }
         } else if meta_type == (oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32) {
+            // Downmix mode metadata is advisory: when the element's active rendering path has no
+            // downmix consumer, accept and ignore the update without validating `mode`.
+            match wrapper.renderer.element_has_downmix_consumer(id) {
+                Ok(true) => {}
+                Ok(false) => return ROAR_STATUS_OK,
+                Err(e) => return e.into(),
+            }
             // C liboar treats downmix mode updates with duration <= 0 as infinite
             // (block-persisting).
             let duration = if meta_ref.duration <= 0 {

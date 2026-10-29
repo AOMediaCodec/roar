@@ -45,6 +45,11 @@ Changes in the repo not yet in a release will appear here.
 -   Fixed binaural rendering when world-locked and head-locked content are in
     the same audio group. (Reported in
     [oar/issues/53](https://github.com/AOMediaCodec/oar/issues/53).)
+-   Fixed handling of downmix modes to align with OAR
+    ([oar/issues/50](https://github.com/AOMediaCodec/oar/issues/50)). Downmix
+    modes are now correctly applied, ignored, or rejected based on the element's
+    active rendering path and whether or not it is a valid downmix mode for that
+    element.
 
 ## [1.0.0] - 2026-10-15
 

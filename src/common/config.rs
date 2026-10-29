@@ -106,9 +106,15 @@ pub struct ElementRenderingConfig {
 pub struct ChannelBasedConfig {
     /// The input loudspeaker or channel-subset layout configuration.
     pub layout: InputLayout,
-    /// Optional initial downmix parameters.
+    /// Optional initial IAMF downmix parameters.
+    ///
+    /// When `Some`, selects `DownmixRenderer` if `layout` and the effective loudspeaker target
+    /// layout form a supported IAMF downmix pair (including `WorldLockedRestricted` elements
+    /// rendered to stereo on `OutputLayout::Binaural`). When `None` or when the layout pair is not
+    /// a supported downmix (such as `5.1.2 -> Stereo` or `in == out`), rendering falls back to EAR
+    /// (or binaural OBR) and runtime downmix mode updates are accepted as advisory no-ops.
     pub downmix_info: Option<DownmixInfo>,
-    ///Optional binaural rendering config.
+    /// Optional binaural rendering config.
     pub rendering_config: Option<ElementRenderingConfig>,
 }
 

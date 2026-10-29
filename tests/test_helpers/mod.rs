@@ -17,9 +17,10 @@ use aom_roar::c_types::{
     def_max_number_of_objects, downmix_info_t, oar_audio_element_config_t,
     oar_audio_element_config_union_t, oar_binaural_filter_profile_t, oar_channel_based_config_t,
     oar_config_t, oar_headphones_rendering_mode_t, oar_hoa_t, oar_layout_t,
-    oar_metadata_object_positions_t, oar_metadata_object_positions_union_t, oar_metadata_t,
-    oar_metadata_type_t, oar_metadata_union_t, oar_object_based_config_t, oar_param_type_t,
-    oar_scene_based_config_t, oar_t, parameter_set_t, polar_t,
+    oar_metadata_iamf_downmix_mode_t, oar_metadata_object_positions_t,
+    oar_metadata_object_positions_union_t, oar_metadata_t, oar_metadata_type_t,
+    oar_metadata_union_t, oar_object_based_config_t, oar_param_type_t, oar_scene_based_config_t,
+    oar_t, parameter_set_t, polar_t,
 };
 use aom_roar::ffi::{roar_create, roar_destroy};
 use aom_roar::{ObjectPosition, PlanarBufferMut, PlanarBufferRef, PolarCoordinate, Samples};
@@ -163,12 +164,55 @@ pub fn create_channel_based_config_with_downmix(
     let mut params = default_parameter_set();
     params.flags = parameter_set_t::def_parameter_set_flag_iamf_downmix_info;
     params.downmix_info.mode = downmix_mode;
+    params.downmix_info.weight_index = -1;
     oar_audio_element_config_t {
         r#type: audio_element_type_t::ck_channel_based as i32,
         config: oar_audio_element_config_union_t {
             cbc: oar_channel_based_config_t { layout: layout as i32 },
         },
         parameters: params,
+    }
+}
+
+/// Creates a channel-based audio element configuration with downmix info and explicit headphones
+/// rendering mode.
+///
+/// # Parameters
+/// * `layout` - Source loudspeaker layout of the channel-based element.
+/// * `downmix_mode` - Initial IAMF downmix mode index.
+/// * `headphones_mode` - Headphones rendering mode applied on binaural target output.
+pub fn create_channel_based_config_with_downmix_and_headphones_mode(
+    layout: oar_layout_t,
+    downmix_mode: i32,
+    headphones_mode: oar_headphones_rendering_mode_t,
+) -> oar_audio_element_config_t {
+    let mut params = default_parameter_set();
+    params.flags = parameter_set_t::def_parameter_set_flag_iamf_downmix_info
+        | parameter_set_t::def_parameter_set_flag_iamf_element_rendering_config;
+    params.downmix_info.mode = downmix_mode;
+    params.downmix_info.weight_index = -1;
+    params.element_rendering_config.headphones_rendering_mode = headphones_mode;
+    oar_audio_element_config_t {
+        r#type: audio_element_type_t::ck_channel_based as i32,
+        config: oar_audio_element_config_union_t {
+            cbc: oar_channel_based_config_t { layout: layout as i32 },
+        },
+        parameters: params,
+    }
+}
+
+/// Creates a C FFI metadata struct (`oar_metadata_t`) for an IAMF downmix mode update.
+///
+/// # Parameters
+/// * `mode` - IAMF downmix mode integer payload.
+/// * `duration` - Duration in samples (`<= 0` persists indefinitely).
+pub fn create_downmix_mode_metadata(mode: i32, duration: i32) -> oar_metadata_t {
+    oar_metadata_t {
+        r#type: oar_metadata_type_t::ck_metadata_iamf_downmix_mode as u32,
+        value: oar_metadata_union_t {
+            iamf_downmix_mode: oar_metadata_iamf_downmix_mode_t { mode },
+        },
+        duration,
     }
 }
 

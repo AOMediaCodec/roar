@@ -329,17 +329,28 @@ rdr.add_element(group_id, element_id, &elem_cfg)?;
 *   Input audio data is provided by ID.
 *   Elements can be updated with dynamic metadata:
     *   **Gain** (`oar_metadata_gain_t`): Dynamic element volume control
-        (applies to all element types).
+        (supported on all element types).
     *   **Object Positions** (`oar_metadata_object_positions_t`): Polar or
-        Cartesian coordinates, both static and animated (applies to object-based
-        elements only). See below for details.
-    *   **Downmix Mode** (`oar_metadata_iamf_downmix_mode_t`): Dynamic downmix
-        mode override (applies to channel-based with downmix only).
+        Cartesian coordinates, both static and animated (supported on
+        object-based elements only; returns `ck_oar_error_notsup` (`-95`) /
+        `OarError::NotSupported` on non-object elements). See below for details.
+    *   **Downmix Mode** (`oar_metadata_iamf_downmix_mode_t`): Advisory dynamic
+        IAMF downmix mode hint (valid IAMF mode values: `0, 1, 2, 4, 5, 6`).
+        Takes effect when the element's active rendering path uses the
+        **Downmix** renderer, and is accepted and ignored as a no-op (`0` /
+        `Ok(())`) when the element's rendering path has no downmix consumer
+        (such as EAR fallback, OLR, or binaural OBR). Passing a non-existent
+        element ID still returns `ck_oar_error_inval` (`-22`) /
+        `OarError::InvalidParameter`. In the C API, an invalid mode value
+        (outside `{0, 1, 2, 4, 5, 6}`) returns `ck_oar_error_inval` (`-22`) when
+        the element's rendering path has a downmix consumer, or `0` when ignored
+        on a path without a downmix consumer.
 
-**Duration**: Downmix Mode supports optional duration. `0` (C) or `None` (Rust)
-indicates the update should persist indefinitely. Gain and Object Positions
-updates require duration. *In the C API, a duration of `0` (or negative) means
-the metadata update is ignored!*
+**Duration**: Downmix Mode supports optional duration. `0` (or negative, in C)
+or `None` (in Rust) indicates the update should persist indefinitely until
+superseded by a new downmix mode update. Gain and Object Positions updates
+require duration. *In the C API, a duration of `0` (or negative) for Gain or
+Object Positions means the metadata update is ignored!*
 
 Note: In the C API, the same metadata struct is used for groups and audio
 elements but groups can only accept gain and head rotation and audio elements
@@ -404,7 +415,7 @@ pos_meta.object_positions.polar_positions[0].elevation = 0.0f;
 pos_meta.object_positions.polar_positions[0].distance = 1.0f;
 roar_update_audio_element_metadata(oar, object_element_id, &pos_meta);
 
-// 3. Update downmix mode (if element is channel-based and using downmix)
+// 3. Update downmix mode (advisory: takes effect when Downmix is active; no-op on other paths)
 oar_metadata_t dmix_meta = {};
 dmix_meta.type = ck_metadata_iamf_downmix_mode;
 dmix_meta.duration = 1024;
@@ -435,7 +446,7 @@ let polar = PolarCoordinate::new_from_floats(30.0f32, 0.0f32, 1.0f32)?;
 let positions = ObjectPosition::Polar(vec![polar]);
 rdr.update_element_positions(object_element_id, &positions, Samples(1024))?;
 
-// 3. Update downmix mode (if element is channel-based and using downmix)
+// 3. Update downmix mode (advisory: takes effect when Downmix is active; no-op on other paths)
 rdr.update_element_downmix_mode(
     channel_element_id, DownmixMode::Mode2NegOffset, Some(Samples(1024)))?;
 
@@ -991,27 +1002,50 @@ graph TD
 : Renderer    :                         :                :                 :
 : (OLR)**     :                         :                :                 :
 | **Downmix** | `src/renderer/downmix/` | Channel-based  | Loudspeaker     |
+:             :                         :                : (including      :
+:             :                         :                : world-locked    :
+:             :                         :                : restricted)     :
 
 ##### Selection logic and downmix parameter behavior
 
-The active internal renderer is selected during initialization based on the
-target output layout and the configuration of the audio elements:
+The active internal renderer is selected when an element is added based on the
+target output layout and the configuration of the audio element:
 
--   Binaural output (`ck_oar_layout_binaural`)
-    -   **OBR** is always selected for all input types. For channel-based
-        inputs, virtual speaker encoding is performed before decoding to
-        binaural.
+-   Binaural output (`ck_oar_layout_binaural` / `OutputLayout::Binaural`)
+    -   Channel-based input configured with `ck_world_locked_restricted` /
+        `HeadphonesRenderingMode::WorldLockedRestricted`: Rendered to stereo
+        using the loudspeaker selection rules below (**Downmix** when
+        `downmix_info` is present and the input layout downmixes to stereo,
+        otherwise **EAR**).
+    -   All other inputs: **OBR** is selected. For channel-based inputs, virtual
+        speaker encoding is performed before decoding to binaural.
 -   Loudspeaker output
     -   Scene-based input: **EAR** is always used.
     -   Object-based input: **OLR** is always selected.
     -   Channel-based input: Selection depends on the downmix configuration:
         -   **Downmix renderer** is selected if:
             1.  Downmix information is provided in the element parameters
-                (`def_parameter_set_flag_iamf_downmix_info` is set).
-            2.  The input layout and target layout form a supported downmix
-                combination.
+                (`def_parameter_set_flag_iamf_downmix_info` is set /
+                `downmix_info` is `Some`).
+            2.  The input layout and effective target layout form a supported
+                IAMF downmix combination (excluding `in == out` and unsupported
+                height-to-non-height pairs such as `5.1.2 -> stereo`).
         -   **EAR** is selected as a fallback if the above conditions are not
             met.
+
+Because renderer selection is internal while an IAMF stream may carry a demixing
+parameter stream regardless of the active rendering path, dynamic downmix mode
+updates (`ck_metadata_iamf_downmix_mode` /
+`RoarRenderer::update_element_downmix_mode`) are treated as **advisory**:
+
+-   When **Downmix** is selected for the element, updates are consumed and
+    applied (valid IAMF mode values are `{0, 1, 2, 4, 5, 6}`; in the C API,
+    invalid mode values are rejected with `ck_oar_error_inval` (`-22`)).
+-   When **EAR**, **OLR**, or **OBR** is selected for the element, updates have
+    no consumer on the active rendering path and are accepted and ignored as a
+    no-op (`0` / `Ok(())`).
+-   Updates targeting a non-existent element ID always return
+    `ck_oar_error_inval` (`-22`) / `Err(OarError::InvalidParameter)`.
 
 ### FFT usage
 

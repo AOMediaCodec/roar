@@ -89,7 +89,14 @@ impl InputLayout {
     }
 
     /// Checks whether IAMF downmixing from this input layout to `target` is supported.
+    ///
+    /// Matches `DMRenderer_open` in `liboar`, which rejects identical input/output layouts
+    /// (`in == out`, handled as pass-through by EAR), non-IAMF-downmix layouts,
+    /// height-to-non-height mixes (`hi > 0 && ho == 0`), and upmixes (`si < so || hi < ho`).
     pub(crate) fn is_valid_downmix_to(&self, target: OutputLayout) -> bool {
+        if InputLayout::try_from(target).ok() == Some(*self) {
+            return false;
+        }
         let (Some((hi, si)), Some((ho, so))) =
             (self.downmix_height_and_surround(), target.downmix_height_and_surround())
         else {
@@ -217,6 +224,8 @@ mod test {
     fn is_valid_downmix_to_validates_surround_and_height_hierarchy() {
         expect_true!(InputLayout::Layout71.is_valid_downmix_to(OutputLayout::Stereo));
         expect_true!(InputLayout::Layout714.is_valid_downmix_to(OutputLayout::Layout512));
+        expect_false!(InputLayout::Stereo.is_valid_downmix_to(OutputLayout::Stereo));
+        expect_false!(InputLayout::Layout512.is_valid_downmix_to(OutputLayout::Layout512));
         expect_false!(InputLayout::Layout512.is_valid_downmix_to(OutputLayout::Layout51));
         expect_false!(InputLayout::Layout512.is_valid_downmix_to(OutputLayout::Stereo));
         expect_false!(InputLayout::Stereo.is_valid_downmix_to(OutputLayout::Layout51));

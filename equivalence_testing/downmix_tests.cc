@@ -46,7 +46,7 @@ constexpr float kEpsilon = 1e-6f;
 constexpr uint32_t kSamplesPerChannel = 1024;
 constexpr uint32_t kSamplingRate = 48000;
 
-// Executes an equivalence test comparing C liboar and Rust roar for a single
+// Executes an equivalence test comparing C OAR and Rust ROAR for a single
 // channel-based element with downmixing.
 void RunDownmixTest(
     const oar_config_t& config,
@@ -146,7 +146,7 @@ void RunDownmixTest(
   }
 }
 
-// Executes an equivalence test comparing C liboar and Rust roar when dynamic
+// Executes an equivalence test comparing C OAR and Rust roar when dynamic
 // downmix mode metadata is updated on a target element within a multi-element
 // group.
 void RunMultiElementDownmixTest(
@@ -310,16 +310,18 @@ TEST_P(FixedDownmixTest, DownmixInfoWithElementConfig) {
   RunDownmixTest(config, element_config, metadata_seq);
 }
 
-const std::vector<std::pair<oar_layout_t, oar_layout_t>> kValidDownmixLayouts =
-    {
-        {ck_oar_layout_71, ck_oar_layout_51},
-        {ck_oar_layout_51, ck_oar_layout_stereo},
-        {ck_oar_layout_71, ck_oar_layout_stereo},
-        {ck_oar_layout_stereo, ck_oar_layout_mono},
-        {ck_oar_layout_714, ck_oar_layout_512},
-        {ck_oar_layout_514, ck_oar_layout_512},
-        {ck_oar_layout_714, ck_oar_layout_312},
-    };
+// Get a list of input/output layout pairs to test fixed downmix.
+std::vector<std::pair<oar_layout_t, oar_layout_t>> GetValidDownmixLayouts() {
+  return {
+      {ck_oar_layout_71, ck_oar_layout_51},
+      {ck_oar_layout_51, ck_oar_layout_stereo},
+      {ck_oar_layout_71, ck_oar_layout_stereo},
+      {ck_oar_layout_stereo, ck_oar_layout_mono},
+      {ck_oar_layout_714, ck_oar_layout_512},
+      {ck_oar_layout_514, ck_oar_layout_512},
+      {ck_oar_layout_714, ck_oar_layout_312},
+  };
+}
 
 std::string FixedDownmixParamsToString(
     const testing::TestParamInfo<FixedDownmixParam>& info) {
@@ -332,7 +334,7 @@ std::string FixedDownmixParamsToString(
 
 INSTANTIATE_TEST_SUITE_P(
     AllLayoutsAndModes, FixedDownmixTest,
-    Combine(ValuesIn(kValidDownmixLayouts),
+    Combine(ValuesIn(GetValidDownmixLayouts()),
             Values(0, 1, 2, 4, 5,
                    6),          // Modes 0,1,2 (negative) and 4,5,6 (positive)
             Values(0, 5, 10)),  // Boundary and midpoint weights
@@ -370,19 +372,25 @@ TEST_P(DynamicDownmixModeTest, DynamicModeTransitions) {
   RunDownmixTest(config, element_config, metadata_seq);
 }
 
-const std::vector<std::pair<oar_layout_t, oar_layout_t>> kDynamicLayouts = {
-    {ck_oar_layout_51, ck_oar_layout_stereo},
-    {ck_oar_layout_71, ck_oar_layout_51},
-    {ck_oar_layout_714, ck_oar_layout_512},
-};
+// Get a list of input/output layout pairs to test dynamic downmix.
+std::vector<std::pair<oar_layout_t, oar_layout_t>> GetDynamicLayouts() {
+  return {
+      {ck_oar_layout_51, ck_oar_layout_stereo},
+      {ck_oar_layout_71, ck_oar_layout_51},
+      {ck_oar_layout_714, ck_oar_layout_512},
+  };
+}
 
 // Sequences of downmix modes to test.
-const std::vector<std::vector<int>> kModeSequences = {
-    {1, 2},        // Negative offset mode sequence
-    {4, 5, 6},     // Positive offset mode sequence
-    {4, 1, 5, 2},  // Alternating positive/negative mode sequence
-};
+std::vector<std::vector<int>> GetModeSequences() {
+  return {
+      {1, 2},        // Negative offset mode sequence
+      {4, 5, 6},     // Positive offset mode sequence
+      {4, 1, 5, 2},  // Alternating positive/negative mode sequence
+  };
+}
 
+// Get a string name for the given dynamic downmix param.
 std::string DynamicDownmixParamsToString(
     const testing::TestParamInfo<DynamicDownmixParam>& info) {
   const auto& [layouts, mode_seq] = info.param;
@@ -393,8 +401,8 @@ std::string DynamicDownmixParamsToString(
 }
 
 INSTANTIATE_TEST_SUITE_P(DynamicTransitions, DynamicDownmixModeTest,
-                         Combine(ValuesIn(kDynamicLayouts),
-                                 ValuesIn(kModeSequences)),
+                         Combine(ValuesIn(GetDynamicLayouts()),
+                                 ValuesIn(GetModeSequences())),
                          DynamicDownmixParamsToString);
 
 // ===== Test downmix metadata duration and expiration logic =====
@@ -487,5 +495,135 @@ INSTANTIATE_TEST_SUITE_P(IsolationModes, MultiElementDownmixTest,
                          Combine(Values(1, 2, 4, 5, 6),           // Mode
                                  Values(0, kSamplesPerChannel)),  // Duration
                          MultiElementParamName);
+
+// ===== Advisory downmix mode metadata equivalence tests =====
+
+TEST(AdvisoryDownmixModeEquivalenceTest,
+     EarFallback512ToStereoAcceptsAdvisoryDownmixUpdatesAndMatchesLiboar) {
+  oar_config_t config = {};
+  config.target_layout = ck_oar_layout_stereo;
+  config.samples_per_channel = kSamplesPerChannel;
+  config.sampling_rate = kSamplingRate;
+
+  oar_audio_element_config_t element_config = {};
+  element_config.type = ck_channel_based;
+  element_config.cbc.layout = ck_oar_layout_512;
+  element_config.parameters.flags |= def_parameter_set_flag_iamf_downmix_info;
+  element_config.parameters.downmix_info.mode = 0;
+  element_config.parameters.downmix_info.weight_index = 5;
+
+  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+      std::nullopt,
+      CreateDownmixModeMetadata(1, kSamplesPerChannel),
+      CreateDownmixModeMetadata(2, kSamplesPerChannel),
+      CreateDownmixModeMetadata(3, kSamplesPerChannel),
+      CreateDownmixModeMetadata(99, kSamplesPerChannel),
+  };
+
+  RunDownmixTest(config, element_config, metadata_seq);
+}
+
+TEST(AdvisoryDownmixModeEquivalenceTest,
+     Matching512To512LayoutAcceptsAdvisoryDownmixUpdatesMatchingOar) {
+  oar_config_t config = {};
+  config.target_layout = ck_oar_layout_512;
+  config.samples_per_channel = kSamplesPerChannel;
+  config.sampling_rate = kSamplingRate;
+
+  oar_audio_element_config_t element_config = {};
+  element_config.type = ck_channel_based;
+  element_config.cbc.layout = ck_oar_layout_512;
+  element_config.parameters.flags |= def_parameter_set_flag_iamf_downmix_info;
+  element_config.parameters.downmix_info.mode = 0;
+  element_config.parameters.downmix_info.weight_index = 5;
+
+  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+      std::nullopt,
+      CreateDownmixModeMetadata(1, kSamplesPerChannel),
+      CreateDownmixModeMetadata(3, kSamplesPerChannel),
+  };
+
+  RunDownmixTest(config, element_config, metadata_seq);
+}
+
+TEST(AdvisoryDownmixModeEquivalenceTest,
+     ChannelElementWithoutDownmixInfoAcceptsAdvisoryDownmixUpdatesMatchingOar) {
+  oar_config_t config = {};
+  config.target_layout = ck_oar_layout_stereo;
+  config.samples_per_channel = kSamplesPerChannel;
+  config.sampling_rate = kSamplingRate;
+
+  oar_audio_element_config_t element_config = {};
+  element_config.type = ck_channel_based;
+  element_config.cbc.layout = ck_oar_layout_51;
+
+  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+      std::nullopt,
+      CreateDownmixModeMetadata(2, kSamplesPerChannel),
+      CreateDownmixModeMetadata(99, kSamplesPerChannel),
+  };
+
+  RunDownmixTest(config, element_config, metadata_seq);
+}
+
+TEST(AdvisoryDownmixModeEquivalenceTest,
+     BinauralWorldLocked51AcceptsAdvisoryDownmixUpdatesAndMatchesLiboar) {
+  oar_config_t config = {};
+  config.target_layout = ck_oar_layout_binaural;
+  config.samples_per_channel = kSamplesPerChannel;
+  config.sampling_rate = kSamplingRate;
+
+  oar_audio_element_config_t element_config = {};
+  element_config.type = ck_channel_based;
+  element_config.cbc.layout = ck_oar_layout_51;
+  element_config.parameters.flags =
+      def_parameter_set_flag_iamf_downmix_info |
+      def_parameter_set_flag_iamf_element_rendering_config;
+  element_config.parameters.downmix_info.mode = 0;
+  element_config.parameters.downmix_info.weight_index = 5;
+  element_config.parameters.element_rendering_config.headphones_rendering_mode =
+      ck_world_locked;
+  element_config.parameters.element_rendering_config.binaural_filter_profile =
+      ck_ambient;
+
+  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+      std::nullopt,
+      CreateDownmixModeMetadata(2, kSamplesPerChannel),
+      CreateDownmixModeMetadata(3, kSamplesPerChannel),
+  };
+
+  RunDownmixTest(config, element_config, metadata_seq);
+}
+
+TEST(AdvisoryDownmixModeEquivalenceTest,
+     BinauralWorldLockedRestricted51AppliesDownmixUpdatesAndMatchesLiboar) {
+  oar_config_t config = {};
+  config.target_layout = ck_oar_layout_binaural;
+  config.samples_per_channel = kSamplesPerChannel;
+  config.sampling_rate = kSamplingRate;
+
+  oar_audio_element_config_t element_config = {};
+  element_config.type = ck_channel_based;
+  element_config.cbc.layout = ck_oar_layout_51;
+  element_config.parameters.flags =
+      def_parameter_set_flag_iamf_downmix_info |
+      def_parameter_set_flag_iamf_element_rendering_config;
+  element_config.parameters.downmix_info.mode = 0;
+  element_config.parameters.downmix_info.weight_index = 5;
+  element_config.parameters.element_rendering_config.headphones_rendering_mode =
+      ck_world_locked_restricted;
+  element_config.parameters.element_rendering_config.binaural_filter_profile =
+      ck_ambient;
+
+  std::vector<std::optional<oar_metadata_t>> metadata_seq = {
+      std::nullopt,
+      CreateDownmixModeMetadata(1, kSamplesPerChannel),
+      CreateDownmixModeMetadata(2, kSamplesPerChannel),
+      CreateDownmixModeMetadata(4, kSamplesPerChannel),
+  };
+
+  RunDownmixTest(config, element_config, metadata_seq);
+}
+
 }  // namespace
 }  // namespace roar_equivalence_testing
