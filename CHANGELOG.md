@@ -17,6 +17,11 @@ Valid sections are:
 
 Changes in the repo not yet in a release will appear here.
 
+## [1.1.0] - 2026-10-15
+
+New release equivalent to OAR at
+[OAR commit a7a5cc8](https://github.com/AOMediaCodec/oar/commit/a7a5cc8).
+
 ### [Added]
 
 -   Added standalone public C/C++ header `include/roar.h` and Bazel `cc_library`

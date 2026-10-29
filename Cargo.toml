@@ -1,6 +1,6 @@
 [package]
 name = "aom-roar"
-version = "1.0.0"
+version = "1.1.0"
 license-file = "LICENSE"
 description = "A Rust port of Alliance for Open Media's Open Audio Renderer (OAR)."
 readme = "README.md"
@@ -19,7 +19,7 @@ keywords = [
 
 [dependencies]
 log = "0.4"
-realfft = "3.5.0"
+realfft = "3.5.1"
 rustfft = "6.4.1"
 
 [[bin]]
