@@ -18,7 +18,7 @@ use std::fmt;
 pub const ROAR_STATUS_OK: std::os::raw::c_int = 0;
 
 /// Maximum number of samples per channel supported by the renderer.
-pub const MAX_SAMPLES_PER_CHANNEL: u32 = 16384;
+pub const MAX_SAMPLES_PER_CHANNEL: u32 = 65536;
 
 /// Maximum output channel count, used to allocate vectors of pointers.
 pub const MAX_OUTPUT_CHANNEL_COUNT: usize = 25;

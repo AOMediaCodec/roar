@@ -17,6 +17,11 @@ Valid sections are:
 
 Changes in the repo not yet in a release will appear here.
 
+### [Changed]
+
+-   Allow a higher upper limit for `samples_per_channel` (16384->65536) (but
+    it's not recommended).
+
 ## [1.1.0] - 2026-10-29
 
 New release equivalent to OAR at

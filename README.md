@@ -100,7 +100,9 @@ instance is created and contains the following:
 
 -   `target_layout`: Output layout. Details below.
 -   `samples_per_channel`: Buffer chunk size in samples (per channel). In the
-    range of [32, 16384].
+    range of [1, 65536], but a value in the range [256, 4096] is recommended,
+    especially for binaural rendering. Larger values increase memory usage,
+    smaller values can increase CPU usage.
 -   `sampling_rate`: Sampling rate in Hz (e.g., 48000).
 
 #### Valid output types

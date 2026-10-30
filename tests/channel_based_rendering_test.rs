@@ -38,7 +38,7 @@ mod test {
     /// layout output.
     #[gtest]
     fn ffi_rendering_51_input_to_stereo_output_succeeds() {
-        let frame_size: usize = 256;
+        let frame_size: usize = 8;
         let sample_rate: u32 = 48000;
         let input_channels: usize = 6;
         let output_channels: usize = 2;
@@ -100,7 +100,7 @@ mod test {
     /// an identity pass-through (no downmixing or spatialization).
     #[gtest]
     fn ffi_rendering_stereo_input_to_stereo_output_acts_as_identity() {
-        let frame_size: usize = 128;
+        let frame_size: usize = 32768;
         let sample_rate: u32 = 48000;
         let channels: usize = 2;
 

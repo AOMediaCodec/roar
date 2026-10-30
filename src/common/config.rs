@@ -215,10 +215,10 @@ mod test {
             Samples::new(512).unwrap(),
             SampleRate::new(48000).unwrap(),
         ));
-        // Invalid samples (too large for config limit of 16384)
+        // Invalid samples (too large for config limit of 65536)
         expect_true!(Config::new(
             OutputLayout::Stereo,
-            Samples::new(20000).unwrap(),
+            Samples::new(MAX_SAMPLES_PER_CHANNEL + 1).unwrap(),
             SampleRate::new(48000).unwrap(),
         )
         .is_err());

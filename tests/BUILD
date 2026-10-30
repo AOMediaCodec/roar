@@ -16,6 +16,20 @@ rust_test(
 )
 
 rust_test(
+    name = "binaural_rendering_test",
+    srcs = [
+        "binaural_rendering_test.rs",
+        "test_helpers/mod.rs",
+    ],
+    edition = "2024",
+    deps = [
+        "@aom-roar//src:aom_roar_rlib",
+        "@crates//:googletest",
+        "@crates//:rstest",
+    ],
+)
+
+rust_test(
     name = "combination_rendering_test",
     srcs = [
         "combination_rendering_test.rs",
